@@ -1,20 +1,5 @@
 # Wallet Decoupling
 
-<p align="left">
-  <br/>
-  <blockquote>
-    <p>
-      <strong>Author</strong>: Matthias Benkort <br/>
-      <strong>Date</strong>: 19 Oct. 2018 <br/>
-      <strong>Version</strong>: 1 <br/>
-    </p>
-  </blockquote>
-</p>
-
-<p align="right" style="position: relative; top: -70px; margin-bottom: -70px;">
-  <img src="IOHK_small.png" />
-<p>
-
 # Current State
 
 ## Cardano-SL Wallet
@@ -221,7 +206,7 @@ Transfer existing code 'wallet-new' to this new repository, and have it built th
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　v  
-_(Bonus) Clean-up and review build and test procedures to be more tailored to the wallet   
+_(Bonus) Clean-up and review build and test procedures to be more tailored to the wallet_  
 
 
 ## B. Node Monitoring / Management API(s)
@@ -316,6 +301,7 @@ point_ using the Node <-> Consumer protocol.
 Part of this milestone will be dedicated to designing and specifying this new protocol in CDDL
 but only at a later stage. 
 
+
 ### Main U/S
 
 Comprehend and integrate with (part of) the Node-To-Node protocol to receive blocks  
@@ -341,14 +327,39 @@ Replace current BListener and NodeStateAdaptor usage by usage of the aforementio
 (Bonus) Once ready, implement the Wallet interface using the Node <-> Consumer protocol  
 
 
+## E. Deadalus & Operational Impacts
+
+One aspect that we shouldn't overlook as well is whatever consequences on
+Daedalus and the installation procedure. Decoupling the wallet at the process
+level means that not one but two services now needs to be started when starting
+Deadalus. And for the same reasons it doesn't make much sense for the Wallet to
+convey process management commands to the nodes, it shouldn't be under the
+Wallet's responsibility to start its underlying node either.
+
+The exact tasks breakdown should be done involving people from Daedalus and
+DevOps. Note that some choices in the stories above may be influenced by
+actions decided here. Ideally, we want to minimize the efforts for Daedalus as
+for any clients already integrated with the wallet. It's not unrealistic to
+have some extra wiring in the current cardano's launcher and have a rather
+seamless transition for clients.
+
+### Main U/S
+
+_TODO: To be Discussed with Daedalus & DevOps_
+
 ## Some remarks
 
-By tackling all items not listed as _Bonus_, we will have fully decoupled the wallet from 
-the current node. Note that the Wallet will only be compatible with nodes that implement
-the _current_ Node <-> Node protocol as well as the monitoring and managements API (though
-accessory, we only intend to maintain this weak coupling for a few release until users have
-transitioned). 
+By tackling all items not listed as _Bonus_, we will have fully decoupled the
+wallet from the current node. Note that the Wallet will only be compatible with
+nodes that implement the _current_ Node <-> Node protocol as well as the
+monitoring and managements API (though accessory, we only intend to maintain
+this weak coupling for a few release until users have transitioned). 
 
-In the meantime, we will have prepared the Wallet to be interfaced with a new Node <-> Consumer
-protocol, and it is not unrealistic to imagine the wallet being able to run in different 
-compatibility modes; comprehending one protocol or the other. 
+Note that, none of the Milestone above really depends on another. So they could
+in theory all be reached simultaneously, in any order. Nevertheless, all of
+them are still needed for a minimal working solution.
+
+In the meantime, we will have prepared the Wallet to be interfaced with a new
+Node <-> Consumer protocol, and it is not unrealistic to imagine the wallet
+being able to run in different compatibility modes; comprehending one protocol
+or the other. 
