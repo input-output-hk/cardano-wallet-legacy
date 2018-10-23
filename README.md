@@ -186,6 +186,20 @@ the Node <-> Node protocol in order to submit transactions.
 1. - [ ] The Wallet _may not_ forward any supervision commands to nodes.
 
 
+## Estimation
+
+Here under are given some **rough time estimation** in _man/day_. Please
+acknowledge that those are purely informative and might be adjusted as we
+refine the underlying stories. 
+
+Also, note that from an historical experience, the wallet team isn't usually
+able to work 100% on tasks as various issues and requests pops in during
+development not necessarily related to the wallet but that get tackled by the
+wallet team anyway.
+
+This makes schedule a bit hard to establish in practice.
+
+
 ## A. Organization structure
 
 In order to have proper decoupling and _experiment_ a lightweight development process and set of tools, 
@@ -196,20 +210,20 @@ part of this code coupling as we go but that's more accessory.
 This will hopefully increase productivity of the wallet team and in the long-term, makes the separation between
 node and wallet clearer.
 
-### Main U/S
+### Main U/S (6-7 man/day)
 
-Setup an infrastructure to build and test wallet code inside its own repo    
+**(5 man/day)** Setup an infrastructure to build and test wallet code inside its own repo    
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　v  
-Transfer existing code 'wallet-new' to this new repository, and have it built there  
+**(1-2 man/day)** Transfer existing code 'wallet-new' to this new repository, and have it built there  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　v  
 _(Bonus) Clean-up and review build and test procedures to be more tailored to the wallet_  
 
 
-## B. Node Monitoring / Management API(s)
+## B. Node Monitoring / Management API(s) 
 
 We have two options here:
 
@@ -232,17 +246,18 @@ We have two options here:
 > by the wallet. Both the node and the wallet will be running an HTTP server with their own
 > certificates signed by a common authority. 
 
-### Main U/S
 
-Define the Node Monitoring & Node Management API(s) via Swagger  
+### Main U/S (16 man/day)
+
+**(3 man/day)** Define the Node Monitoring & Node Management API(s) via Swagger  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　v  
-Implement the API(s) on the node's side and have them started with it  
+**(10 man/day)** Implement the API(s) on the node's side and have them started with it  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　v  
-Integrate the Wallet with its Node's API for backward-compatibility  
+**(3 man/day)** Integrate the Wallet with its Node's API for backward-compatibility  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　v  
@@ -262,25 +277,25 @@ and `infra` to implement the protocol.
 Part of this milestone may concern the design of such protocol, alongside the Haskell team
 working on this. 
 
-### Main U/S
+### Main U/S **(34-37 man/day)**
 
-Comprehend and integrate with (part of) the Node-To-Node protocol to submit transactions  
+**(2-5 man/day)** Comprehend and integrate with (part of) the Node-To-Node protocol to submit transactions  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　v  
-Clearly identify currents areas where transactions are submitted / resubmitted  
+**(2 man/day)** Clearly identify current areas where transactions are submitted / resubmitted  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　v  
-Design a protocol-neutral interface which abstract transactions submission away  
+**(5 man/day)** Design a protocol-neutral interface which abstract transactions submission away  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　v  
-Implement the interface by using the current Node-To-Node protocol  
+**(15 man/day)** Implement the interface by using the current Node-To-Node protocol  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　v  
-Replace current direct usage of the diffusion layer by the interface above  
+**(10 man/day)** Replace current direct usage of the diffusion layer by the interface above  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　v  
@@ -291,7 +306,7 @@ Replace current direct usage of the diffusion layer by the interface above
 (Bonus) Implement the aforementioned interface using this new Node <-> Submitter protocol
 
 
-## D. Node <-> Consumer protocol
+## D. Node <-> Consumer protocol 
 
 The Node should be able to receive blocks and derive states from those blocks
 using the existing Node <-> Node protocol. Again, this part ought to be
@@ -302,21 +317,21 @@ Part of this milestone will be dedicated to designing and specifying this new pr
 but only at a later stage. 
 
 
-### Main U/S
+### Main U/S (42-47 man/day)
 
-Comprehend and integrate with (part of) the Node-To-Node protocol to receive blocks  
+**(2-5 man/day)** Comprehend and integrate with (part of) the Node-To-Node protocol to receive blocks  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　v  
-Design a protocol-neutral interface to receive blocks, command a switch to fork, get an initial state, get current state    
+**(5 man/day)** Design a protocol-neutral interface to receive blocks, command a switch to fork, get an initial state, get current state    
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　v  
-Implement the interface by using the current Node-To-Node protocol  
+**(20 man/day)** Implement the interface by using the current Node-To-Node protocol  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　v  
-Replace current BListener and NodeStateAdaptor usage by usage of the aforementioned interface  
+**(15 man/day)** Replace current BListener and NodeStateAdaptor usage by usage of the aforementioned interface  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　|  
 　　　　　　　　　　　　　　v  
