@@ -1,0 +1,11 @@
+*.aux
+*.auxlock
+*.bbl
+*.blg
+*.lof
+*.log
+*.pdf
+*.toc
+*.out
+spec-figure*
+*.tex.bak
