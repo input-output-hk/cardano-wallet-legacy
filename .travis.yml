@@ -1,0 +1,50 @@
+# Use new container infrastructure to enable caching
+sudo: false
+
+# Use OSX to by-pass issue with CouchDB PGP Key on Linux
+os: osx
+
+# Generic language, we provide our custom builds
+language: generic
+
+# Caching so the next build will be fast too.
+cache:
+  directories:
+  - $HOME/.stack
+  - $HOME/.local
+  - $HOME/.ghc
+
+# Only clone the repo's tip
+git:
+  depth: false
+
+# Setup some global env variables
+env:
+  global:
+  - PATH=$HOME/.local/bin:$PATH
+
+# Define custom set of stages
+stages:
+- snapshot
+- dependencies
+- wallet-new-specs
+
+# Build snapshot & dependencies in different jobs. This copes with Travis limit of 50 minutes per job.
+jobs:
+  include:
+  - stage: snapshot
+    if: commit_message =~ /Bump LTS/
+    script:
+    - mkdir -p ~/.local/bin
+    - travis_retry curl --insecure -L https://www.stackage.org/stack/osx-x86_64 | tar xz --strip-components=1 --include '*/stack' -C ~/.local/bin
+    - travis_wait 42 stack --no-terminal --install-ghc build --only-snapshot
+    - stack --no-terminal install cpphs
+    - brew install rocksdb
+
+  - stage: dependencies
+    script:
+    - travis_wait 42 stack --no-terminal build --only-dependencies
+
+  - stage: wallet-new-specs
+    script:
+    - stack --no-terminal test wallet-new-specs
