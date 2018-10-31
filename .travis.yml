@@ -14,6 +14,7 @@ cache:
   - $HOME/.stack
   - $HOME/.local
   - $HOME/.ghc
+  - $HOME/Library/Caches/Homebrew
   - $TRAVIS_BUILD_DIR/.stack-work
 
 # Only clone the repo's tip
@@ -57,4 +58,6 @@ jobs:
 
   - stage: wallet-new-specs
     script:
-    - stack --no-terminal test wallet-new-specs
+    - stack clean
+    - travis_wait 42 stack --no-terminal test cardano-sl-wallet-new:test:wallet-new-specs
+    - stack clean
