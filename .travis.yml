@@ -9,10 +9,12 @@ language: generic
 
 # Caching so the next build will be fast too.
 cache:
+  timeout: 1337
   directories:
   - $HOME/.stack
   - $HOME/.local
   - $HOME/.ghc
+  - $TRAVIS_BUILD_DIR/.stack-work
 
 # Only clone the repo's tip
 git:
@@ -26,7 +28,8 @@ env:
 # Define custom set of stages
 stages:
 - snapshot
-- dependencies
+- extra-dependencies
+- cardano-sl
 - wallet-new-specs
 
 # Build snapshot & dependencies in different jobs. This copes with Travis limit of 50 minutes per job.
@@ -39,11 +42,18 @@ jobs:
     - travis_retry curl --insecure -L https://www.stackage.org/stack/osx-x86_64 | tar xz --strip-components=1 --include '*/stack' -C ~/.local/bin
     - travis_wait 42 stack --no-terminal --install-ghc build --only-snapshot
     - stack --no-terminal install cpphs
-    - brew install rocksdb
 
-  - stage: dependencies
+  - stage: extra-dependencies
+    if: commit_message =~ /Update stack.yaml/
     script:
-    - travis_wait 42 stack --no-terminal build --only-dependencies
+    - brew install rocksdb
+    - travis_wait 42 stack --no-terminal build --fast plutus-prototype cardano-report-server cardano-crypto ip cborg time-units kademlia network-transport network-transport-tcp network-transport-inmemory acid-state canonical-json clock rocksdb-haskell-ng log-warper hedgehog servant-quickcheck universum serokell-util
+
+  - stage: cardano-sl
+    if: commit_message =~ /Update stack.yaml/
+    script:
+    - brew install rocksdb
+    - travis_wait 42 stack --no-terminal build --fast cardano-sl
 
   - stage: wallet-new-specs
     script:

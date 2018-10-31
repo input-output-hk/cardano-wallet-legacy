@@ -1,222 +1,9 @@
 resolver: lts-11.13
 
-flags:
-  ether:
-    disable-tup-instances: true
-
 extra-package-dbs: []
-
-# The dependency graph which was previously here has been dropped in favor of
-# PNG output from the script `scripts/package-dep-graph.sh`, which uses
-# `stack dot` to construct a graph which represents the current state exactly.
 
 packages:
 - .
-# IOHK projects:
-
-# TODO(parsonsmatt): There have been some breaking changes with Plutus for
-# cardano-sl and it would be nice to have some help from that team to get this
-# updated and back on IOHK.
-- location:
-    git: https://github.com/avieth/plutus-prototype
-    commit: d094be301195fcd8ab864d793f114970426a4478
-  extra-dep: true
-
-- location:
-    git: https://github.com/input-output-hk/cardano-report-server.git
-    commit: 9b96874d0f234554a5779d98762cc0a6773a532a
-  extra-dep: true
-
-- location:
-    git: https://github.com/input-output-hk/cardano-crypto
-    commit: e87fcd3fea18f664d6e4f39c11abb8cafbd25785
-  extra-dep: true
-# to be removed when haskell-ip is in the current stackage version
-- location:
-    git: https://github.com/andrewthad/haskell-ip
-    commit: 9bb453139aa82cc973125091800422a523e1eb8f
-  extra-dep: true
-
-- location:
-    git: https://github.com/input-output-hk/cardano-sl
-    commit: 94e53458d6ab24bfb131eb53f92d3d418936891b
-    subdirs:
-      - util
-      - util/test
-      - networking
-      - binary
-      - binary/test
-      - crypto
-      - crypto/test
-      - core
-      - core/test
-      - db
-      - db/test
-      - infra
-      - infra/test
-      - chain
-      - chain/test
-      - lib
-      - generator
-      - client
-      - auxx
-      - explorer
-      - node
-      - tools
-      - tools/post-mortem
-      - utxo
-      - wallet
-      - wallet/test
-      - node-ipc
-      - faucet
-      - acid-state-exts
-      - x509
-      - cluster
-  extra-dep: true
-
-## Vendored/Forked dependencies
-#
-# For these projects, please include a note describing:
-# 1. why we're using a fork
-# 2. what branch the commit is on
-# 3. a link to the PR that upstreams the patch
-#
-# Has support for canonical cbor. This commit is pulled into `master`. I've
-# posted a GitHub issue requesting a Hackage release:
-# https://github.com/well-typed/cborg/issues/171
-- location:
-    git: https://github.com/well-typed/cborg
-    commit: 3d274c14ca3077c3a081ba7ad57c5182da65c8c1
-  subdirs:
-  - cborg
-  extra-dep: true
-
-# this extra-dep is to avoid printing microseconds with unicode
-# no PR upstream was made
-# TODO(parsonsmatt): why was this change done?
-- location:
-    git: https://github.com/serokell/time-units.git
-    commit: 6c3747c1ac794f952de996dd7ba8a2f6d63bf132
-  extra-dep: true
-
-# not reviewing this too deeply as we're dumping kademlia
-- location:
-    git: https://github.com/serokell/kademlia.git
-    commit: 7120bb4d28e708acd52dfd61d3dca7914fac7d7f # master
-  extra-dep: true
-
-# These three are needed for cardano-sl-networking
-#
-# This defines a bundle type and attribute:
-# https://github.com/haskell-distributed/network-transport/compare/master...serokell:018a50b9042c2115c3ec9c9fd5ca5f28737dd29c?expand=1
-# Seems relatively straightforward to PR.
-- location:
-    git: https://github.com/serokell/network-transport
-    commit: 018a50b9042c2115c3ec9c9fd5ca5f28737dd29c
-  extra-dep: true
-
-# This doesn't have much difference at all with the upstream master:
-# https://github.com/haskell-distributed/network-transport-tcp/compare/master...serokell:3d56652123bd296dc759cd31947eb2a17924e68a?expand=1
-# As above, seems relatively straightforward to PR.
-- location:
-    git: https://github.com/serokell/network-transport-tcp
-    commit: 3d56652123bd296dc759cd31947eb2a17924e68a # csl-0.6.0
-  extra-dep: true
-
-# This one has more changes:
-# https://github.com/haskell-distributed/network-transport-inmemory/compare/master...avieth:5d8ff2b07b9df35cf61329a3d975e2c8cf95c12a?expand=1
-# Do we have an issue that documents why we made these changes, so we can make a PR upstream?
-- location:
-      git: https://github.com/avieth/network-transport-inmemory
-      commit: 5d8ff2b07b9df35cf61329a3d975e2c8cf95c12a
-  extra-dep: true
-
-# Waiting on the space leak bug fix PR to be merged:
-# https://github.com/acid-state/acid-state/pull/104
-- location:
-    git: https://github.com/parsonsmatt/acid-state
-    commit: a1b23e2056f134e53f705a694ab85deeecabec5c
-  extra-dep: true
-
-# Required for explorer.
-# We forked it because it has some unacceptable version bounds. We didn't
-# add any features nor fix any bugs.
-- location:
-    git: https://github.com/input-output-hk/engine.io.git
-    commit: d3c55f51bb81cee7d0d551de930ce65fe7d76756
-  extra-dep: true
-  subdirs:
-    - socket-io
-    - engine-io
-    - engine-io-wai
-
-# Library has never been released on Hackage yet
-- location:
-    git: https://github.com/input-output-hk/canonical-json.git
-    commit: f66762e4c4fe484ed109d28ad541fc55cc841c2c
-  extra-dep: true
-
-# The latest release of clock on hackage is *way* too old (0.7.2)
-# and can not be cross compiled.  As
-# https://github.com/corsis/clock/commit/f7fe4fb5691d56c342e6fbf5a99c121ab24a6b41
-# hasn't made it into any release yet.
-- location:
-    git: https://github.com/corsis/clock.git
-    commit: ef60bd51a3587a173adf565c33bf2886df6e3842
-  extra-dep: true
-
-# Library has never been released on Hackage yet
-- location:
-    git: https://github.com/input-output-hk/rocksdb-haskell-ng.git
-    commit: 49f501a082d745f3b880677220a29cafaa181452
-  extra-dep: true
-
-# Because log-warper mainline depends on a lifted-async which depends upon a
-# buggy async
-- location:
-    git: https://github.com/input-output-hk/log-warper.git
-    commit: 4af8114fbcd5698a4e1fbc653031f0300e29faee
-  extra-dep: true
-
-# Exposes a custom discovery function so you can specify the prefix.
-# https://github.com/hedgehogqa/haskell-hedgehog/compare/master...input-output-hk:master
-- location:
-    git: https://github.com/input-output-hk/haskell-hedgehog.git
-    commit: 2e741bb53afb085741807018948ae17d956c53af
-  subdirs:
-    - hedgehog
-  extra-dep: true
-
-# servant-quickcheck has a doc/doc.cabal file that is poorly specified and this
-# breaks the mafia build tool.
-- location:
-    git: https://github.com/avieth/servant-quickcheck.git
-    commit: e4e879abca99d0d56015765859fb37af59a81dbb
-  extra-dep: true
-
-# Add custom stylish-haskell while waiting for PR upstream: https://github.com/jaspervdj/stylish-haskell/pull/214
-- location:
-    git: https://github.com/input-output-hk/stylish-haskell.git
-    commit: ecfd3b307d8d13a6d12aff03055f25a39a17e182
-  extra-dep: true
-
-# Custom Universum prelude, that brings back some of the
-# formatting logic, as well as `pretty`.
-- location:
-    git: https://github.com/input-output-hk/universum.git
-    commit: 7f1b2483f71cacdfd032fe447064d6e0a1df50fc
-  extra-dep: true
-
-
-# Need to adjust version bounds on serokell-util.
-# serokell-util has an upper bound preventing 6.3 for some reason
-- location:
-    git: https://github.com/input-output-hk/serokell-util.git
-    commit: 4ead9809e119483e7832da5f8224b0c4d4a2d5d6
-  extra-dep: true
-
-nix:
-  shell-file: nix/stack-shell.nix
 
 extra-deps:
 
@@ -296,18 +83,153 @@ extra-deps:
 # thus to use our hedgehog-0.6+ from source,
 # we need to explicilty bump tasty-hedgehog to 0.2.0.0.
 - tasty-hedgehog-0.2.0.0
-
 - file-embed-lzma-0
 - servant-swagger-ui-core-0.3.1
 - servant-swagger-ui-0.3.0.3.13.2
 - servant-swagger-ui-redoc-0.3.0.1.21.2
-
 - fsnotify-0.2.1.2
 - hinotify-0.3.10
 
-# This is for CI to pass --fast to all dependencies
-apply-ghc-options: everything
+- git: https://github.com/avieth/plutus-prototype
+  commit: d094be301195fcd8ab864d793f114970426a4478
 
-# If you find it too restrictive, you can use `scripts/build/cardano-sl.sh' script
-ghc-options:
-  cardano-sl-wallet-new:        -Wall -Werror -Wcompat -fwarn-redundant-constraints
+- git: https://github.com/input-output-hk/cardano-report-server
+  commit: 9b96874d0f234554a5779d98762cc0a6773a532a
+
+- git: https://github.com/input-output-hk/cardano-crypto
+  commit: e87fcd3fea18f664d6e4f39c11abb8cafbd25785
+
+- git: https://github.com/andrewthad/haskell-ip
+  commit: 9bb453139aa82cc973125091800422a523e1eb8f
+
+- git: https://github.com/input-output-hk/cardano-sl
+  commit: 94e53458d6ab24bfb131eb53f92d3d418936891b
+  subdirs:
+    - util
+    - util/test
+    - networking
+    - binary
+    - binary/test
+    - crypto
+    - crypto/test
+    - core
+    - core/test
+    - db
+    - db/test
+    - infra
+    - infra/test
+    - chain
+    - chain/test
+    - lib
+    - generator
+    - client
+    - auxx
+    - explorer
+    - node
+    - tools
+    - tools/post-mortem
+    - utxo
+    - wallet
+    - wallet/test
+    - node-ipc
+    - faucet
+    - acid-state-exts
+    - x509
+    - cluster
+
+# https://github.com/well-typed/cborg/issues/171
+- git: https://github.com/well-typed/cborg
+  commit: 3d274c14ca3077c3a081ba7ad57c5182da65c8c1
+  subdirs:
+  - cborg
+
+# this extra-dep is to avoid printing microseconds with unicode
+# no PR upstream was made
+# TODO(parsonsmatt): why was this change done?
+- git: https://github.com/serokell/time-units.git
+  commit: 6c3747c1ac794f952de996dd7ba8a2f6d63bf132
+
+# not reviewing this too deeply as we're dumping kademlia
+- git: https://github.com/serokell/kademlia.git
+  commit: 7120bb4d28e708acd52dfd61d3dca7914fac7d7f # master
+
+# These three are needed for cardano-sl-networking
+#
+# This defines a bundle type and attribute:
+# https://github.com/haskell-distributed/network-transport/compare/master...serokell:018a50b9042c2115c3ec9c9fd5ca5f28737dd29c?expand=1
+# Seems relatively straightforward to PR.
+- git: https://github.com/serokell/network-transport
+  commit: 018a50b9042c2115c3ec9c9fd5ca5f28737dd29c
+
+# This doesn't have much difference at all with the upstream master:
+# https://github.com/haskell-distributed/network-transport-tcp/compare/master...serokell:3d56652123bd296dc759cd31947eb2a17924e68a?expand=1
+# As above, seems relatively straightforward to PR.
+- git: https://github.com/serokell/network-transport-tcp
+  commit: 3d56652123bd296dc759cd31947eb2a17924e68a # csl-0.6.0
+
+# This one has more changes:
+# https://github.com/haskell-distributed/network-transport-inmemory/compare/master...avieth:5d8ff2b07b9df35cf61329a3d975e2c8cf95c12a?expand=1
+# Do we have an issue that documents why we made these changes, so we can make a PR upstream?
+- git: https://github.com/avieth/network-transport-inmemory
+  commit: 5d8ff2b07b9df35cf61329a3d975e2c8cf95c12a
+
+# Waiting on the space leak bug fix PR to be merged:
+# https://github.com/acid-state/acid-state/pull/104
+- git: https://github.com/parsonsmatt/acid-state
+  commit: a1b23e2056f134e53f705a694ab85deeecabec5c
+
+# Required for explorer.
+# We forked it because it has some unacceptable version bounds. We didn't
+# add any features nor fix any bugs.
+- git: https://github.com/input-output-hk/engine.io.git
+  commit: d3c55f51bb81cee7d0d551de930ce65fe7d76756
+  subdirs:
+    - socket-io
+    - engine-io
+    - engine-io-wai
+
+# Library has never been released on Hackage yet
+- git: https://github.com/input-output-hk/canonical-json.git
+  commit: f66762e4c4fe484ed109d28ad541fc55cc841c2c
+
+# The latest release of clock on hackage is *way* too old (0.7.2)
+# and can not be cross compiled.  As
+# https://github.com/corsis/clock/commit/f7fe4fb5691d56c342e6fbf5a99c121ab24a6b41
+# hasn't made it into any release yet.
+- git: https://github.com/corsis/clock.git
+  commit: ef60bd51a3587a173adf565c33bf2886df6e3842
+
+# Library has never been released on Hackage yet
+- git: https://github.com/input-output-hk/rocksdb-haskell-ng.git
+  commit: 49f501a082d745f3b880677220a29cafaa181452
+
+# Because log-warper mainline depends on a lifted-async which depends upon a
+# buggy async
+- git: https://github.com/input-output-hk/log-warper.git
+  commit: 4af8114fbcd5698a4e1fbc653031f0300e29faee
+
+# Exposes a custom discovery function so you can specify the prefix.
+# https://github.com/hedgehogqa/haskell-hedgehog/compare/master...input-output-hk:master
+- git: https://github.com/input-output-hk/haskell-hedgehog.git
+  commit: 2e741bb53afb085741807018948ae17d956c53af
+  subdirs:
+  - hedgehog
+
+# servant-quickcheck has a doc/doc.cabal file that is poorly specified and this
+# breaks the mafia build tool.
+- git: https://github.com/avieth/servant-quickcheck.git
+  commit: e4e879abca99d0d56015765859fb37af59a81dbb
+
+# Add custom stylish-haskell while waiting for PR upstream: https://github.com/jaspervdj/stylish-haskell/pull/214
+- git: https://github.com/input-output-hk/stylish-haskell.git
+  commit: ecfd3b307d8d13a6d12aff03055f25a39a17e182
+
+# Custom Universum prelude, that brings back some of the
+# formatting logic, as well as `pretty`.
+- git: https://github.com/input-output-hk/universum.git
+  commit: 7f1b2483f71cacdfd032fe447064d6e0a1df50fc
+
+# Need to adjust version bounds on serokell-util.
+# serokell-util has an upper bound preventing 6.3 for some reason
+- git: https://github.com/input-output-hk/serokell-util.git
+  commit: 4ead9809e119483e7832da5f8224b0c4d4a2d5d6
