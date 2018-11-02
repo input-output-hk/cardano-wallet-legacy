@@ -14,7 +14,6 @@ cache:
   - $HOME/.stack
   - $HOME/.local
   - $HOME/.ghc
-  - $HOME/Library/Caches/Homebrew
   - $TRAVIS_BUILD_DIR/.stack-work
 
 # Only clone the repo's tip
@@ -25,13 +24,18 @@ git:
 env:
   global:
   - PATH=$HOME/.local/bin:$PATH
+  - HOMEBREW_NO_AUTO_UPDATE=1
+  - HOMEBREW_CACHE=$HOME/.local/Homebrew
 
 # Define custom set of stages
 stages:
 - snapshot
 - extra-dependencies
-- cardano-sl
 - wallet-new-specs
+
+# Install rocksdb DLL
+before_install:
+- brew install rocksdb
 
 # Build snapshot & dependencies in different jobs. This copes with Travis limit of 50 minutes per job.
 jobs:
@@ -47,14 +51,7 @@ jobs:
   - stage: extra-dependencies
     if: commit_message =~ /Update stack.yaml/
     script:
-    - brew install rocksdb
-    - travis_wait 42 stack --no-terminal build --fast plutus-prototype cardano-report-server cardano-crypto ip cborg time-units kademlia network-transport network-transport-tcp network-transport-inmemory acid-state canonical-json clock rocksdb-haskell-ng log-warper hedgehog servant-quickcheck universum serokell-util
-
-  - stage: cardano-sl
-    if: commit_message =~ /Update stack.yaml/
-    script:
-    - brew install rocksdb
-    - travis_wait 42 stack --no-terminal build --fast cardano-sl
+    - travis_wait 42 stack --no-terminal build --fast --only-dependencies
 
   - stage: wallet-new-specs
     script:
