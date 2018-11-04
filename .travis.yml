@@ -53,6 +53,8 @@ jobs:
     - travis_retry curl --insecure -L https://www.stackage.org/stack/osx-x86_64 | tar xz --strip-components=1 --include '*/stack' -C ~/.local/bin
     - travis_wait 42 stack --no-terminal --install-ghc build --only-snapshot
     - stack --no-terminal install cpphs
+    - travis_retry wget https://gist.github.com/Anviking/323c184cbb7d16e1d9eed852dd58714c/raw/a895eb8380eaa0a6f83dd5d09f4aff2e066f46e9/shc -O $HOME/.local/bin/shc
+    - chmod +x $HOME/.local/bin/shc
 
   # Rebuild only the extra dependencies; mainly: cardano-sl. This isn't part of the custom
   # snapshot because we likely bumps the git hash reference more often  than other dependencies.
@@ -66,13 +68,7 @@ jobs:
   # Run all tests and upload the result to coveralls.
   - stage: wallet-new-specs
     script:
-    # TODO Move it into `snapshot` phase
-    - travis_retry wget https://gist.github.com/Anviking/323c184cbb7d16e1d9eed852dd58714c/raw/a895eb8380eaa0a6f83dd5d09f4aff2e066f46e9/shc -O $HOME/.local/bin/shc
-    - chmod +x $HOME/.local/bin/shc
-
     - stack clean
     - travis_wait 42 stack --no-terminal test cardano-sl-wallet-new:test:wallet-new-specs --fast --coverage --ghc-options=-optl-Wl,-dead_strip_dylibs
     - shc cardano-sl-wallet-new wallet-new-specs
-
-after_script:
-- stack clean
+    - stack clean
