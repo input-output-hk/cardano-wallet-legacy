@@ -204,7 +204,7 @@ spec :: Spec
 spec = describe "Addresses" $ do
     describe "CreateAddress" $ do
         describe "Address creation (wallet layer)" $ do
-            prop "works as expected in the happy path scenario" $ withMaxSuccess 200 $
+            prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \keystore layer _ Fixture{..} -> do
@@ -217,7 +217,7 @@ spec = describe "Addresses" $ do
                         (bimap STB STB res) `shouldSatisfy` isRight
 
         describe "Address creation (kernel)" $ do
-            prop "works as expected in the happy path scenario" $ withMaxSuccess 200 $
+            prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \keystore _ _ Fixture{..} -> do
@@ -225,7 +225,7 @@ spec = describe "Addresses" $ do
                         res <- Kernel.createAddress mempty fixtureAccountId fixturePw
                         (bimap STB STB res) `shouldSatisfy` isRight
 
-            prop "fails if the account has no associated key in the keystore" $ do
+            prop "fails if the account has no associated key in the keystore" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \_ _ _ Fixture{..} -> do
@@ -234,7 +234,7 @@ spec = describe "Addresses" $ do
                             (Left (Kernel.CreateAddressKeystoreNotFound acc)) | acc == fixtureAccountId -> return ()
                             x -> fail (show (bimap STB STB x))
 
-            prop "fails if the parent account doesn't exist" $ do
+            prop "fails if the parent account doesn't exist" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \keystore _ _ Fixture{..} -> do
@@ -247,7 +247,7 @@ spec = describe "Addresses" $ do
                             x -> fail (show (bimap STB STB x))
 
         describe "Address creation (Servant)" $ do
-            prop "works as expected in the happy path scenario" $ do
+            prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \keystore layer _ Fixture{..} -> do
@@ -261,7 +261,7 @@ spec = describe "Addresses" $ do
                         (bimap identity STB res) `shouldSatisfy` isRight
 
         describe "Address creation (wallet layer & kernel consistency)" $ do
-            prop "layer & kernel agrees on the result" $ do
+            prop "layer & kernel agrees on the result" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     res1 <- withFixture pm $ \keystore _ _ Fixture{..} -> do
@@ -287,7 +287,7 @@ spec = describe "Addresses" $ do
                              return $ (bimap STB STB res1) `shouldSatisfy` isRight
 
         describe "Address listing (Servant)" $ do
-            prop "0 addresses, page 0, per page 0" $ do
+            prop "0 addresses, page 0, per page 0" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 0 $ \_ layer _ _ -> do
@@ -298,7 +298,7 @@ spec = describe "Addresses" $ do
                            Right wr | null (wrData wr) -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "1 addresses, page 0, per page 0" $ do
+            prop "1 addresses, page 0, per page 0" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 1 $ \_ layer _ _ -> do
@@ -309,7 +309,7 @@ spec = describe "Addresses" $ do
                            Right wr | null (wrData wr) -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 0, per page 0" $ do
+            prop "3 addresses, page 0, per page 0" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 3 $ \_ layer _ _ -> do
@@ -320,7 +320,7 @@ spec = describe "Addresses" $ do
                            Right wr | null (wrData wr) -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 1, per page 0" $ do
+            prop "3 addresses, page 1, per page 0" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 3 $ \_ layer _ _ -> do
@@ -331,7 +331,7 @@ spec = describe "Addresses" $ do
                            Right wr | null (wrData wr) -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 1, per page 1" $ do
+            prop "3 addresses, page 1, per page 1" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 3 $ \_ layer _ [wa0, _, _] -> do
@@ -343,7 +343,7 @@ spec = describe "Addresses" $ do
                                 wrData wr `shouldBe` [addressFixtureAddress wa0]
                             _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 1, per page 2" $ do
+            prop "3 addresses, page 1, per page 2" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 3 $ \_ layer _ [wa0, wa1, _wa2] -> do
@@ -357,7 +357,7 @@ spec = describe "Addresses" $ do
                                     -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 1, per page 3" $ do
+            prop "3 addresses, page 1, per page 3" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 3 $ \_ layer _ [wa0, wa1, wa2] -> do
@@ -372,7 +372,7 @@ spec = describe "Addresses" $ do
                                     -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 2, per page 2" $ do
+            prop "3 addresses, page 2, per page 2" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 3 $ \_ layer _ [_wa0, _wa1, wa2] -> do
@@ -385,7 +385,7 @@ spec = describe "Addresses" $ do
                                     -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "4 addresses, page 2, per page 2" $ do
+            prop "4 addresses, page 2, per page 2" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 4 $ \_ layer _ [_wa0, _wa1, wa2, wa3] -> do
@@ -399,7 +399,7 @@ spec = describe "Addresses" $ do
                                     -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "arbitrary number of addresses, pages and per page" $ withMaxSuccess 500 $ do
+            prop "arbitrary number of addresses, pages and per page" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     (rNumOfAddresses :: Int) <- pick $ elements [0..15]
                     (rNumOfPages :: Int) <- pick $ elements [0..15]
@@ -421,7 +421,7 @@ spec = describe "Addresses" $ do
 
         describe "Address listing with multiple Accounts (Servant)" $ do
             let rootId = addrRoot . V1.unV1 . V1.addrId
-            prop "page 0, per page 0" $ withMaxSuccess 20 $ do
+            prop "page 0, per page 0" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressesFixtures pm (DesiredNewAccs 4) (DesiredNewAddrs 4) $ \_ layer _ _ -> do
@@ -432,7 +432,7 @@ spec = describe "Addresses" $ do
                             Right wr | null (wrData wr) -> pure ()
                             _ -> fail ("Got " ++ show res)
 
-            prop "it yields the correct number of results" $ withMaxSuccess 20 $ do
+            prop "it yields the correct number of results" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressesFixtures pm (DesiredNewAccs 3) (DesiredNewAddrs 4) $ \_ layer _ (_, total) -> do
@@ -444,7 +444,7 @@ spec = describe "Addresses" $ do
                                 length (wrData wr) `shouldBe` min 40 total
                             _        -> fail ("Got " ++ show res)
 
-            prop "is deterministic" $ withMaxSuccess 20 $ do
+            prop "is deterministic" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressesFixtures pm (DesiredNewAccs 3) (DesiredNewAddrs 8) $ \_ layer _ (_, expectedTotal) -> do
@@ -456,7 +456,7 @@ spec = describe "Addresses" $ do
                                               (,) <$> mkRequest pp <*> mkRequest pp
                             r1 `shouldBe` r2
 
-            prop "yields the correct set of resutls" $ withMaxSuccess 20 $ do
+            prop "yields the correct set of resutls" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressesFixtures pm (DesiredNewAccs 4) (DesiredNewAddrs 8) $ \_ layer _ (_, expectedTotal) -> do
@@ -482,7 +482,7 @@ spec = describe "Addresses" $ do
                                 (rootId <$> con) `shouldBe` (rootId <$> wrData wr)
                             _        -> fail ("Got " ++ show res)
 
-            prop "yields the correct ordered resutls when there is one account" $ withMaxSuccess 20 $ do
+            prop "yields the correct ordered resutls when there is one account" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressesFixtures pm (DesiredNewAccs 0) (DesiredNewAddrs 15) $ \_ layer _ (_, expectedTotal) -> do
@@ -509,7 +509,7 @@ spec = describe "Addresses" $ do
                             _        -> fail ("Got " ++ show res)
 
 
-            prop "yields the correct ordered resutls" $ withMaxSuccess 20 $ do
+            prop "yields the correct ordered resutls" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                   pm <- pick arbitrary
                   forM_ [(DesiredNewAccs 4,DesiredNewAddrs 8),
@@ -538,7 +538,7 @@ spec = describe "Addresses" $ do
     describe "ValidateAddress" $ do
         describe "Address validation (wallet layer)" $ do
 
-            prop "works as expected in the happy path scenario (valid address, ours)" $ withMaxSuccess 25 $
+            prop "works as expected in the happy path scenario (valid address, ours)" $ withMaxSuccess 5 $
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 1 $ \_ layer _ [af] -> do
@@ -546,7 +546,7 @@ spec = describe "Addresses" $ do
                             (sformat build (V1.unV1 $ V1.addrId $ addressFixtureAddress af))
                         bimap STB STB res `shouldSatisfy` isRight
 
-            prop "rejects a malformed address" $ withMaxSuccess 1 $
+            prop "rejects a malformed address" $ withMaxSuccess 5 $
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 1 $ \_ layer _ _ -> do
@@ -556,7 +556,7 @@ spec = describe "Addresses" $ do
                              Left err -> fail $ "Got different error than expected: " <> show err
                              Right _ -> fail "I was expecting a failure, but it didn't happen."
 
-            prop "returns not used/not change for an address which is not ours" $ withMaxSuccess 1 $ do
+            prop "returns not used/not change for an address which is not ours" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     (randomAddr :: Address) <- pick arbitrary
                     pm                      <- pick arbitrary

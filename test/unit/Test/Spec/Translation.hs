@@ -12,6 +12,7 @@ import           Pos.Core.Chrono
 import           Pos.Crypto (ProtocolMagic (..), RequiresNetworkMagic (..))
 import           Serokell.Util (mapJson)
 import           Test.Hspec.QuickCheck
+import           Test.QuickCheck (withMaxSuccess)
 
 import qualified Pos.Chain.Block as Cardano
 import qualified Pos.Chain.Txp as Cardano
@@ -64,7 +65,7 @@ specBody pm = do
 
       -- There are subtle points near the epoch boundary, so we test from a
       -- few blocks less to a few blocks more than the length of an epoch
-      prop "can construct and verify chain that spans epochs" $
+      prop "can construct and verify chain that spans epochs" $ withMaxSuccess 5 $
         let epochSlots = runTranslateNoErrors pm $ asks (ccEpochSlots . tcCardano)
         in forAll (choose (  1,  3) :: Gen Int) $ \numEpochs ->
            forAll (choose (-10, 10) :: Gen Int) $ \extraSlots ->
@@ -74,7 +75,7 @@ specBody pm = do
                expectValid
 
     describe "Translation QuickCheck tests" $ do
-      prop "can translate randomly generated chains" $
+      prop "can translate randomly generated chains" $ withMaxSuccess 5 $
         forAll
           (intAndVerifyGen pm (genChainUsingModel . cardanoModel linearFeePolicy ourActorIx allAddrs))
           expectValid

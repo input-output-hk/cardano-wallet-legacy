@@ -185,7 +185,7 @@ spec = describe "NewPayment" $ do
 
     describe "Generating a new payment (wallet layer)" $ do
 
-        prop "pay works (realSigner, SenderPaysFee)" $ withMaxSuccess 50 $ do
+        prop "pay works (realSigner, SenderPaysFee)" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withPayment pm (InitialADA 10000) (PayLovelace 10) $ \activeLayer newPayment -> do
@@ -197,7 +197,7 @@ spec = describe "NewPayment" $ do
                     liftIO ((bimap STB STB res) `shouldSatisfy` isRight)
 
     describe "Generating a new payment (kernel)" $ do
-        prop "newTransaction works (real signer, SenderPaysFee)" $ withMaxSuccess 50 $ do
+        prop "newTransaction works (real signer, SenderPaysFee)" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture @IO pm (InitialADA 10000) (PayLovelace 10) $ \_ _ aw Fixture{..} -> do
@@ -215,7 +215,7 @@ spec = describe "NewPayment" $ do
                                   )
                     liftIO ((bimap STB (const $ STB ()) res) `shouldSatisfy` isRight)
 
-        prop "newTransaction works (ReceiverPaysFee)" $ withMaxSuccess 50 $ do
+        prop "newTransaction works (ReceiverPaysFee)" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture @IO pm (InitialADA 10000) (PayADA 1) $ \_ _ aw Fixture{..} -> do
@@ -235,7 +235,7 @@ spec = describe "NewPayment" $ do
 
     describe "Generating a new payment (Servant)" $ do
 
-        prop "works as expected in the happy path scenario" $ withMaxSuccess 50 $
+        prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $
             monadicIO $ do
                 pm <- pick arbitrary
                 withPayment pm (InitialADA 1000) (PayADA 1) $ \activeLayer newPayment -> do
@@ -246,7 +246,7 @@ spec = describe "NewPayment" $ do
 
         describe "Estimating fees (wallet layer)" $ do
 
-            prop "estimating fees works (SenderPaysFee)" $ withMaxSuccess 50 $ do
+            prop "estimating fees works (SenderPaysFee)" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withPayment pm (InitialADA 10000) (PayLovelace 10) $ \activeLayer newPayment -> do
@@ -260,7 +260,7 @@ spec = describe "NewPayment" $ do
                                  fee `shouldSatisfy` (> (Coin 0))
 
         describe "Estimating fees (kernel)" $ do
-            prop "estimating fees works (SenderPaysFee)" $ withMaxSuccess 50 $
+            prop "estimating fees works (SenderPaysFee)" $ withMaxSuccess 5 $
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture @IO pm (InitialADA 10000) (PayADA 1) $ \_ _ aw Fixture{..} -> do
@@ -280,7 +280,7 @@ spec = describe "NewPayment" $ do
                              Left e  -> fail (formatToString build e)
                              Right x -> x `shouldBe` Coin 10
 
-            prop "estimating fees works (kernel, ReceiverPaysFee)" $ withMaxSuccess 50 $
+            prop "estimating fees works (kernel, ReceiverPaysFee)" $ withMaxSuccess 5 $
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture @IO pm (InitialADA 10000) (PayADA 1) $ \_ _ aw Fixture{..} -> do
@@ -300,7 +300,7 @@ spec = describe "NewPayment" $ do
                              Left e  -> fail (formatToString build e)
                              Right x -> x `shouldBe` Coin 10
 
-            prop "estimating fees works (kernel, SenderPaysFee, cardanoFee)" $ withMaxSuccess 50 $
+            prop "estimating fees works (kernel, SenderPaysFee, cardanoFee)" $ withMaxSuccess 5 $
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture @IO pm (InitialADA 10000) (PayADA 1) $ \_ _ aw Fixture{..} -> do
@@ -322,7 +322,7 @@ spec = describe "NewPayment" $ do
                              Right x -> x `shouldSatisfy` (> (Coin 0))
 
         describe "Estimating fees (Servant)" $ do
-            prop "works as expected in the happy path scenario" $ withMaxSuccess 50 $
+            prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $
                 monadicIO $ do
                     pm <- pick arbitrary
                     withPayment pm (InitialADA 1000) (PayADA 1) $ \activeLayer newPayment -> do
@@ -332,7 +332,7 @@ spec = describe "NewPayment" $ do
             -- The 'estimateFee' endpoint doesn't require a spendingPassword, but
             -- the 'Payment' type does come with an optional 'spendingPassword' field.
             -- Here we want to check this is completely ignored.
-            prop "ignores completely the spending password in Payment" $ withMaxSuccess 50 $
+            prop "ignores completely the spending password in Payment" $ withMaxSuccess 5 $
                 monadicIO $ do
                     randomPass <- pick arbitrary
                     pm         <- pick arbitrary

@@ -34,7 +34,8 @@ import           Serokell.Util.Text (listJsonIndent)
 import qualified Test.Pos.Chain.Txp.Arbitrary as Txp
 
 import           Test.QuickCheck (Gen, Property, arbitrary, choose, conjoin,
-                     forAll, generate, listOf, shuffle, vectorOf, (===))
+                     forAll, generate, listOf, shuffle, vectorOf,
+                     withMaxSuccess, (===))
 import           Test.QuickCheck.Property (counterexample)
 import           Util.Buildable (ShowThroughBuild (..))
 import           Util.Buildable.Hspec
@@ -297,7 +298,7 @@ specBody pm = do
     describe "Test wallet submission layer" $ do
 
       it "supports addition of pending transactions" $
-          forAll (genPurePair pm) $ \(unSTB -> (submission, toAdd)) ->
+          withMaxSuccess 5 $ forAll (genPurePair pm) $ \(unSTB -> (submission, toAdd)) ->
               let currentSlot = submission ^. getCurrentSlot
                   submission' = addPending' toAdd submission
                   schedule = submission' ^. getSchedule
@@ -309,11 +310,11 @@ specBody pm = do
                  ]
 
       it "supports deletion of pending transactions" $
-          forAll (genPurePair pm) $ \(unSTB -> (submission, toRemove)) ->
+          withMaxSuccess 5 $ forAll (genPurePair pm) $ \(unSTB -> (submission, toRemove)) ->
               doesNotContainPending toRemove $ remPendingById myAccountId (toTxIdSet' toRemove) submission
 
       it "remPending . addPending = id" $
-          forAll (genPurePair pm) $ \(unSTB -> (submission, pending)) ->
+          withMaxSuccess 5 $ forAll (genPurePair pm) $ \(unSTB -> (submission, pending)) ->
               let originallyPending = submission ^. localPendingSet myAccountId
                   currentlyPending  = view (localPendingSet myAccountId)
                                            (remPendingById myAccountId
@@ -323,7 +324,7 @@ specBody pm = do
               in failIf "the two pending set are not equal" ((==) `on` Pending.transactions) originallyPending currentlyPending
 
       it "increases its internal slot after ticking" $ do
-          forAll (genPureWalletSubmission pm myAccountId) $ \(unSTB -> submission) ->
+          withMaxSuccess 5 $ forAll (genPureWalletSubmission pm myAccountId) $ \(unSTB -> submission) ->
               let slotNow  = submission ^. getCurrentSlot
                   (_, _, ws') = tick submission
                   in failIf "internal slot didn't increase" (==) (ws' ^. getCurrentSlot) (mapSlot succ slotNow)
@@ -340,7 +341,7 @@ specBody pm = do
               ]
 
       it "limit retries correctly" $ do
-          forAll (genPurePair pm) $ \(unSTB -> (ws, pending)) ->
+          withMaxSuccess 5 $ forAll (genPurePair pm) $ \(unSTB -> (ws, pending)) ->
               let ws' = (addPending' pending ws) & wsResubmissionFunction .~ giveUpAfter 3
                   (evicted1, _, ws1) = tick ws'
                   (evicted2, _, ws2) = tick ws1
@@ -366,7 +367,7 @@ specBody pm = do
                                  ws  <- addPending myAccountId (pendingFromTxs (map labelledTxAux [a,b,c,d])) . unSTB <$> genPureWalletSubmission pm myAccountId
                                  txs <- shuffle [b,c,a,d]
                                  return $ STB (ws, txs)
-              forAll generator $ \(unSTB -> (submission, txs)) ->
+              withMaxSuccess 5 $ forAll generator $ \(unSTB -> (submission, txs)) ->
                   let currentSlot = submission ^. getCurrentSlot
                       schedule = submission ^. getSchedule
                       nxtSlot = mapSlot succ currentSlot
@@ -387,7 +388,7 @@ specBody pm = do
               let generator = do (b,c,a,d) <- dependentTransactions pm
                                  ws  <- addPending myAccountId (pendingFromTxs (map labelledTxAux [a,b,c])) . unSTB <$> genPureWalletSubmission pm myAccountId
                                  return $ STB (addPending myAccountId (pendingFromTxs (map labelledTxAux [d])) ((\(_,_,s) -> s) . tick $ ws), d)
-              forAll generator $ \(unSTB -> (submission, d)) ->
+              withMaxSuccess 5 $ forAll generator $ \(unSTB -> (submission, d)) ->
                   let currentSlot = submission ^. getCurrentSlot
                       schedule = submission ^. getSchedule
                       nxtSlot = mapSlot succ currentSlot
@@ -418,7 +419,7 @@ specBody pm = do
                                  let ws'' = addPending myAccountId (pendingFromTxs (map labelledTxAux [d])) ws'
                                  return $ STB (ws'', [a,b,c,d])
 
-              forAll generator $ \(unSTB -> (submission1, [a,b,c,d])) ->
+              withMaxSuccess 5 $ forAll generator $ \(unSTB -> (submission1, [a,b,c,d])) ->
                   let slot1     = submission1 ^. getCurrentSlot
                       (scheduledInSlot1, confirmed1, _) = tickSlot slot1 submission1
 

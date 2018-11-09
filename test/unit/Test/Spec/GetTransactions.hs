@@ -272,7 +272,7 @@ constantFeeCheck c c' = mkCoin c == c'
 spec :: Spec
 spec = do
     describe "GetTransactions" $ do
-        prop "utxo fixture creates the correct balance" $ withMaxSuccess 10 $
+        prop "utxo fixture creates the correct balance" $ withMaxSuccess 5 $
             monadicIO $ do
                 pm <- pick arbitrary
                 withUtxosFixture @IO pm [1,2,3] $ \_keystore _activeLayer aw f@Fix{..} -> do
@@ -280,7 +280,7 @@ spec = do
                     balance <- getAccountBalanceNow pw f
                     balance `shouldBe` 6
 
-        prop "sanity tests checks" $ withMaxSuccess 10 $
+        prop "sanity tests checks" $ withMaxSuccess 5 $
             monadicIO $ do
                 pm <- pick arbitrary
                 Fixture.withPassiveWalletFixture @IO pm (return $ \_ -> return ()) $ \_ _ pw _ -> do
@@ -294,7 +294,7 @@ spec = do
                     checker (2 * 155381 + 1) `shouldBe` False
                     checker 755381 `shouldBe` False
 
-        prop "pay works normally for coin selection with additional utxos and changes" $ withMaxSuccess 10 $
+        prop "pay works normally for coin selection with additional utxos and changes" $ withMaxSuccess 5 $
             monadicIO $ do
                 pm <- pick arbitrary
                 let nm = makeNetworkMagic pm
@@ -318,7 +318,7 @@ spec = do
                     -- payment is very small so difference is almost equa to fees.
                     coinsBefore - coinsAfter `shouldSatisfy` checker
 
-        prop "estimateFees looks sane for coin selection with additional utxos and changes" $ withMaxSuccess 10 $
+        prop "estimateFees looks sane for coin selection with additional utxos and changes" $ withMaxSuccess 5 $
             monadicIO $ do
                 pm <- pick arbitrary
                 let nm = makeNetworkMagic pm

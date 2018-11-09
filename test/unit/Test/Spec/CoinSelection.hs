@@ -590,7 +590,7 @@ ignoreGrouping o = o { csoInputGrouping = IgnoreGrouping }
 spec :: Spec
 spec =
     describe "Coin selection policies unit tests" $ do
-        withMaxSuccess 1000 $ describe "largestFirst" $ do
+        withMaxSuccess 5 $ describe "largestFirst" $ do
             prop "one payee, SenderPaysFee, fee = 0" $ \pm -> forAll (
                  payOne pm freeLunch freeLunchCheck identity (InitialLovelace 1000) (PayLovelace 100) largestFirst
                  ) $ \(utxo, payee, res) -> paymentSucceeded utxo payee res
@@ -618,7 +618,7 @@ spec =
                 payBatch pm minFee minFeeCheck receiverPays (InitialLovelace 1000) (PayLovelace 100) largestFirst
                 ) $ \(utxo, payee, res) -> paymentSucceeded utxo payee res
 
-        withMaxSuccess 2000 $ describe "random" $ do
+        withMaxSuccess 5 $ describe "random" $ do
             prop "one payee, SenderPaysFee, fee = 0" $ \pm -> forAll (
                 payOne pm freeLunch freeLunchCheck identity (InitialLovelace 1000) (PayLovelace 100) random
                 ) $ \(utxo, payee, res) -> paymentSucceeded utxo payee res
@@ -676,7 +676,7 @@ spec =
                 ) $ \(utxo, payee, res) ->
                   paymentSucceededWith utxo payee res [feeWasPayed ReceiverPaysFee]
 
-        withMaxSuccess 2000 $ describe "Expected failures" $ do
+        withMaxSuccess 5 $ describe "Expected failures" $ do
             prop "Paying a redeem address should always be rejected" $ \pm -> forAll (
                 payOne' pm genRedeemPayee linearFee linearFeeCheck receiverPays (InitialLovelace 1000) (PayLovelace 100) random
                 ) $ \(utxo, payee, res) ->
@@ -698,7 +698,7 @@ spec =
         -- Addresses in Cardano, as in the past there was a subtle corner case
         -- where coin selection would fail for Addresses of size < 104, which is
         -- the average in Cardano.
-        withMaxSuccess 200 $ describe "Fiddly Addresses" $ do
+        withMaxSuccess 5 $ describe "Fiddly Addresses" $ do
             prop "multiple payees, SenderPaysFee, fee = cardano" $ \pm -> forAll (
                 pay pm genFiddlyUtxo genFiddlyPayees cardanoFee cardanoFeeCheck identity (InitialADA 1000) (PayADA 100) random
                 ) $ \(utxo, payee, res) ->
@@ -718,7 +718,7 @@ spec =
         -- be at risk. This is why we allow an 'InputGrouping' option to be
         -- passed, which allows the coin selection to, if needed, pick all
         -- the associated inputs paying into the address we just picked.
-        withMaxSuccess 2000 $ describe "Input Grouping" $ do
+        withMaxSuccess 5 $ describe "Input Grouping" $ do
             prop "Require grouping, fee = 0, one big group depletes the Utxo completely" $ \pm -> forAll (
                 pay pm (genGroupedUtxo 1) genPayee freeLunch freeLunchCheck requireGrouping (InitialLovelace 1000) (PayLovelace 10) random
                 ) $ \(utxo, payee, res) -> do
@@ -751,7 +751,7 @@ spec =
                     Left _err        -> False
                     Right (lhs, rhs) -> lhs > rhs
 
-            withMaxSuccess 1000 $ prop "estimateHardMaxTxInputs is close to estimateMaxTxInputs." $
+            withMaxSuccess 5 $ prop "estimateHardMaxTxInputs is close to estimateMaxTxInputs." $
                 forAll ((,) <$> genMaxTxSize
                             <*> (getAddrAttrSize <$> genOutAux)) $
                 \(maxTxSize, addrAttrSize) ->

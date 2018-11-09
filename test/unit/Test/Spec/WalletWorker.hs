@@ -8,7 +8,7 @@ import           Formatting (bprint, shown, (%))
 import qualified Formatting.Buildable
 import           Pos.Core.Chrono
 import           Test.QuickCheck (arbitrary, frequency, getPositive, listOf,
-                     suchThat)
+                     suchThat, withMaxSuccess)
 
 import           Util.Buildable.Hspec
 import           Util.Buildable.QuickCheck
@@ -67,7 +67,7 @@ spec = do
           let stk0 = Stack [1..100]
               run = (`runStackWorker` stk0)
               doesNotResultInFork = not . Actions.hasPendingFork . srState . run
-          forAll (listOf someAction `suchThat` doesNotResultInFork) $
+          withMaxSuccess 5 $ forAll (listOf someAction `suchThat` doesNotResultInFork) $
               \actions -> do
                   let StackResult{..} = run actions
                       expectedStack  = execState (mapM actionToStackOp actions) stk0

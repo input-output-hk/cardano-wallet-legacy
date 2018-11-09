@@ -77,7 +77,7 @@ spec :: Spec
 spec = describe "Accounts" $ do
     describe "CreateAccount" $ do
 
-        prop "works as expected in the happy path scenario" $ withMaxSuccess 50 $ do
+        prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -86,7 +86,7 @@ spec = describe "Accounts" $ do
                              fixtureNewAccountRq
                     (bimap STB STB res) `shouldSatisfy` isRight
 
-        prop "fails if the parent wallet doesn't exists" $ withMaxSuccess 50 $ do
+        prop "fails if the parent wallet doesn't exists" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 wId <- pick arbitrary
                 pwd <- genSpendingPassword
@@ -106,7 +106,7 @@ spec = describe "Accounts" $ do
                                         % build
                              in fail $ formatToString errMsg wId request
 
-        prop "works when called from Servant" $ withMaxSuccess 50 $ do
+        prop "works when called from Servant" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -114,7 +114,7 @@ spec = describe "Accounts" $ do
                     res <- runExceptT . runHandler' $ hdl
                     (bimap identity STB res) `shouldSatisfy` isRight
 
-        prop "does NOT come with 1 address by default" $ withMaxSuccess 50 $ do
+        prop "does NOT come with 1 address by default" $ withMaxSuccess 5 $ do
             -- We expect newly created accounts to @not@ have any associated
             -- addresses. Remember, it's only when we create a new HdRoot that
             -- we enforce this invariant.
@@ -130,7 +130,7 @@ spec = describe "Accounts" $ do
 
     describe "DeleteAccount" $ do
 
-        prop "works as expected in the happy path scenario" $ withMaxSuccess 50 $ do
+        prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -140,7 +140,7 @@ spec = describe "Accounts" $ do
                     res <- WalletLayer.deleteAccount layer wId accIndex
                     (bimap STB STB res) `shouldSatisfy` isRight
 
-        prop "fails if the parent wallet doesn't exists" $ withMaxSuccess 50 $ do
+        prop "fails if the parent wallet doesn't exists" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 wId <- pick arbitrary
                 pm  <- pick arbitrary
@@ -159,7 +159,7 @@ spec = describe "Accounts" $ do
                                         % " , V1.Wallet "
                              in fail $ formatToString errMsg wId
 
-        prop "fails if the account doesn't exists" $ withMaxSuccess 50 $ do
+        prop "fails if the account doesn't exists" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -181,7 +181,7 @@ spec = describe "Accounts" $ do
                                         % " , V1.Wallet "
                              in fail $ formatToString errMsg (V1.walId fixtureV1Wallet)
 
-        prop "works when called from Servant" $ withMaxSuccess 50 $ do
+        prop "works when called from Servant" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -196,7 +196,7 @@ spec = describe "Accounts" $ do
                          -- trying to make one would be overkill.
                          Right _ -> return ()
 
-        prop "Servant handler fails if the parent wallet doesn't exist" $ withMaxSuccess 50 $ do
+        prop "Servant handler fails if the parent wallet doesn't exist" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 wId <- pick arbitrary
                 pm  <- pick arbitrary
@@ -210,7 +210,7 @@ spec = describe "Accounts" $ do
                          Right (Left e)  -> throwM e -- Unexpected Failure
                          Right (Right _) -> fail "Expecting a failure, but the handler succeeded."
 
-        prop "Servant handler fails if the account doesn't exist" $ withMaxSuccess 50 $ do
+        prop "Servant handler fails if the account doesn't exist" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -229,7 +229,7 @@ spec = describe "Accounts" $ do
 
     describe "UpdateAccount" $ do
 
-        prop "works as expected in the happy path scenario" $ withMaxSuccess 50 $ do
+        prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -243,7 +243,7 @@ spec = describe "Accounts" $ do
                          Right updatedAccount ->
                              V1.accName updatedAccount `shouldBe` "My nice account"
 
-        prop "fails if the parent wallet doesn't exists" $ withMaxSuccess 50 $ do
+        prop "fails if the parent wallet doesn't exists" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 wId <- pick arbitrary
                 pm  <- pick arbitrary
@@ -264,7 +264,7 @@ spec = describe "Accounts" $ do
                                         % " , V1.Wallet "
                              in fail $ formatToString errMsg wId
 
-        prop "fails if the account doesn't exists" $ withMaxSuccess 50 $ do
+        prop "fails if the account doesn't exists" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -288,7 +288,7 @@ spec = describe "Accounts" $ do
                                         % " , V1.Wallet "
                              in fail $ formatToString errMsg wId
 
-        prop "works when called from Servant" $ withMaxSuccess 50 $ do
+        prop "works when called from Servant" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -304,7 +304,7 @@ spec = describe "Accounts" $ do
 
     describe "GetAccount" $ do
 
-        prop "works as expected in the happy path scenario" $ withMaxSuccess 50 $ do
+        prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -317,7 +317,7 @@ spec = describe "Accounts" $ do
                          Left e    -> fail (show e)
                          Right acc -> V1.accIndex acc `shouldBe` accIndex
 
-        prop "fails if the parent wallet doesn't exists" $ withMaxSuccess 50 $ do
+        prop "fails if the parent wallet doesn't exists" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 wId <- pick arbitrary
                 pm  <- pick arbitrary
@@ -336,7 +336,7 @@ spec = describe "Accounts" $ do
                                         % " , V1.Wallet "
                              in fail $ formatToString errMsg wId
 
-        prop "fails if the account doesn't exists" $ withMaxSuccess 50 $ do
+        prop "fails if the account doesn't exists" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -357,7 +357,7 @@ spec = describe "Accounts" $ do
                                         % " , V1.Wallet "
                              in fail $ formatToString errMsg (V1.walId fixtureV1Wallet)
 
-        prop "works when called from Servant" $ withMaxSuccess 50 $ do
+        prop "works when called from Servant" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -372,7 +372,7 @@ spec = describe "Accounts" $ do
 
     describe "GetAccounts" $ do
 
-        prop "works as expected in the happy path scenario" $ withMaxSuccess 25 $ do
+        prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -386,7 +386,7 @@ spec = describe "Accounts" $ do
                          Left e     -> fail (show e)
                          Right accs -> IxSet.size accs `shouldBe` 5
 
-        prop "fails if the parent wallet doesn't exists" $ withMaxSuccess 25 $ do
+        prop "fails if the parent wallet doesn't exists" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 wId <- pick arbitrary
                 pm  <- pick arbitrary
@@ -403,7 +403,7 @@ spec = describe "Accounts" $ do
                                         % " , V1.Wallet "
                              in fail $ formatToString errMsg wId
 
-        prop "works when called from Servant" $ withMaxSuccess 25 $ do
+        prop "works when called from Servant" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -421,7 +421,7 @@ spec = describe "Accounts" $ do
 
     describe "GetAccountAddresses" $ do
 
-        prop "fails if the account doesn't exists" $ withMaxSuccess 50 $ do
+        prop "fails if the account doesn't exists" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -447,7 +447,7 @@ spec = describe "Accounts" $ do
                              in fail $ formatToString errMsg (V1.walId fixtureV1Wallet)
 
 
-        prop "applied to each newly created accounts gives addresses as obtained from GetAccounts" $ withMaxSuccess 25 $ do
+        prop "applied to each newly created accounts gives addresses as obtained from GetAccounts" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -472,7 +472,7 @@ spec = describe "Accounts" $ do
                         Left err   -> fail (show err)
 
 
-        prop "and this also works when called from Servant" $ withMaxSuccess 25 $ do
+        prop "and this also works when called from Servant" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -501,7 +501,7 @@ spec = describe "Accounts" $ do
                         Left err   -> fail (show err)
 
 
-        prop "applied to accounts that were just updated via address creation is the same as obtained from GetAccounts" $ withMaxSuccess 25 $ do
+        prop "applied to accounts that were just updated via address creation is the same as obtained from GetAccounts" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -531,7 +531,7 @@ spec = describe "Accounts" $ do
 
     describe "GetAccountBalance" $ do
 
-        prop "gives zero balance for newly created account" $ withMaxSuccess 25 $ do
+        prop "gives zero balance for newly created account" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -545,7 +545,7 @@ spec = describe "Accounts" $ do
                          Left e    -> fail (show e)
                          Right balance -> balance `shouldBe` V1.AccountBalance zero
 
-        prop "fails if the account doesn't exists" $ withMaxSuccess 50 $ do
+        prop "fails if the account doesn't exists" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -568,7 +568,7 @@ spec = describe "Accounts" $ do
 
 
 
-        prop "applied to each newly created account gives balances as obtained from GetAccounts" $ withMaxSuccess 25 $ do
+        prop "applied to each newly created account gives balances as obtained from GetAccounts" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
@@ -591,7 +591,7 @@ spec = describe "Accounts" $ do
                         _                   -> fail "expecting to get 5 balances from partial getters"
 
 
-        prop "and this also works when called from Servant" $ withMaxSuccess 25 $ do
+        prop "and this also works when called from Servant" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
