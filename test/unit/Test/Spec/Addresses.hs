@@ -225,7 +225,7 @@ spec = describe "Addresses" $ do
                         res <- Kernel.createAddress mempty fixtureAccountId fixturePw
                         (bimap STB STB res) `shouldSatisfy` isRight
 
-            prop "fails if the account has no associated key in the keystore" $ do
+            prop "fails if the account has no associated key in the keystore" $ withMaxSuccess 20 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \_ _ _ Fixture{..} -> do
@@ -234,7 +234,7 @@ spec = describe "Addresses" $ do
                             (Left (Kernel.CreateAddressKeystoreNotFound acc)) | acc == fixtureAccountId -> return ()
                             x -> fail (show (bimap STB STB x))
 
-            prop "fails if the parent account doesn't exist" $ do
+            prop "fails if the parent account doesn't exist" $ withMaxSuccess 20 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \keystore _ _ Fixture{..} -> do
@@ -247,7 +247,7 @@ spec = describe "Addresses" $ do
                             x -> fail (show (bimap STB STB x))
 
         describe "Address creation (Servant)" $ do
-            prop "works as expected in the happy path scenario" $ do
+            prop "works as expected in the happy path scenario" $ withMaxSuccess 20 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \keystore layer _ Fixture{..} -> do
@@ -261,7 +261,7 @@ spec = describe "Addresses" $ do
                         (bimap identity STB res) `shouldSatisfy` isRight
 
         describe "Address creation (wallet layer & kernel consistency)" $ do
-            prop "layer & kernel agrees on the result" $ do
+            prop "layer & kernel agrees on the result" $ withMaxSuccess 20 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     res1 <- withFixture pm $ \keystore _ _ Fixture{..} -> do
