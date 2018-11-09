@@ -217,7 +217,7 @@ spec = describe "Addresses" $ do
                         (bimap STB STB res) `shouldSatisfy` isRight
 
         describe "Address creation (kernel)" $ do
-            prop "works as expected in the happy path scenario" $ withMaxSuccess 20 $
+            prop "works as expected in the happy path scenario" $ withMaxSuccess 2 $
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \keystore _ _ Fixture{..} -> do
@@ -225,7 +225,7 @@ spec = describe "Addresses" $ do
                         res <- Kernel.createAddress mempty fixtureAccountId fixturePw
                         (bimap STB STB res) `shouldSatisfy` isRight
 
-            prop "fails if the account has no associated key in the keystore" $ withMaxSuccess 20 $ do
+            prop "fails if the account has no associated key in the keystore" $ withMaxSuccess 2 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \_ _ _ Fixture{..} -> do
@@ -234,7 +234,7 @@ spec = describe "Addresses" $ do
                             (Left (Kernel.CreateAddressKeystoreNotFound acc)) | acc == fixtureAccountId -> return ()
                             x -> fail (show (bimap STB STB x))
 
-            prop "fails if the parent account doesn't exist" $ withMaxSuccess 20 $ do
+            prop "fails if the parent account doesn't exist" $ withMaxSuccess 2 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \keystore _ _ Fixture{..} -> do
@@ -247,7 +247,7 @@ spec = describe "Addresses" $ do
                             x -> fail (show (bimap STB STB x))
 
         describe "Address creation (Servant)" $ do
-            prop "works as expected in the happy path scenario" $ withMaxSuccess 20 $ do
+            prop "works as expected in the happy path scenario" $ withMaxSuccess 1 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \keystore layer _ Fixture{..} -> do
@@ -261,7 +261,7 @@ spec = describe "Addresses" $ do
                         (bimap identity STB res) `shouldSatisfy` isRight
 
         describe "Address creation (wallet layer & kernel consistency)" $ do
-            prop "layer & kernel agrees on the result" $ withMaxSuccess 20 $ do
+            prop "layer & kernel agrees on the result" $ withMaxSuccess 1 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     res1 <- withFixture pm $ \keystore _ _ Fixture{..} -> do
@@ -399,7 +399,7 @@ spec = describe "Addresses" $ do
                                     -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "arbitrary number of addresses, pages and per page" $ withMaxSuccess 50 $ do
+            prop "arbitrary number of addresses, pages and per page" $ withMaxSuccess 10 $ do
                 monadicIO $ do
                     (rNumOfAddresses :: Int) <- pick $ elements [0..15]
                     (rNumOfPages :: Int) <- pick $ elements [0..15]

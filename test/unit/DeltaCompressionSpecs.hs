@@ -120,7 +120,7 @@ spec = do
             let cs'' = applyDeltas d
             return $ (STB cs'') `shouldBe` (STB cs)
 
-        it "Safecopy PartialCheckpoints round trips" $ monadicIO $ do
+        it "Safecopy PartialCheckpoints round trips" $ withMaxSuccess 10 $ monadicIO $ do
             (cs :: Checkpoints PartialCheckpoint) <- pick' $ resize 10 arbitrary
             let ret = runGet SC.safeGet (runPut (SC.safePut cs))
             return $ (STB <$> ret) `shouldBe` (Right (STB cs))

@@ -29,6 +29,7 @@ import           Test.Infrastructure.Genesis
 import           Test.Pos.Configuration (withProvidedMagicConfig)
 import           Test.Spec.BlockMetaScenarios
 import           Test.Spec.TxMetaScenarios
+import           Test.QuickCheck (withMaxSuccess)
 import           Util.Buildable.Hspec
 import           Util.Buildable.QuickCheck
 import           UTxO.Bootstrap
@@ -101,7 +102,7 @@ specBody pm = do
 
       withWithoutWW $ \useWW ->
         it "computes identical results using generated inductive wallets" $
-          forAll (genInductiveUsingModel model) $ \ind -> do
+          withMaxSuccess 1 $ forAll (genInductiveUsingModel model) $ \ind -> do
             conjoin [
                 shouldBeValidated $ void (inductiveIsValid ind)
               , bracketActiveWallet pm $ \activeWallet -> do

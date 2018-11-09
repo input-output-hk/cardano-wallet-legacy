@@ -28,15 +28,15 @@ main = do
         [ WalletNewJson.tests
         ]
     hspec $ do
-        parallel $ Marshalling.spec
-        parallel $ API.spec
-        parallel $ Swagger.spec
-        parallel $ ReqSpec.spec
+        Marshalling.spec
+        API.spec
+        Swagger.spec
+        ReqSpec.spec
 
-        parallel $ eqProps @WalletAddress
-        parallel $ eqProps @Address
-        parallel $ eqProps @Wallet
-        parallel $ eqProps @Transaction
+        eqProps @WalletAddress
+        eqProps @Address
+        eqProps @Wallet
+        eqProps @Transaction
 
 eqProps :: forall a. (Typeable a, Eq a, Arbitrary a, Show a) => Spec
 eqProps = do
