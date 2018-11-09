@@ -12,6 +12,8 @@
 ├─ node-settings/
 │  └─•
 ├─ transactions/
+│  ├─ certificates/
+│  │  └─•
 │  ├─ fees/
 │  │  └─•
 │  ├─•
@@ -26,6 +28,9 @@
    ├─ <capture>/
    │  ├─ password/
    │  │  └─•
+   │  ├─ statistics/
+   │  │  └─ utxos/
+   │  │     └─•
    │  ├─•
    │  ┆
    │  ├─•
@@ -45,4 +50,8 @@
          ┆
          ┆
          └─ <capture>/
+            ├─ addresses/
+            │  └─•
+            ├─ amount/
+            │  └─•
             └─•

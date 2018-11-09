@@ -1,4 +1,4 @@
-module RequestSpec (spec) where
+module API.RequestSpec (spec) where
 
 import           Universum
 

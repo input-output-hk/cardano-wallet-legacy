@@ -90,8 +90,8 @@ jobs:
   - stage: coverage
     script:
     - cp -r $HOME/.local/.stack-work/* .stack-work
-    - travis_wait 42 stack --no-terminal test cardano-wallet:test:wallet-new-specs --fast --coverage --ghc-options=-optl-Wl,-dead_strip_dylibs
-    - shc cardano-wallet wallet-new-specs
+    - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit --fast --coverage --ghc-options=-optl-Wl,-dead_strip_dylibs
+    - shc cardano-wallet unit
 
   # FIXME: Upload API doc automatically on each build against `develop` to `gh-pages`
   # - stage: api-doc

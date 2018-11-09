@@ -1,8 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
-
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module MarshallingSpec (spec) where
+module API.MarshallingSpec (spec) where
 
 import           Universum
 

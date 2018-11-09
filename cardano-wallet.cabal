@@ -418,148 +418,7 @@ executable wal-integr-test
       WalletSpecs
 
 
-test-suite wallet-unit-tests
-  default-language:
-      Haskell2010
-  default-extensions:
-      BangPatterns
-      ConstraintKinds
-      DeriveGeneric
-      FlexibleContexts
-      FlexibleInstances
-      GADTs
-      InstanceSigs
-      LambdaCase
-      MultiParamTypeClasses
-      MultiWayIf
-      NoImplicitPrelude
-      OverloadedStrings
-      RankNTypes
-      RecordWildCards
-      ScopedTypeVariables
-      StandaloneDeriving
-      TypeFamilies
-  other-extensions:
-      DeriveAnyClass
-      GeneralizedNewtypeDeriving
-      UndecidableInstances
-  ghc-options:
-      -threaded -rtsopts
-      -Wall
-      -O2
-
-  build-depends:
-      base
-    , acid-state
-    , bytestring
-    , cardano-crypto
-    , cardano-sl
-    , cardano-sl-binary
-    , cardano-sl-chain
-    , cardano-sl-chain-test
-    , cardano-sl-client
-    , cardano-sl-core
-    , cardano-sl-core-test
-    , cardano-sl-crypto
-    , cardano-sl-db
-    , cardano-sl-infra
-    , cardano-sl-util
-    , cardano-sl-util-test
-    , cardano-sl-utxo
-    , cardano-wallet
-    , cereal
-    , conduit
-    , containers
-    , cryptonite
-    , data-default
-    , directory
-    , filepath
-    , formatting
-    , hspec
-    , hspec-core
-    , lens
-    , mtl
-    , normaldistribution
-    , optparse-applicative
-    , QuickCheck
-    , quickcheck-instances
-    , random
-    , safe-exceptions
-    , safecopy
-    , serokell-util
-    , servant-server
-    , tabl
-    , text
-    , time
-    , time-units
-    , universum
-    , vector
-
-  type:
-     exitcode-stdio-1.0
-  hs-source-dirs:
-      server
-      test/unit
-  main-is:
-      WalletUnitTest.hs
-  other-modules:
-      Arbitrary
-      DeltaCompressionSpecs
-      InputSelection.Evaluation
-      InputSelection.Evaluation.Events
-      InputSelection.Evaluation.Generic
-      InputSelection.Evaluation.Options
-      InputSelection.Evaluation.Replot
-      InputSelection.Evaluation.TimeSeries
-      InputSelection.FromGeneric
-      InputSelection.SortedUtxo
-      InputSelection.TxStats
-      Test.Infrastructure.Generator
-      Test.Infrastructure.Genesis
-      Test.Spec.Accounts
-      Test.Spec.Addresses
-      Test.Spec.BlockMetaScenarios
-      Test.Spec.CoinSelection
-      Test.Spec.CoinSelection.Generators
-      Test.Spec.Fixture
-      Test.Spec.GetTransactions
-      Test.Spec.Kernel
-      Test.Spec.Keystore
-      Test.Spec.Models
-      Test.Spec.NewPayment
-      Test.Spec.Submission
-      Test.Spec.Translation
-      Test.Spec.TxMetaScenarios
-      Test.Spec.WalletWorker
-      Test.Spec.Wallets
-      TxMetaStorageSpecs
-      UTxO.ToCardano.Interpreter
-      Util.Buildable
-      Util.Buildable.Hspec
-      Util.Buildable.QuickCheck
-      Util.Distr
-      Util.GenHash
-      Util.Histogram
-      Util.MultiSet
-      Util.QuickCheck
-      Util.Range
-      Wallet.Abstract
-      Wallet.Basic
-      Wallet.Incremental
-      Wallet.Inductive
-      Wallet.Inductive.Cardano
-      Wallet.Inductive.ExtWalletEvent
-      Wallet.Inductive.Generator
-      Wallet.Inductive.History
-      Wallet.Inductive.Interpreter
-      Wallet.Inductive.Invariants
-      Wallet.Inductive.Validation
-      Wallet.Prefiltered
-      Wallet.Rollback.Basic
-      Wallet.Rollback.Full
-
-
-test-suite wallet-new-specs
+test-suite unit
   default-language:
       Haskell2010
   default-extensions:
@@ -587,7 +446,6 @@ test-suite wallet-new-specs
   other-extensions:
       DeriveAnyClass
       GeneralizedNewtypeDeriving
-      MonadFailDesugaring
       UndecidableInstances
   ghc-options:
       -threaded -rtsopts
@@ -596,41 +454,57 @@ test-suite wallet-new-specs
 
   build-depends:
       base
+    , acid-state
     , aeson
     , bytestring
     , cardano-crypto
     , cardano-sl
+    , cardano-sl-binary
     , cardano-sl-chain
     , cardano-sl-chain-test
-    , cardano-sl-client
     , cardano-sl-client
     , cardano-sl-core
     , cardano-sl-core-test
     , cardano-sl-crypto
+    , cardano-sl-db
+    , cardano-sl-infra
     , cardano-sl-util
     , cardano-sl-util-test
+    , cardano-sl-utxo
     , cardano-wallet
     , cereal
+    , conduit
+    , containers
+    , cryptonite
     , data-default
     , directory
-    , directory
+    , filepath
     , formatting
     , hedgehog
     , hspec
+    , hspec-core
     , insert-ordered-containers
     , lens
+    , mtl
+    , normaldistribution
+    , optparse-applicative
     , QuickCheck
     , quickcheck-instances
+    , random
     , safe-exceptions
     , safecopy
+    , serokell-util
     , servant
     , servant-server
     , servant-swagger
     , string-conv
     , swagger2
+    , tabl
     , text
     , time
+    , time-units
     , universum
+    , vector
 
   type:
      exitcode-stdio-1.0
@@ -638,12 +512,56 @@ test-suite wallet-new-specs
       test
       test/unit
   main-is:
-      Spec.hs
+      Main.hs
   other-modules:
-      APISpec
+      API.MarshallingSpec
+      API.RequestSpec
+      API.SwaggerSpec
+      Arbitrary
       Cardano.Wallet.Kernel.BIP39Spec
-      Cardano.Wallet.WalletLayer.QuickCheck
-      MarshallingSpec
-      RequestSpec
-      SwaggerSpec
-      WalletNewJson
+      Golden.APILayout
+      Golden.WalletError
+      Test.Infrastructure.Generator
+      Test.Infrastructure.Genesis
+      Test.Spec.Accounts
+      Test.Spec.Addresses
+      Test.Spec.BlockMetaScenarios
+      Test.Spec.CoinSelection
+      Test.Spec.CoinSelection.Generators
+      Test.Spec.DeltaCompression
+      Test.Spec.Fixture
+      Test.Spec.GetTransactions
+      Test.Spec.Kernel
+      Test.Spec.Keystore
+      Test.Spec.Models
+      Test.Spec.NewPayment
+      Test.Spec.Submission
+      Test.Spec.Translation
+      Test.Spec.TxMetaScenarios
+      Test.Spec.TxMetaStorage
+      Test.Spec.WalletWorker
+      Test.Spec.Wallets
+      UTxO.ToCardano.Interpreter
+      Util.Buildable
+      Util.Buildable.Hspec
+      Util.Buildable.QuickCheck
+      Util.Distr
+      Util.GenHash
+      Util.Histogram
+      Util.MultiSet
+      Util.QuickCheck
+      Util.Range
+      Wallet.Abstract
+      Wallet.Basic
+      Wallet.Incremental
+      Wallet.Inductive
+      Wallet.Inductive.Cardano
+      Wallet.Inductive.ExtWalletEvent
+      Wallet.Inductive.Generator
+      Wallet.Inductive.History
+      Wallet.Inductive.Interpreter
+      Wallet.Inductive.Invariants
+      Wallet.Inductive.Validation
+      Wallet.Prefiltered
+      Wallet.Rollback.Basic
+      Wallet.Rollback.Full

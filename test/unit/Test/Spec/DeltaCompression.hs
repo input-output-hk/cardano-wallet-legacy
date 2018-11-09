@@ -1,4 +1,4 @@
-module DeltaCompressionSpecs (spec) where
+module Test.Spec.DeltaCompression (spec) where
 
 import           Universum
 

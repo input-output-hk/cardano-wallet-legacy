@@ -75,7 +75,7 @@ import           Test.Spec.CoinSelection.Generators (InitialBalance (..),
                      Pay (..), genPayeeWithNM, genUtxoWithAtLeast)
 import qualified Test.Spec.Fixture as Fixture
 import qualified Test.Spec.NewPayment as NewPayment
-import           TxMetaStorageSpecs (Isomorphic (..), genMeta)
+import           Test.Spec.TxMetaStorage (Isomorphic (..), genMeta)
 
 
 {-# ANN module ("HLint: ignore Reduce duplication" :: Text) #-}

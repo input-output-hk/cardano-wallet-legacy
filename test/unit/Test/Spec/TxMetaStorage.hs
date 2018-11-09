@@ -1,8 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
-module TxMetaStorageSpecs
-
- (
-      txMetaStorageSpecs
+module Test.Spec.TxMetaStorage
+    ( spec
     , genMeta
     , Isomorphic (..)
     ) where
@@ -168,9 +166,8 @@ hasDupes :: Ord a => [a] -> Bool
 hasDupes xs = length (Set.fromList xs) /= List.length xs
 
 -- | Specs which tests the persistent storage and API provided by 'TxMeta'.
-txMetaStorageSpecs :: Spec
-txMetaStorageSpecs = do
-
+spec :: Spec
+spec = do
     describe "SQlite transactions" $ do
         it "throws an exception when tx with double spending" $ monadicIO $ do
             testMetaSTB <- pick genMeta
