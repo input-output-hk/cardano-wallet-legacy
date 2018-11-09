@@ -25,7 +25,7 @@ import           Serokell.Util.Text (listJsonIndent, pairF)
 import           Test.Hspec (expectationFailure, shouldContain, shouldThrow)
 import           Test.Hspec.QuickCheck (prop)
 import           Test.QuickCheck (Arbitrary, Gen, arbitrary, forAll, suchThat,
-                     vectorOf)
+                     vectorOf, withMaxSuccess)
 import           Test.QuickCheck.Monadic (assert, monadicIO, pick, run)
 import           Util.Buildable (ShowThroughBuild (..))
 import           Util.Buildable.Hspec
@@ -172,7 +172,7 @@ txMetaStorageSpecs :: Spec
 txMetaStorageSpecs = do
 
     describe "SQlite transactions" $ do
-        it "throws an exception when tx with double spending" $ monadicIO $ do
+        it "throws an exception when tx with double spending" $ withMaxSuccess 2 $ monadicIO $ do
             testMetaSTB <- pick genMeta
             run $ withTemporaryDb $ \hdl -> do
                 let testMeta = unSTB testMetaSTB
@@ -181,7 +181,7 @@ txMetaStorageSpecs = do
                 putTxMetaT hdl doubleSpendTx `shouldThrow`
                     (\(StorageFailure _) -> True)
 
-        it "rolls back if an insertion fails" $ monadicIO $ do
+        it "rolls back if an insertion fails" $ withMaxSuccess 2 $ monadicIO $ do
             testMetaSTB <- pick genMeta
             let testMeta = unSTB testMetaSTB
             let ins = testMeta ^. txMetaInputs
@@ -200,7 +200,7 @@ txMetaStorageSpecs = do
                 SQlite.closeMetaDB conn
 
     describe "migrations" $ do
-        it "calling migration second time does nothing" $ monadicIO $ do
+        it "calling migration second time does nothing" $ withMaxSuccess 2 $ monadicIO $ do
             testMetaSTB <- pick genMeta
             let testMeta = unSTB testMetaSTB
             db <- liftIO $ openMetaDB ":memory:"
@@ -213,7 +213,7 @@ txMetaStorageSpecs = do
             liftIO $ Isomorphic <$> mbTx2 `shouldBe` Just (Isomorphic testMeta)
             liftIO $ closeMetaDB db
 
-        it "calling clearMetaDB wipes entries" $ monadicIO $ do
+        it "calling clearMetaDB wipes entries" $ withMaxSuccess 2 $ monadicIO $ do
             testMetaSTB <- pick genMeta
             let testMeta = unSTB testMetaSTB
             db <- liftIO $ openMetaDB ":memory:"
@@ -227,7 +227,7 @@ txMetaStorageSpecs = do
             liftIO $ closeMetaDB db
 
     describe "uniqueElements generator" $ do
-        it "generates unique inputs" $ monadicIO $ do
+        it "generates unique inputs" $ withMaxSuccess 20 $ monadicIO $ do
             (inputs :: NonEmpty (ShowThroughBuild Input)) <- pick (uniqueElements 30)
             assert (not $ hasDupes . map unSTB . toList $ inputs)
 
@@ -255,7 +255,7 @@ txMetaStorageSpecs = do
 
     describe "TxMeta storage" $ do
 
-        it "can store a TxMeta and retrieve it back" $ monadicIO $ do
+        it "can store a TxMeta and retrieve it back" $ withMaxSuccess 2 $ monadicIO $ do
             testMetaSTB <- pick genMeta
             run $ withTemporaryDb $ \hdl -> do
                 let testMeta = unSTB testMetaSTB
@@ -263,14 +263,14 @@ txMetaStorageSpecs = do
                 mbTx <- getTxMeta hdl (testMeta ^. txMetaId) (testMeta ^. txMetaWalletId) (testMeta ^. txMetaAccountIx)
                 Isomorphic <$> mbTx `shouldBe` Just (Isomorphic testMeta)
 
-        it "yields Nothing when calling getTxMeta, if a TxMeta is not there" $ monadicIO $ do
+        it "yields Nothing when calling getTxMeta, if a TxMeta is not there" $ withMaxSuccess 2 $ monadicIO $ do
             testMetaSTB <- pick genMeta
             run $ withTemporaryDb $ \hdl -> do
                 let testMeta = unSTB testMetaSTB
                 mbTx <- getTxMeta hdl (testMeta ^. txMetaId) (testMeta ^. txMetaWalletId) (testMeta ^. txMetaAccountIx)
                 fmap DeepEqual mbTx `shouldBe` Nothing
 
-        it "inserting the same tx twice is a no-op" $ monadicIO $ do
+        it "inserting the same tx twice is a no-op" $ withMaxSuccess 2 $ monadicIO $ do
             testMetaSTB <- pick genMeta
             run $ withTemporaryDb $ \hdl -> do
                 let testMeta = unSTB testMetaSTB
@@ -278,7 +278,7 @@ txMetaStorageSpecs = do
                 putTxMetaT hdl testMeta `shouldReturn` Tx
                 putTxMetaT hdl testMeta `shouldReturn` No
 
-        it "inserting two tx with the same PrimaryKey, but different content is an no-op" $ monadicIO $ do
+        it "inserting two tx with the same PrimaryKey, but different content is an no-op" $ withMaxSuccess 2 $ monadicIO $ do
             -- Double insertion may happen in rollback.
             -- The meta may be different e.g. different timestamps.
             -- So no errors here.
@@ -290,7 +290,7 @@ txMetaStorageSpecs = do
                 putTxMetaT hdl meta1 `shouldReturn` Tx
                 putTxMetaT hdl meta2 `shouldReturn` No
 
-        it "same account can`t insert the same tx with different Inputs" $ monadicIO $ do
+        it "same account can`t insert the same tx with different Inputs" $ withMaxSuccess 2 $ monadicIO $ do
             ins <- map getInput  <$> pick (uniqueElements 4)
             let in1 : in2 : in3 : in4 : _ = NonEmpty.toList ins
             let inp1 = NonEmpty.fromList [in1,in2]
@@ -303,7 +303,7 @@ txMetaStorageSpecs = do
                 putTxMetaT hdl meta2 `shouldThrow`
                     (\(InvariantViolated (TxIdInvariantViolated _)) -> True)
 
-        it "two accounts can`t insert the same tx with different Inputs" $ monadicIO $ do
+        it "two accounts can`t insert the same tx with different Inputs" $ withMaxSuccess 2 $ monadicIO $ do
             ins <- map getInput  <$> pick (uniqueElements 4)
             let in1 : in2 : in3 : in4 : _ = NonEmpty.toList ins
             let inp1 = NonEmpty.fromList [in1,in2]
@@ -331,7 +331,7 @@ txMetaStorageSpecs = do
                     (_, _) -> expectationFailure "only the first get should succeed"
 
 
-        it "two accounts can`t insert the same tx with different Outputs" $ monadicIO $ do
+        it "two accounts can`t insert the same tx with different Outputs" $ withMaxSuccess 2 $ monadicIO $ do
             meta <- unSTB <$> pick genMeta
             let out1 = _txMetaOutputs meta
             let out2 = NonEmpty.reverse out1
@@ -356,7 +356,7 @@ txMetaStorageSpecs = do
                         count `shouldBe` (Just 1)
                     (_, _) -> expectationFailure "only the first get should succeed"
 
-        it "two accounts can succesfully insert the same tx" $ monadicIO $ do
+        it "two accounts can succesfully insert the same tx" $ withMaxSuccess 2 $ monadicIO $ do
             meta1 <- unSTB <$> pick genMeta
             let accountIx1 = meta1 ^. txMetaAccountIx
             accountIx2 <- pick $ suchThat arbitrary (\ix -> ix /= accountIx1)
@@ -379,7 +379,7 @@ txMetaStorageSpecs = do
                         count `shouldBe` (Just 2)
                     (_, _) -> expectationFailure "can`t retrieve same tx"
 
-        it "two accounts can succesfully insert the same tx, one Incoming the other Outgoing" $ monadicIO $ do
+        it "two accounts can succesfully insert the same tx, one Incoming the other Outgoing" $ withMaxSuccess 10 $ monadicIO $ do
             meta <- unSTB <$> pick genMeta
             let accountIx1 = meta ^. txMetaAccountIx
             accountIx2 <- pick $ suchThat arbitrary (\ix -> ix /= accountIx1)
@@ -403,7 +403,7 @@ txMetaStorageSpecs = do
                         count `shouldBe` (Just 2)
                     (_, _) -> expectationFailure "can`t retrieve same tx"
 
-        it "one account can succesfully insert two tx" $ monadicIO $ do
+        it "one account can succesfully insert two tx" $ withMaxSuccess 20 $ monadicIO $ do
             meta1 <- unSTB <$> pick genMeta
             let txId1 = meta1 ^. txMetaId
             txId2 <- pick $ suchThat arbitrary (\ix -> ix /= txId1)
@@ -425,7 +425,7 @@ txMetaStorageSpecs = do
                         count `shouldBe` (Just 2)
                     (_, _) -> expectationFailure "can`t retrieve both txs"
 
-        it "inserting multiple txs and later retrieving all of them works" $ monadicIO $ do
+        it "inserting multiple txs and later retrieving all of them works" $ withMaxSuccess 10 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -433,7 +433,7 @@ txMetaStorageSpecs = do
                 (result, _) <- getTxMetas hdl (Offset 0) (Limit 100) Everything Nothing NoFilterOp NoFilterOp Nothing
                 map Isomorphic result `shouldMatchList` map Isomorphic metas
 
-        it "pagination correctly limit the results" $ monadicIO $ do
+        it "pagination correctly limit the results" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 10)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -441,7 +441,7 @@ txMetaStorageSpecs = do
                 (result, _) <- getTxMetas hdl (Offset 0) (Limit 5) Everything Nothing NoFilterOp NoFilterOp Nothing
                 length result `shouldBe` 5
 
-        it "pagination correctly sorts (ascending) the results" $ monadicIO $ do
+        it "pagination correctly sorts (ascending) the results" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -449,7 +449,7 @@ txMetaStorageSpecs = do
                 (result, _) <- (getTxMetas hdl) (Offset 0) (Limit 10) Everything Nothing NoFilterOp NoFilterOp (Just $ Sorting SortByAmount Ascending)
                 map Isomorphic result `shouldBe` sortByAmount Ascending (map Isomorphic metas)
 
-        it "pagination correctly sorts (descending) the results" $ monadicIO $ do
+        it "pagination correctly sorts (descending) the results" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -457,7 +457,7 @@ txMetaStorageSpecs = do
                 (result, _) <- (getTxMetas hdl) (Offset 0) (Limit 10) Everything Nothing NoFilterOp NoFilterOp (Just $ Sorting SortByCreationAt Descending)
                 map Isomorphic result `shouldBe` sortByCreationAt Descending (map Isomorphic metas)
 
-        it "implicit sorting is by creation time descenting" $ monadicIO $ do
+        it "implicit sorting is by creation time descenting" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -465,7 +465,7 @@ txMetaStorageSpecs = do
                 (result, _) <- (getTxMetas hdl) (Offset 0) (Limit 10) Everything Nothing NoFilterOp NoFilterOp Nothing
                 map Isomorphic result `shouldBe` sortByCreationAt Descending (map Isomorphic metas)
 
-        it "metadb counts total Entries properly" $ monadicIO $ do
+        it "metadb counts total Entries properly" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 10)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -473,7 +473,7 @@ txMetaStorageSpecs = do
                 (_, total) <- (getTxMetas hdl) (Offset 0) (Limit 5) Everything Nothing NoFilterOp NoFilterOp Nothing
                 total `shouldBe` (Just 10)
 
-        it "filtering walletid works ok" $ monadicIO $ do
+        it "filtering walletid works ok" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 10)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -485,7 +485,7 @@ txMetaStorageSpecs = do
                         map Isomorphic result `shouldMatchList` map Isomorphic expectedResults
                         total `shouldBe` (Just $ length expectedResults)
 
-        it "multiple filters works ok" $ monadicIO $ do
+        it "multiple filters works ok" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 10)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -497,7 +497,7 @@ txMetaStorageSpecs = do
                         map Isomorphic result `shouldMatchList` map Isomorphic expectedResults
                         total `shouldBe` (Just $ length expectedResults)
 
-        it "pagination and filtering" $ monadicIO $ do
+        it "pagination and filtering" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -509,7 +509,7 @@ txMetaStorageSpecs = do
                         map Isomorphic expectedResults `shouldContain` map Isomorphic result
                         total `shouldBe` (Just $ length expectedResults)
 
-        it "fitlering addresses" $ monadicIO $ do
+        it "fitlering addresses" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -520,7 +520,7 @@ txMetaStorageSpecs = do
                         (result, _) <- (getTxMetas hdl) (Offset 0) (Limit 5) Everything (Just addr) NoFilterOp NoFilterOp Nothing
                         map Isomorphic result `shouldContain` [Isomorphic m]
 
-        it "returns meta with the correct address in Inputs or Outputs (SQL union)" $ monadicIO $ do
+        it "returns meta with the correct address in Inputs or Outputs (SQL union)" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -534,7 +534,7 @@ txMetaStorageSpecs = do
                         iso  `shouldContain` [Isomorphic m1]
                         iso  `shouldContain` [Isomorphic m2]
 
-        it "txs with same address in both inputs and outputs are reported once (SQL union removes duplicates)" $ monadicIO $ do
+        it "txs with same address in both inputs and outputs are reported once (SQL union removes duplicates)" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -552,7 +552,7 @@ txMetaStorageSpecs = do
                         map Isomorphic sameTxIdWithM2 `shouldBe` [Isomorphic m2]
 
 
-        it "paginates meta with the correct address in Inputs or Outputs" $ monadicIO $ do
+        it "paginates meta with the correct address in Inputs or Outputs" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -572,7 +572,7 @@ txMetaStorageSpecs = do
                         iso  `shouldContain` [Isomorphic m1]
                         iso  `shouldContain` [Isomorphic m2]
 
-        it "filters on txid meta with the correct address in Inputs or Outputs" $ monadicIO $ do
+        it "filters on txid meta with the correct address in Inputs or Outputs" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -585,7 +585,7 @@ txMetaStorageSpecs = do
                         count `shouldBe` (Just 1) -- here it`s exactly one because we filter on TxId.
                         map Isomorphic result `shouldBe` [Isomorphic m1]
 
-        it "correctly filters on txid meta with the correct address in Inputs or Outputs" $ monadicIO $ do
+        it "correctly filters on txid meta with the correct address in Inputs or Outputs" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -599,7 +599,7 @@ txMetaStorageSpecs = do
                         map Isomorphic result `shouldBe` [Isomorphic m1]
 
 
-        it "pagination sorts meta with the correct address in Inputs or Outputs (SQL: union, sorting, pagination)" $ monadicIO $ do
+        it "pagination sorts meta with the correct address in Inputs or Outputs (SQL: union, sorting, pagination)" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -619,7 +619,7 @@ txMetaStorageSpecs = do
                         count1 `shouldBe` count2
                         map Isomorphic result `shouldBe` sortByCreationAt Descending (map Isomorphic [m1, m2])
 
-        it "like above, but we test implicit sorting" $ monadicIO $ do
+        it "like above, but we test implicit sorting" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -639,7 +639,7 @@ txMetaStorageSpecs = do
                         count1 `shouldBe` count2
                         map Isomorphic result `shouldBe` sortByCreationAt Descending (map Isomorphic [m1, m2])
 
-        it "applying all filters succeeds when it should" $ monadicIO $ do
+        it "applying all filters succeeds when it should" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -658,7 +658,7 @@ txMetaStorageSpecs = do
                         map Isomorphic result `shouldMatchList` [Isomorphic m]
                         total `shouldBe` (Just 1)
 
-        it "applying all filters rejects everything when it should" $ monadicIO $ do
+        it "applying all filters rejects everything when it should" $ withMaxSuccess 2 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
