@@ -49,8 +49,8 @@ import qualified Cardano.Wallet.Util as Util
 
 -- | Tests whether or not some instances (JSON, Bi, etc) roundtrips.
 spec :: HasCallStack => Spec
-spec = parallel $ describe "Marshalling & Unmarshalling" $ do
-    parallel $ describe "Roundtrips" $ do
+spec = describe "Marshalling & Unmarshalling" $ do
+    describe "Roundtrips" $ do
         aesonRoundtripProp @Account Proxy
         aesonRoundtripProp @AssuranceLevel Proxy
         aesonRoundtripProp @BackupPhrase Proxy
@@ -132,9 +132,6 @@ spec = parallel $ describe "Marshalling & Unmarshalling" $ do
         safeCopyRoundTrip @(InDb Core.BlockVersion)
         safeCopyRoundTrip @(InDb Core.SoftwareVersion)
         safeCopyRoundTrip @(InDb Core.ApplicationName)
-        -- safeCopyRoundTrip @(InDb (Core.ProxySignature w)
-        -- safeCopyRoundTrip @(InDb (Core.ProxySecretKey w))
-        -- safeCopyRoundTrip @(InDb (Core.ProxyCert w))
         safeCopyRoundTrip @(InDb CCW.XSignature)
         safeCopyRoundTrip @(InDb (Core.HeavyDlgIndex))
         safeCopyRoundTrip @(InDb (Core.LightDlgIndices))
@@ -238,7 +235,7 @@ safeCopyRoundTrip
     :: forall a
     . (HasCallStack, Arbitrary a, SafeCopy a, Show a, Eq a, Typeable a)
     => Spec
-safeCopyRoundTrip = prop propName $ \(a :: a) ->
+safeCopyRoundTrip = prop propName $ withMaxSuccess 30 $  \(a :: a) ->
     runGet safeGet (runPut (safePut a)) === Right a
   where
     propName = "Safe Copy Roundtrip for: " <> show (typeRep (Proxy @a))

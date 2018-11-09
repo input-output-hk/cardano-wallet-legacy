@@ -510,7 +510,6 @@ test-suite unit
      exitcode-stdio-1.0
   hs-source-dirs:
       test
-      test/unit
   main-is:
       Main.hs
   other-modules:
