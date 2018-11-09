@@ -287,7 +287,7 @@ spec = describe "Addresses" $ do
                              return $ (bimap STB STB res1) `shouldSatisfy` isRight
 
         describe "Address listing (Servant)" $ do
-            prop "0 addresses, page 0, per page 0" $ do
+            prop "0 addresses, page 0, per page 0" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 0 $ \_ layer _ _ -> do
@@ -298,7 +298,7 @@ spec = describe "Addresses" $ do
                            Right wr | null (wrData wr) -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "1 addresses, page 0, per page 0" $ do
+            prop "1 addresses, page 0, per page 0" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 1 $ \_ layer _ _ -> do
@@ -309,7 +309,7 @@ spec = describe "Addresses" $ do
                            Right wr | null (wrData wr) -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 0, per page 0" $ do
+            prop "3 addresses, page 0, per page 0" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 3 $ \_ layer _ _ -> do
@@ -320,7 +320,7 @@ spec = describe "Addresses" $ do
                            Right wr | null (wrData wr) -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 1, per page 0" $ do
+            prop "3 addresses, page 1, per page 0" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 3 $ \_ layer _ _ -> do
@@ -331,7 +331,7 @@ spec = describe "Addresses" $ do
                            Right wr | null (wrData wr) -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 1, per page 1" $ do
+            prop "3 addresses, page 1, per page 1" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 3 $ \_ layer _ [wa0, _, _] -> do
@@ -343,7 +343,7 @@ spec = describe "Addresses" $ do
                                 wrData wr `shouldBe` [addressFixtureAddress wa0]
                             _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 1, per page 2" $ do
+            prop "3 addresses, page 1, per page 2" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 3 $ \_ layer _ [wa0, wa1, _wa2] -> do
@@ -357,7 +357,7 @@ spec = describe "Addresses" $ do
                                     -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 1, per page 3" $ do
+            prop "3 addresses, page 1, per page 3" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 3 $ \_ layer _ [wa0, wa1, wa2] -> do
@@ -372,7 +372,7 @@ spec = describe "Addresses" $ do
                                     -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 2, per page 2" $ do
+            prop "3 addresses, page 2, per page 2" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 3 $ \_ layer _ [_wa0, _wa1, wa2] -> do
@@ -385,7 +385,7 @@ spec = describe "Addresses" $ do
                                     -> pure ()
                            _ -> fail ("Got " ++ show res)
 
-            prop "4 addresses, page 2, per page 2" $ do
+            prop "4 addresses, page 2, per page 2" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 4 $ \_ layer _ [_wa0, _wa1, wa2, wa3] -> do
