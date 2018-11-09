@@ -81,8 +81,8 @@ jobs:
   - stage: wallet-new-specs
     script:
     - stack clean
-    - travis_wait 42 stack --no-terminal test cardano-sl-wallet-new:test:wallet-new-specs --fast --coverage --ghc-options=-optl-Wl,-dead_strip_dylibs
-    - shc cardano-sl-wallet-new wallet-new-specs
+    - travis_wait 42 stack --no-terminal test cardano-sl-wallet-new:test:wallet-unit-tests --fast --coverage --ghc-options=-optl-Wl,-dead_strip_dylibs
+    - shc cardano-sl-wallet-new wallet-unit-tests
     - stack clean
 
   # FIXME: Upload API doc automatically on each build against `develop` to `gh-pages`
