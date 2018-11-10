@@ -52,7 +52,7 @@ genNewAccountRq spendingPassword = do
 
 prepareFixtures :: GenPassiveWalletFixture Fixture
 prepareFixtures = do
-    spendingPassword <- genSpendingPassword
+    spendingPassword <- pick genSpendingPassword
     newWalletRq <- WalletLayer.CreateWallet <$> Wallets.genNewWalletRq spendingPassword
     newAccountRq <- genNewAccountRq spendingPassword
     return $ \pw -> do
@@ -89,7 +89,7 @@ spec = describe "Accounts" $ do
         prop "fails if the parent wallet doesn't exists" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 wId <- pick arbitrary
-                pwd <- genSpendingPassword
+                pwd <- pick genSpendingPassword
                 request <- genNewAccountRq pwd
                 pm <- pick arbitrary
                 withLayer pm $ \layer _ -> do

@@ -19,8 +19,8 @@ import           Pos.Util.Wlog (Severity)
 import           Pos.Crypto (ProtocolMagic)
 import           Pos.Infra.InjectFail (mkFInjects)
 
-import           Test.QuickCheck (arbitrary, frequency)
-import           Test.QuickCheck.Monadic (PropertyM, pick)
+import           Test.QuickCheck (arbitrary, frequency, Gen)
+import           Test.QuickCheck.Monadic (PropertyM)
 
 import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel as Kernel
@@ -36,9 +36,8 @@ import qualified Cardano.Wallet.WalletLayer.Kernel as WalletLayer.Kernel
 devNull :: Severity -> Text -> IO ()
 devNull _ _ = return ()
 
-genSpendingPassword :: PropertyM IO (Maybe V1.SpendingPassword)
-genSpendingPassword =
-    pick (frequency [(20, pure Nothing), (80, Just <$> arbitrary)])
+genSpendingPassword :: Gen (Maybe V1.SpendingPassword)
+genSpendingPassword = frequency [(20, pure Nothing), (80, Just <$> arbitrary)]
 
 withLayer :: MonadIO m
           => ProtocolMagic

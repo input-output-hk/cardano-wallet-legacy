@@ -99,7 +99,7 @@ prepareAddressFixture
   :: Int  -- ^ Number of 'AddressFixture's to create.
   -> Fixture.GenPassiveWalletFixture [AddressFixture]
 prepareAddressFixture n = do
-    spendingPassword <- Fixture.genSpendingPassword
+    spendingPassword <- pick Fixture.genSpendingPassword
     newWalletRq <- WalletLayer.CreateWallet <$> Wallets.genNewWalletRq spendingPassword
     return $ \pw -> do
         Right v1Wallet <- Wallets.createWallet pw newWalletRq
@@ -134,7 +134,7 @@ prepareAddressesFixture
     -> DesiredNewAddresses  -- ^ Number of Address per account to create.
     -> Fixture.GenPassiveWalletFixture (M.Map V1.AccountIndex [V1.WalletAddress], Int)
 prepareAddressesFixture (DesiredNewAccs acn) (DesiredNewAddrs adn) = do
-    spendingPassword <- Fixture.genSpendingPassword
+    spendingPassword <- pick Fixture.genSpendingPassword
     newWalletRq <- WalletLayer.CreateWallet <$> Wallets.genNewWalletRq spendingPassword
     return $ \pw -> do
         let newAcc (n :: Int) = (V1.NewAccount spendingPassword ("My Account " <> show n))

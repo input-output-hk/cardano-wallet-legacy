@@ -112,7 +112,7 @@ spec = describe "Wallets" $ do
 
             prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    pwd     <- genSpendingPassword
+                    pwd     <- pick genSpendingPassword
                     request <- WalletLayer.CreateWallet <$> genNewWalletRq pwd
                     pm      <- pick arbitrary
                     withLayer pm $ \layer _ -> do
@@ -122,7 +122,7 @@ spec = describe "Wallets" $ do
 
             prop "fails if the wallet already exists" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    pwd     <- genSpendingPassword
+                    pwd     <- pick genSpendingPassword
                     request <- WalletLayer.CreateWallet <$> genNewWalletRq pwd
                     pm      <- pick arbitrary
                     withLayer pm $ \layer _ -> do
@@ -142,7 +142,7 @@ spec = describe "Wallets" $ do
 
             prop "supports Unicode characters" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    pwd     <- genSpendingPassword
+                    pwd     <- pick genSpendingPassword
                     request <- genNewWalletRq pwd
                     pm      <- pick arbitrary
                     withLayer pm $ \layer _ -> do
@@ -156,7 +156,7 @@ spec = describe "Wallets" $ do
         describe "Wallet creation (kernel)" $ do
             prop "correctly persists the ESK in the keystore" $ withMaxSuccess 5 $
                 monadicIO $ do
-                    pwd     <- genSpendingPassword
+                    pwd     <- pick genSpendingPassword
                     V1.NewWallet{..} <- genNewWalletRq pwd
                     pm      <- pick arbitrary
                     withLayer @IO pm $ \_ wallet -> do
@@ -181,7 +181,7 @@ spec = describe "Wallets" $ do
         describe "Wallet creation (Servant)" $ do
             prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    pwd <- genSpendingPassword
+                    pwd <- pick genSpendingPassword
                     rq  <- genNewWalletRq pwd
                     pm  <- pick arbitrary
                     withLayer pm $ \layer _ -> do
@@ -191,7 +191,7 @@ spec = describe "Wallets" $ do
 
             prop "comes by default with 1 account at a predictable index" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    pwd <- genSpendingPassword
+                    pwd <- pick genSpendingPassword
                     rq  <- genNewWalletRq pwd
                     pm  <- pick arbitrary
                     withLayer pm $ \layer _ -> do
@@ -205,7 +205,7 @@ spec = describe "Wallets" $ do
 
             prop "comes by default with 1 address at the default account" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    pwd <- genSpendingPassword
+                    pwd <- pick genSpendingPassword
                     rq  <- genNewWalletRq pwd
                     pm  <- pick arbitrary
                     withLayer pm $ \layer _ -> do
