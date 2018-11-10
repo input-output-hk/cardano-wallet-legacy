@@ -103,7 +103,7 @@ prepareAddressFixture
   -> WalletLayer.CreateWallet
   -> PassiveWallet
   -> IO [AddressFixture]
-prepareAddressFixture n spendingPassword newWalletReq pw = do
+prepareAddressFixture n spendingPassword newWalletRq pw = do
    Right v1Wallet <- Wallets.createWallet pw newWalletRq
    -- Create new accounts under the first, automatically-generated
    -- account for this wallet, placed at 'firstHardened'.
@@ -138,7 +138,7 @@ prepareAddressesFixture
     -> DesiredNewAddresses  -- ^ Number of Address per account to create.
     -> PassiveWallet
     -> IO(M.Map V1.AccountIndex [V1.WalletAddress], Int)
-prepareAddressesFixture spendingPassword newWalletReq (DesiredNewAccs acn) (DesiredNewAddrs adn) pw = do
+prepareAddressesFixture spendingPassword newWalletRq (DesiredNewAccs acn) (DesiredNewAddrs adn) pw = do
     let newAcc (n :: Int) = (V1.NewAccount spendingPassword ("My Account " <> show n))
     Right v1Wallet <- Wallets.createWallet pw newWalletRq
     forM_ [1..acn] $ \n ->
@@ -185,9 +185,9 @@ withAddressFixtures
      -> IO a
      )
   -> PropertyM IO a
-withAddressFixtures pm wp w n =
+withAddressFixtures pm sp w n =
   Fixture.withPassiveWalletFixture pm $ do
-      prepareAddressFixture n sp w
+      return $ prepareAddressFixture n sp w
 
 withAddressesFixtures
     :: ProtocolMagic
@@ -202,9 +202,9 @@ withAddressesFixtures
     -> IO a
     )
     -> PropertyM IO a
-withAddressesFixtures pm wp w n m =
+withAddressesFixtures pm sp w n m =
     Fixture.withPassiveWalletFixture pm $ do
-        prepareAddressesFixture n m sp w
+        return $ prepareAddressesFixture sp w n m
 
 spec :: Spec
 spec = describe "Addresses" $ do
@@ -427,7 +427,7 @@ spec = describe "Addresses" $ do
             let rootId = addrRoot . V1.unV1 . V1.addrId
             prop "page 0, per page 0" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    withAddressesFixtures pm (DesiredNewAccs 4) (DesiredNewAddrs 4) $ \_ layer _ _ -> do
+                    withAddressesFixtures pm sp w (DesiredNewAccs 4) (DesiredNewAddrs 4) $ \_ layer _ _ -> do
                         let pp = PaginationParams (Page 0) (PerPage 0)
                         res <- runExceptT $ runHandler' $ do
                             Handlers.listAddresses layer (RequestParams pp)
@@ -437,7 +437,7 @@ spec = describe "Addresses" $ do
 
             prop "it yields the correct number of results" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    withAddressesFixtures pm (DesiredNewAccs 3) (DesiredNewAddrs 4) $ \_ layer _ (_, total) -> do
+                    withAddressesFixtures pm sp w (DesiredNewAccs 3) (DesiredNewAddrs 4) $ \_ layer _ (_, total) -> do
                         let pp = PaginationParams (Page 1) (PerPage 40)
                         res <- runExceptT $ runHandler' $ do
                             Handlers.listAddresses layer (RequestParams pp)
@@ -448,7 +448,7 @@ spec = describe "Addresses" $ do
 
             prop "is deterministic" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    withAddressesFixtures pm (DesiredNewAccs 3) (DesiredNewAddrs 8) $ \_ layer _ (_, expectedTotal) -> do
+                    withAddressesFixtures pm sp w (DesiredNewAccs 3) (DesiredNewAddrs 8) $ \_ layer _ (_, expectedTotal) -> do
                         let ppSplit = quot expectedTotal 3 + 1
                             mkRequest mypp = Handlers.listAddresses layer (RequestParams mypp)
                         forM_ [(1,40), (1, ppSplit), (2, ppSplit), (3, ppSplit)] $ \(page, perPage) -> do
@@ -459,7 +459,7 @@ spec = describe "Addresses" $ do
 
             prop "yields the correct set of resutls" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    withAddressesFixtures pm (DesiredNewAccs 4) (DesiredNewAddrs 8) $ \_ layer _ (_, expectedTotal) -> do
+                    withAddressesFixtures pm sp w (DesiredNewAccs 4) (DesiredNewAddrs 8) $ \_ layer _ (_, expectedTotal) -> do
                         let ppSplit = quot expectedTotal 3 + 1
                             pp = PaginationParams (Page 1) (PerPage 50)
                             pp1 = PaginationParams (Page 1) (PerPage ppSplit)
@@ -484,7 +484,7 @@ spec = describe "Addresses" $ do
 
             prop "yields the correct ordered resutls when there is one account" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    withAddressesFixtures pm (DesiredNewAccs 0) (DesiredNewAddrs 15) $ \_ layer _ (_, expectedTotal) -> do
+                    withAddressesFixtures pm sp w (DesiredNewAccs 0) (DesiredNewAddrs 15) $ \_ layer _ (_, expectedTotal) -> do
                         let ppSplit = quot expectedTotal 3 + 1
                             pp = PaginationParams (Page 1) (PerPage 50)
                             pp1 = PaginationParams (Page 1) (PerPage ppSplit)
@@ -513,7 +513,7 @@ spec = describe "Addresses" $ do
                   forM_ [(DesiredNewAccs 4,DesiredNewAddrs 8),
                          (DesiredNewAccs 6,DesiredNewAddrs 6),
                          (DesiredNewAccs 5,DesiredNewAddrs 7)] $ \(acc,adr) ->
-                    withAddressesFixtures pm acc adr $ \_ layer _ (_, expectedTotal) -> do
+                    withAddressesFixtures pm sp w acc adr $ \_ layer _ (_, expectedTotal) -> do
                         forM_ [2..10] $ \k -> do
                             let indexes = [1..k]
                                 pagesParams = map (\i -> PaginationParams (Page i) (PerPage (quot expectedTotal k + 1)))
