@@ -92,7 +92,7 @@ spec = describe "Accounts" $ do
                 pwd <- pick genSpendingPassword
                 request <- genNewAccountRq pwd
                 pm <- pick arbitrary
-                withLayer pm $ \layer _ -> do
+                liftIO $ withLayer pm $ \layer _ -> do
                     res <- WalletLayer.createAccount layer wId request
                     case res of
                          Left (WalletLayer.CreateAccountError (CreateAccountKeystoreNotFound _)) ->
@@ -144,7 +144,7 @@ spec = describe "Accounts" $ do
             monadicIO $ do
                 wId <- pick arbitrary
                 pm  <- pick arbitrary
-                withLayer pm $ \layer _ -> do
+                liftIO $ withLayer pm $ \layer _ -> do
                     res <- WalletLayer.deleteAccount layer wId
                              (V1.unsafeMkAccountIndex firstHardened)
                     case res of
@@ -200,7 +200,7 @@ spec = describe "Accounts" $ do
             monadicIO $ do
                 wId <- pick arbitrary
                 pm  <- pick arbitrary
-                withLayer pm $ \layer _ -> do
+                liftIO $ withLayer pm $ \layer _ -> do
                     let delete = Handlers.deleteAccount layer
                             wId
                             (V1.unsafeMkAccountIndex 2147483648)
@@ -247,7 +247,7 @@ spec = describe "Accounts" $ do
             monadicIO $ do
                 wId <- pick arbitrary
                 pm  <- pick arbitrary
-                withLayer pm $ \layer _ -> do
+                liftIO $ withLayer pm $ \layer _ -> do
                     res <- WalletLayer.updateAccount layer
                              wId
                              (V1.unsafeMkAccountIndex 2147483648)
@@ -321,7 +321,7 @@ spec = describe "Accounts" $ do
             monadicIO $ do
                 wId <- pick arbitrary
                 pm  <- pick arbitrary
-                withLayer pm $ \layer _ -> do
+                liftIO $ withLayer pm $ \layer _ -> do
                     res <- WalletLayer.getAccount layer
                              wId
                              (V1.unsafeMkAccountIndex 2147483648)
@@ -390,7 +390,7 @@ spec = describe "Accounts" $ do
             monadicIO $ do
                 wId <- pick arbitrary
                 pm  <- pick arbitrary
-                withLayer pm $ \layer _ -> do
+                liftIO $ withLayer pm $ \layer _ -> do
                     res <- WalletLayer.getAccounts layer wId
                     case res of
                          Left (WalletLayer.GetAccountsError (Kernel.UnknownHdRoot _)) ->

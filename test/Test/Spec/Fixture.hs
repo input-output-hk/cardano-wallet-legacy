@@ -19,7 +19,7 @@ import           Pos.Util.Wlog (Severity)
 import           Pos.Crypto (ProtocolMagic)
 import           Pos.Infra.InjectFail (mkFInjects)
 
-import           Test.QuickCheck (arbitrary, frequency, Gen)
+import           Test.QuickCheck (Gen, arbitrary, frequency)
 import           Test.QuickCheck.Monadic (PropertyM)
 
 import qualified Cardano.Wallet.API.V1.Types as V1
@@ -42,7 +42,7 @@ genSpendingPassword = frequency [(20, pure Nothing), (80, Just <$> arbitrary)]
 withLayer :: MonadIO m
           => ProtocolMagic
           -> (PassiveWalletLayer m -> PassiveWallet -> IO a)
-          -> PropertyM IO a
+          -> m a
 withLayer pm cc = do
     liftIO $ Keystore.bracketTestKeystore $ \keystore -> do
         mockFInjects <- mkFInjects mempty
