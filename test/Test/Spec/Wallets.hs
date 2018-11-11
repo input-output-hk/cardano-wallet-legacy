@@ -50,7 +50,7 @@ import           Control.Monad.Except (runExceptT)
 import           Servant.Server
 
 import           Test.Spec.Fixture (GenPassiveWalletFixture,
-                     genSpendingPassword, withLayer, withPassiveWalletFixture)
+                     genSpendingPassword, withLayer, withPassiveWalletFixture2)
 import           Util.Buildable (ShowThroughBuild (..))
 
 {-# ANN module ("HLint: ignore Reduce duplication" :: Text) #-}
@@ -108,9 +108,9 @@ withNewWalletFixture :: ProtocolMagic
                         -> Fixture
                         -> IO a
                         )
-                     -> PropertyM IO a
-withNewWalletFixture pm sp w cc = withPassiveWalletFixture pm
-                                (return $ prepareFixtures sp w) cc
+                     -> IO a
+withNewWalletFixture pm sp w cc = withPassiveWalletFixture2 pm
+                                (prepareFixtures sp w) cc
 
 spec :: Spec
 spec = describe "Wallets" $ do
@@ -212,74 +212,67 @@ spec = describe "Wallets" $ do
     describe "DeleteWallet" $ do
         describe "Wallet deletion (wallet layer)" $ do
 
-            prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withNewWalletFixture pm nonEmptySpendingPassword request $ \_ layer _ Fixture{..} -> do
-                        let wId = V1.walId fixtureV1Wallet
-                        liftIO $ do
-                            res1 <- WalletLayer.deleteWallet layer wId
-                            (bimap STB STB res1) `shouldSatisfy` isRight
-                            -- Check that the wallet is not there anymore
-                            res2 <- WalletLayer.getWallet layer wId
-                            (bimap STB STB res2) `shouldSatisfy` isLeft
+            prop "works as expected in the happy path scenario" $ do
+                withNewWalletFixture pm nonEmptySpendingPassword request $ \_ layer _ Fixture{..} -> do
+                    let wId = V1.walId fixtureV1Wallet
+                    res1 <- WalletLayer.deleteWallet layer wId
+                    (bimap STB STB res1) `shouldSatisfy` isRight
+                    -- Check that the wallet is not there anymore
+                    res2 <- WalletLayer.getWallet layer wId
+                    (bimap STB STB res2) `shouldSatisfy` isLeft
 
-            prop "cascade-deletes all the associated accounts" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withNewWalletFixture pm nonEmptySpendingPassword request $ \_ layer _ Fixture{..} -> do
-                        let wId = V1.walId fixtureV1Wallet
-                        liftIO $ do
-                            let check predicate _ V1.Account{..} = do
-                                    acc <- WalletLayer.getAccount layer wId accIndex
-                                    (bimap STB STB acc) `shouldSatisfy` predicate
+            prop "cascade-deletes all the associated accounts" $
+                withNewWalletFixture pm nonEmptySpendingPassword request $ \_ layer _ Fixture{..} -> do
+                    let wId = V1.walId fixtureV1Wallet
+                    let check predicate _ V1.Account{..} = do
+                            acc <- WalletLayer.getAccount layer wId accIndex
+                            (bimap STB STB acc) `shouldSatisfy` predicate
 
-                            Right allAccounts <- WalletLayer.getAccounts layer wId
+                    Right allAccounts <- WalletLayer.getAccounts layer wId
 
-                            -- We should have 1 account, and fetching it must
-                            -- succeed.
-                            IxSet.size allAccounts `shouldBe` 1
-                            foldM_ (check isRight) () allAccounts
+                    -- We should have 1 account, and fetching it must
+                    -- succeed.
+                    IxSet.size allAccounts `shouldBe` 1
+                    foldM_ (check isRight) () allAccounts
 
-                            -- Deletion should still return 'Right'.
-                            res <- WalletLayer.deleteWallet layer wId
-                            (bimap STB STB res) `shouldSatisfy` isRight
+                    -- Deletion should still return 'Right'.
+                    res <- WalletLayer.deleteWallet layer wId
+                    (bimap STB STB res) `shouldSatisfy` isRight
 
-                            -- Fetching the old, not-existing-anymore accounts
-                            -- should fail.
-                            foldM_ (check isLeft) () allAccounts
+                    -- Fetching the old, not-existing-anymore accounts
+                    -- should fail.
+                    foldM_ (check isLeft) () allAccounts
 
             prop "fails if the wallet doesn't exists" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     wId  <- pick arbitrary
                     liftIO $ withLayer pm $ \layer _ -> do
-                        liftIO $ do
-                            res <- WalletLayer.deleteWallet layer wId
-                            case res of
-                                 Left (WalletLayer.DeleteWalletError (UnknownHdRoot _)) ->
-                                     return ()
-                                 Left unexpectedErr ->
-                                     fail $ "expecting different failure than " <> show unexpectedErr
-                                 Right _ -> fail "expecting wallet not to be created, but it was."
+                        res <- WalletLayer.deleteWallet layer wId
+                        case res of
+                             Left (WalletLayer.DeleteWalletError (UnknownHdRoot _)) ->
+                                 return ()
+                             Left unexpectedErr ->
+                                 fail $ "expecting different failure than " <> show unexpectedErr
+                             Right _ -> fail "expecting wallet not to be created, but it was."
 
 
         describe "Wallet deletion (kernel)" $ do
-            prop "correctly deletes the ESK in the keystore" $ withMaxSuccess 5 $
-                monadicIO $ do
-                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ks _ wallet Fixture{..} -> do
-                        liftIO $ do
-                            let nm  = makeNetworkMagic pm
-                                wId = WalletIdHdRnd fixtureHdRootId
+            prop "correctly deletes the ESK in the keystore" $
+                withNewWalletFixture pm nonEmptySpendingPassword request $ \ks _ wallet Fixture{..} -> do
+                    let nm  = makeNetworkMagic pm
+                        wId = WalletIdHdRnd fixtureHdRootId
 
-                            mbKey <- Keystore.lookup nm wId ks
-                            mbKey `shouldSatisfy` isJust
+                    mbKey <- Keystore.lookup nm wId ks
+                    mbKey `shouldSatisfy` isJust
 
-                            res <- Kernel.deleteHdWallet nm wallet fixtureHdRootId
+                    res <- Kernel.deleteHdWallet nm wallet fixtureHdRootId
 
-                            case res of
-                                 Left e -> fail (formatToString build e)
-                                 Right () -> do
-                                     --  Check that the key is not in the keystore anymore
-                                     mbKey' <- Keystore.lookup nm wId ks
-                                     mbKey' `shouldSatisfy` isNothing
+                    case res of
+                         Left e -> fail (formatToString build e)
+                         Right () -> do
+                             --  Check that the key is not in the keystore anymore
+                             mbKey' <- Keystore.lookup nm wId ks
+                             mbKey' `shouldSatisfy` isNothing
 
     describe "UpdateWalletPassword" $ do
 
@@ -288,7 +281,7 @@ spec = describe "Wallets" $ do
             prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     newPwd  <- pick arbitrary
-                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
+                    liftIO $ withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
                             let request = V1.PasswordUpdate fixtureSpendingPassword newPwd
                             let wId     = V1.walId fixtureV1Wallet
                             res <- WalletLayer.updateWalletPassword layer wId request
@@ -298,7 +291,7 @@ spec = describe "Wallets" $ do
                 monadicIO $ do
                     wrongPwd  <- pick (arbitrary `suchThat` ((/=) mempty))
                     newPwd    <- pick arbitrary
-                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
+                    liftIO $ withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
                             let request = V1.PasswordUpdate wrongPwd newPwd
                             let wId     = V1.walId fixtureV1Wallet
                             res <- WalletLayer.updateWalletPassword layer wId request
@@ -313,7 +306,7 @@ spec = describe "Wallets" $ do
             prop "correctly replaces the ESK in the keystore" $ withMaxSuccess 5 $
                 monadicIO $ do
                     newPwd <- pick arbitrary
-                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ keystore _ wallet Fixture{..} -> do
+                    liftIO $ withNewWalletFixture pm nonEmptySpendingPassword request $ \ keystore _ wallet Fixture{..} -> do
                         let nm  = makeNetworkMagic pm
                             wid = WalletIdHdRnd fixtureHdRootId
                         oldKey <- Keystore.lookup nm wid keystore
@@ -332,7 +325,7 @@ spec = describe "Wallets" $ do
             prop "correctly updates hdRootHasPassword" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     newPwd <- pick arbitrary
-                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ _ wallet Fixture{..} -> do
+                    liftIO $ withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ _ wallet Fixture{..} -> do
                         res <- Kernel.updatePassword wallet
                                                      fixtureHdRootId
                                                      (unV1 fixtureSpendingPassword)
@@ -351,7 +344,7 @@ spec = describe "Wallets" $ do
             prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     newPwd <- pick arbitrary
-                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
+                    liftIO $ withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
                         liftIO $ do
                             let wId = V1.walId fixtureV1Wallet
                             let rq  = V1.PasswordUpdate fixtureSpendingPassword newPwd
@@ -364,12 +357,11 @@ spec = describe "Wallets" $ do
         -- testing only the WalletLayer and the Servant handler.
         describe "Get a specific wallet (wallet layer)" $ do
 
-            prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
-                            let wId     = V1.walId fixtureV1Wallet
-                            res <- WalletLayer.getWallet layer wId
-                            (bimap STB STB res) `shouldBe` (Right (STB fixtureV1Wallet))
+            prop "works as expected in the happy path scenario" $ do
+                withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
+                    let wId     = V1.walId fixtureV1Wallet
+                    res <- WalletLayer.getWallet layer wId
+                    (bimap STB STB res) `shouldBe` (Right (STB fixtureV1Wallet))
 
             prop "fails if the wallet doesn't exist" $ withMaxSuccess 5 $ do
                 monadicIO $ do
@@ -384,13 +376,11 @@ spec = describe "Wallets" $ do
                                  Right _ -> fail "expecting wallet not to be fetched, but it was."
 
         describe "Get a specific wallet (Servant)" $ do
-            prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
-                        liftIO $ do
-                            let wId = V1.walId fixtureV1Wallet
-                            res <- runExceptT . runHandler' $ Handlers.getWallet layer wId
-                            (bimap identity STB res) `shouldSatisfy` isRight
+            prop "works as expected in the happy path scenario" $
+                withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
+                    let wId = V1.walId fixtureV1Wallet
+                    res <- runExceptT . runHandler' $ Handlers.getWallet layer wId
+                    (bimap identity STB res) `shouldSatisfy` isRight
 
             prop "fails if the wallet doesn't exist" $ withMaxSuccess 5 $ do
                 monadicIO $ do
@@ -409,17 +399,16 @@ spec = describe "Wallets" $ do
         -- testing only the WalletLayer and the Servant handler.
         describe "Update a wallet (wallet layer)" $ do
 
-            prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
-                            let wId     = V1.walId fixtureV1Wallet
-                            let newLevel = oppositeLevel (V1.walAssuranceLevel fixtureV1Wallet)
-                            res <- WalletLayer.updateWallet layer wId (V1.WalletUpdate newLevel "FooBar")
-                            case res of
-                                 Left e  -> fail (formatToString build e)
-                                 Right w -> do
-                                     V1.walAssuranceLevel w `shouldBe` newLevel
-                                     V1.walName w `shouldBe` "FooBar"
+            prop "works as expected in the happy path scenario" $ do
+                withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
+                        let wId     = V1.walId fixtureV1Wallet
+                        let newLevel = oppositeLevel (V1.walAssuranceLevel fixtureV1Wallet)
+                        res <- WalletLayer.updateWallet layer wId (V1.WalletUpdate newLevel "FooBar")
+                        case res of
+                             Left e  -> fail (formatToString build e)
+                             Right w -> do
+                                 V1.walAssuranceLevel w `shouldBe` newLevel
+                                 V1.walName w `shouldBe` "FooBar"
 
             prop "fails if the wallet doesn't exist" $ withMaxSuccess 5 $ do
                 monadicIO $ do
@@ -436,19 +425,17 @@ spec = describe "Wallets" $ do
                                  Right _ -> fail "expecting wallet not to be updated, but it was."
 
         describe "Update a wallet (Servant)" $ do
-            prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
-                        liftIO $ do
-                            let wId = V1.walId fixtureV1Wallet
-                            let newLevel = oppositeLevel (V1.walAssuranceLevel fixtureV1Wallet)
-                            let updt     = V1.WalletUpdate newLevel "FooBar"
-                            res <- runExceptT . runHandler' $ Handlers.updateWallet layer wId updt
-                            case res of
-                                 Left e  -> fail (show e)
-                                 Right (V1.WalletResponse{..}) -> do
-                                     V1.walAssuranceLevel wrData `shouldBe` newLevel
-                                     V1.walName wrData `shouldBe` "FooBar"
+            prop "works as expected in the happy path scenario" $
+                withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
+                    let wId = V1.walId fixtureV1Wallet
+                    let newLevel = oppositeLevel (V1.walAssuranceLevel fixtureV1Wallet)
+                    let updt     = V1.WalletUpdate newLevel "FooBar"
+                    res <- runExceptT . runHandler' $ Handlers.updateWallet layer wId updt
+                    case res of
+                         Left e  -> fail (show e)
+                         Right (V1.WalletResponse{..}) -> do
+                             V1.walAssuranceLevel wrData `shouldBe` newLevel
+                             V1.walName wrData `shouldBe` "FooBar"
 
             prop "fails if the wallet doesn't exist" $ withMaxSuccess 5 $ do
                 monadicIO $ do
@@ -485,11 +472,10 @@ spec = describe "Wallets" $ do
                     rqs <- map (\rq -> rq { V1.newwalOperation = V1.CreateWallet })
                                <$> pick (vectorOf 5 arbitrary)
                     liftIO $ withLayer pm $ \ layer _ -> do
-                        liftIO $ do
-                            forM_ rqs (runExceptT . runHandler' . Handlers.newWallet layer)
-                            let params = API.RequestParams (API.PaginationParams (API.Page 1) (API.PerPage 10))
-                            res <- runExceptT . runHandler' $ Handlers.listWallets layer params API.NoFilters API.NoSorts
-                            case res of
-                                 Left e -> throwM e
-                                 Right (V1.WalletResponse{..}) -> do
-                                     length wrData `shouldBe` 5
+                        forM_ rqs (runExceptT . runHandler' . Handlers.newWallet layer)
+                        let params = API.RequestParams (API.PaginationParams (API.Page 1) (API.PerPage 10))
+                        res <- runExceptT . runHandler' $ Handlers.listWallets layer params API.NoFilters API.NoSorts
+                        case res of
+                             Left e -> throwM e
+                             Right (V1.WalletResponse{..}) -> do
+                                 length wrData `shouldBe` 5
