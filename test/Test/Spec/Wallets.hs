@@ -124,7 +124,7 @@ spec = describe "Wallets" $ do
         walletName       <- generate arbitrary
         mnemonic <- BIP39.entropyToMnemonic <$> BIP39.genEntropy @(BIP39.EntropySize 12)
         return $ V1.NewWallet (V1.BackupPhrase mnemonic)
-                              spendingPassword
+                              (Just nonEmptySpendingPassword)
                               assuranceLevel
                               walletName
                               V1.CreateWallet
