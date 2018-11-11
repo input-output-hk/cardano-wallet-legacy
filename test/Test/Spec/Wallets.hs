@@ -76,27 +76,32 @@ genNewWalletRq spendingPassword = do
                           walletName
                           V1.CreateWallet
 
-prepareFixtures :: GenPassiveWalletFixture Fixture
-prepareFixtures = do
-    spendingPassword <- pick (arbitrary `suchThat` ((/=) mempty))
-    newWalletRq <- WalletLayer.CreateWallet <$> genNewWalletRq (Just spendingPassword)
-    return $ \pw -> do
-        res <- Wallets.createWallet pw newWalletRq
-        case res of
-             Left e         -> error (show e)
-             Right v1Wallet -> do
-                 let (V1.WalletId wId) = V1.walId v1Wallet
-                 case decodeTextAddress wId of
-                      Left e -> error $  "Error decoding the input Address "
-                                      <> show wId
-                                      <> ": "
-                                      <> show e
-                      Right rootAddr -> do
-                          let rootId = HdRootId . InDb $ rootAddr
-                          return (Fixture spendingPassword v1Wallet rootId)
+-- FIXME: Previously the spending password was ensured to be Just and nonempty
+--     spendingPassword <- pick (arbitrary `suchThat` ((/=) mempty))
+--     newWalletRq <- WalletLayer.CreateWallet <$> genNewWalletRq (Just spendingPassword)
+prepareFixtures :: V1.SpendingPassword
+                -> WalletLayer.CreateWallet
+                -> Internal.PassiveWallet
+                -> IO Fixture
+prepareFixtures spendingPassword newWalletRq pw = do
+    res <- Wallets.createWallet pw newWalletRq
+    case res of
+         Left e         -> error (show e)
+         Right v1Wallet -> do
+             let (V1.WalletId wId) = V1.walId v1Wallet
+             case decodeTextAddress wId of
+                  Left e -> error $  "Error decoding the input Address "
+                                  <> show wId
+                                  <> ": "
+                                  <> show e
+                  Right rootAddr -> do
+                      let rootId = HdRootId . InDb $ rootAddr
+                      return (Fixture spendingPassword v1Wallet rootId)
 
 -- | A 'Fixture' where we already have a new 'Wallet' in scope.
 withNewWalletFixture :: ProtocolMagic
+                     -> V1.SpendingPassword
+                     -> WalletLayer.CreateWallet
                      -> (  Keystore.Keystore
                         -> WalletLayer.PassiveWalletLayer IO
                         -> Internal.PassiveWallet
@@ -104,14 +109,16 @@ withNewWalletFixture :: ProtocolMagic
                         -> IO a
                         )
                      -> PropertyM IO a
-withNewWalletFixture pm cc = withPassiveWalletFixture pm prepareFixtures cc
+withNewWalletFixture pm sp w cc = withPassiveWalletFixture pm
+                                (return $ prepareFixtures sp w) cc
 
 spec :: Spec
 spec = describe "Wallets" $ do
 
-    pm        <- runIO $ generate arbitrary
-    newWallet <- runIO $ do
-        spendingPassword <- generate genSpendingPassword
+    pm               <- runIO $ generate arbitrary
+    spendingPassword <- runIO $ generate genSpendingPassword
+    nonEmptySpendingPassword <- runIO $ generate $ arbitrary `suchThat` ((/=) mempty)
+    newWallet        <- runIO $ do
 
         assuranceLevel   <- generate arbitrary
         walletName       <- generate arbitrary
@@ -207,7 +214,7 @@ spec = describe "Wallets" $ do
 
             prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    withNewWalletFixture pm $ \_ layer _ Fixture{..} -> do
+                    withNewWalletFixture pm nonEmptySpendingPassword request $ \_ layer _ Fixture{..} -> do
                         let wId = V1.walId fixtureV1Wallet
                         liftIO $ do
                             res1 <- WalletLayer.deleteWallet layer wId
@@ -218,7 +225,7 @@ spec = describe "Wallets" $ do
 
             prop "cascade-deletes all the associated accounts" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    withNewWalletFixture pm $ \_ layer _ Fixture{..} -> do
+                    withNewWalletFixture pm nonEmptySpendingPassword request $ \_ layer _ Fixture{..} -> do
                         let wId = V1.walId fixtureV1Wallet
                         liftIO $ do
                             let check predicate _ V1.Account{..} = do
@@ -257,7 +264,7 @@ spec = describe "Wallets" $ do
         describe "Wallet deletion (kernel)" $ do
             prop "correctly deletes the ESK in the keystore" $ withMaxSuccess 5 $
                 monadicIO $ do
-                    withNewWalletFixture pm $ \ks _ wallet Fixture{..} -> do
+                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ks _ wallet Fixture{..} -> do
                         liftIO $ do
                             let nm  = makeNetworkMagic pm
                                 wId = WalletIdHdRnd fixtureHdRootId
@@ -281,7 +288,7 @@ spec = describe "Wallets" $ do
             prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     newPwd  <- pick arbitrary
-                    withNewWalletFixture pm $ \ _ layer _ Fixture{..} -> do
+                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
                             let request = V1.PasswordUpdate fixtureSpendingPassword newPwd
                             let wId     = V1.walId fixtureV1Wallet
                             res <- WalletLayer.updateWalletPassword layer wId request
@@ -291,7 +298,7 @@ spec = describe "Wallets" $ do
                 monadicIO $ do
                     wrongPwd  <- pick (arbitrary `suchThat` ((/=) mempty))
                     newPwd    <- pick arbitrary
-                    withNewWalletFixture pm $ \ _ layer _ Fixture{..} -> do
+                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
                             let request = V1.PasswordUpdate wrongPwd newPwd
                             let wId     = V1.walId fixtureV1Wallet
                             res <- WalletLayer.updateWalletPassword layer wId request
@@ -306,7 +313,7 @@ spec = describe "Wallets" $ do
             prop "correctly replaces the ESK in the keystore" $ withMaxSuccess 5 $
                 monadicIO $ do
                     newPwd <- pick arbitrary
-                    withNewWalletFixture pm $ \ keystore _ wallet Fixture{..} -> do
+                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ keystore _ wallet Fixture{..} -> do
                         let nm  = makeNetworkMagic pm
                             wid = WalletIdHdRnd fixtureHdRootId
                         oldKey <- Keystore.lookup nm wid keystore
@@ -325,7 +332,7 @@ spec = describe "Wallets" $ do
             prop "correctly updates hdRootHasPassword" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     newPwd <- pick arbitrary
-                    withNewWalletFixture pm $ \ _ _ wallet Fixture{..} -> do
+                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ _ wallet Fixture{..} -> do
                         res <- Kernel.updatePassword wallet
                                                      fixtureHdRootId
                                                      (unV1 fixtureSpendingPassword)
@@ -344,7 +351,7 @@ spec = describe "Wallets" $ do
             prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     newPwd <- pick arbitrary
-                    withNewWalletFixture pm $ \ _ layer _ Fixture{..} -> do
+                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
                         liftIO $ do
                             let wId = V1.walId fixtureV1Wallet
                             let rq  = V1.PasswordUpdate fixtureSpendingPassword newPwd
@@ -359,7 +366,7 @@ spec = describe "Wallets" $ do
 
             prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    withNewWalletFixture pm $ \ _ layer _ Fixture{..} -> do
+                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
                             let wId     = V1.walId fixtureV1Wallet
                             res <- WalletLayer.getWallet layer wId
                             (bimap STB STB res) `shouldBe` (Right (STB fixtureV1Wallet))
@@ -379,7 +386,7 @@ spec = describe "Wallets" $ do
         describe "Get a specific wallet (Servant)" $ do
             prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    withNewWalletFixture pm $ \ _ layer _ Fixture{..} -> do
+                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
                         liftIO $ do
                             let wId = V1.walId fixtureV1Wallet
                             res <- runExceptT . runHandler' $ Handlers.getWallet layer wId
@@ -404,7 +411,7 @@ spec = describe "Wallets" $ do
 
             prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    withNewWalletFixture pm $ \ _ layer _ Fixture{..} -> do
+                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
                             let wId     = V1.walId fixtureV1Wallet
                             let newLevel = oppositeLevel (V1.walAssuranceLevel fixtureV1Wallet)
                             res <- WalletLayer.updateWallet layer wId (V1.WalletUpdate newLevel "FooBar")
@@ -431,7 +438,7 @@ spec = describe "Wallets" $ do
         describe "Update a wallet (Servant)" $ do
             prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
                 monadicIO $ do
-                    withNewWalletFixture pm $ \ _ layer _ Fixture{..} -> do
+                    withNewWalletFixture pm nonEmptySpendingPassword request $ \ _ layer _ Fixture{..} -> do
                         liftIO $ do
                             let wId = V1.walId fixtureV1Wallet
                             let newLevel = oppositeLevel (V1.walAssuranceLevel fixtureV1Wallet)
