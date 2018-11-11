@@ -41,10 +41,10 @@ main = do
     runTests
         [ Golden.WalletError.tests
         ]
-    hspec Golden.APILayout.spec
+    hspec $ parallel $ Golden.APILayout.spec
 
     -- API Specs
-    hspec $ do
+    hspec $ parallel $ do
         Marshalling.spec
         Swagger.spec
         ReqSpec.spec
@@ -55,7 +55,7 @@ main = do
         eqProps @Transaction
 
     -- New Data-Layer Unit Tests
-    hspec $ do
+    hspec $ parallel $ do
         Test.Spec.Accounts.spec
         Test.Spec.Addresses.spec
         Test.Spec.CoinSelection.spec
