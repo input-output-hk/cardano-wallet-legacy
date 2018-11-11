@@ -71,31 +71,30 @@ data AddressFixture = AddressFixture {
     addressFixtureAddress :: V1.WalletAddress
     } deriving (Eq, Ord)
 
--- | Prepare some fixtures using the 'PropertyM' context to prepare the data,
+-- | Prepare some fixtures using the 'IO' context to prepare the data,
 -- and execute the 'acid-state' update once the 'PassiveWallet' gets into
 -- scope (after the bracket initialisation).
-prepareFixtures :: NetworkMagic -> Fixture.GenPassiveWalletFixture Fixture
-prepareFixtures nm = do
+prepareFixtures :: NetworkMagic -> PassiveWallet -> IO Fixture
+prepareFixtures nm pw = do
     let (_, esk) = safeDeterministicKeyGen (B.pack $ replicate 32 0x42) mempty
     let newRootId = eskToHdRootId nm esk
     newRoot <- initHdRoot <$> pure newRootId
                           <*> pure (WalletName "A wallet")
                           <*> pure NoSpendingPassword
                           <*> pure AssuranceLevelNormal
-                          <*> (InDb <$> pick arbitrary)
-    newAccountId <- HdAccountId newRootId <$> deriveIndex (pick . choose) HdAccountIx HardDerivation
+                          <*> (InDb <$> generate arbitrary)
+    newAccountId <- HdAccountId newRootId <$> deriveIndex (generate . choose) HdAccountIx HardDerivation
     let accounts = M.singleton newAccountId mempty
         hdAccountId = Kernel.defaultHdAccountId newRootId
         hdAddress   = Kernel.defaultHdAddress nm esk emptyPassphrase newRootId
 
-    return $ \pw -> do
-        void $ liftIO $ update (pw ^. wallets) (CreateHdWallet newRoot hdAccountId hdAddress accounts)
-        return $ Fixture {
-                           fixtureHdRootId = newRootId
-                         , fixtureAccountId = AccountIdHdRnd newAccountId
-                         , fixtureESK = esk
-                         , fixturePw  = pw
-                         }
+    void $ liftIO $ update (pw ^. wallets) (CreateHdWallet newRoot hdAccountId hdAddress accounts)
+    return $ Fixture {
+                       fixtureHdRootId = newRootId
+                     , fixtureAccountId = AccountIdHdRnd newAccountId
+                     , fixtureESK = esk
+                     , fixturePw  = pw
+                     }
 
 prepareAddressFixture
   :: Int  -- ^ Number of 'AddressFixture's to create.
@@ -168,8 +167,8 @@ withFixture :: ProtocolMagic
                -> Fixture
                -> IO a
                )
-            -> PropertyM IO a
-withFixture pm = Fixture.withPassiveWalletFixture pm (prepareFixtures nm)
+            -> IO a
+withFixture pm = Fixture.withPassiveWalletFixture2 pm (prepareFixtures nm)
   where
     nm = makeNetworkMagic pm
 
@@ -184,10 +183,10 @@ withAddressFixtures
      -> [AddressFixture]
      -> IO a
      )
-  -> PropertyM IO a
+  -> IO a
 withAddressFixtures pm sp w n =
-  Fixture.withPassiveWalletFixture pm $ do
-      return $ prepareAddressFixture n sp w
+  Fixture.withPassiveWalletFixture2 pm $ do
+      prepareAddressFixture n sp w
 
 withAddressesFixtures
     :: ProtocolMagic
@@ -201,10 +200,10 @@ withAddressesFixtures
     -> (M.Map V1.AccountIndex [V1.WalletAddress], Int)
     -> IO a
     )
-    -> PropertyM IO a
+    -> IO a
 withAddressesFixtures pm sp w n m =
-    Fixture.withPassiveWalletFixture pm $ do
-        return $ prepareAddressesFixture sp w n m
+    Fixture.withPassiveWalletFixture2 pm $ do
+        prepareAddressesFixture sp w n m
 
 spec :: Spec
 spec = describe "Addresses" $ do
@@ -224,192 +223,177 @@ spec = describe "Addresses" $ do
     let w = WalletLayer.CreateWallet newWallet
     describe "CreateAddress" $ do
         describe "Address creation (wallet layer)" $ do
-            prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $
-                monadicIO $ do
-                    withFixture pm $ \keystore layer _ Fixture{..} -> do
-                        Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
-                        let (HdRootId hdRoot) = fixtureHdRootId
-                            (AccountIdHdRnd myAccountId) = fixtureAccountId
-                            wId = sformat build (view fromDb hdRoot)
-                            accIdx = Kernel.Conv.toAccountId myAccountId
-                        res <- WalletLayer.createAddress layer (V1.NewAddress Nothing accIdx (V1.WalletId wId))
-                        (bimap STB STB res) `shouldSatisfy` isRight
+            prop "works as expected in the happy path scenario" $
+                withFixture pm $ \keystore layer _ Fixture{..} -> do
+                    Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
+                    let (HdRootId hdRoot) = fixtureHdRootId
+                        (AccountIdHdRnd myAccountId) = fixtureAccountId
+                        wId = sformat build (view fromDb hdRoot)
+                        accIdx = Kernel.Conv.toAccountId myAccountId
+                    res <- WalletLayer.createAddress layer (V1.NewAddress Nothing accIdx (V1.WalletId wId))
+                    (bimap STB STB res) `shouldSatisfy` isRight
 
         describe "Address creation (kernel)" $ do
-            prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $
-                monadicIO $ do
-                    withFixture pm $ \keystore _ _ Fixture{..} -> do
-                        Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
-                        res <- Kernel.createAddress mempty fixtureAccountId fixturePw
-                        (bimap STB STB res) `shouldSatisfy` isRight
+            prop "works as expected in the happy path scenario" $
+                withFixture pm $ \keystore _ _ Fixture{..} -> do
+                    Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
+                    res <- Kernel.createAddress mempty fixtureAccountId fixturePw
+                    (bimap STB STB res) `shouldSatisfy` isRight
 
-            prop "fails if the account has no associated key in the keystore" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withFixture pm $ \_ _ _ Fixture{..} -> do
-                        res <- Kernel.createAddress mempty fixtureAccountId fixturePw
-                        case res of
-                            (Left (Kernel.CreateAddressKeystoreNotFound acc)) | acc == fixtureAccountId -> return ()
-                            x -> fail (show (bimap STB STB x))
+            prop "fails if the account has no associated key in the keystore" $ do
+                withFixture pm $ \_ _ _ Fixture{..} -> do
+                    res <- Kernel.createAddress mempty fixtureAccountId fixturePw
+                    case res of
+                        (Left (Kernel.CreateAddressKeystoreNotFound acc)) | acc == fixtureAccountId -> return ()
+                        x -> fail (show (bimap STB STB x))
 
-            prop "fails if the parent account doesn't exist" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withFixture pm $ \keystore _ _ Fixture{..} -> do
-                        Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
-                        let (AccountIdHdRnd hdAccountId) = fixtureAccountId
-                        void $ update (fixturePw ^. wallets) (DeleteHdAccount hdAccountId)
-                        res <- Kernel.createAddress mempty fixtureAccountId fixturePw
-                        case res of
-                            Left (Kernel.CreateAddressUnknownHdAccount _) -> return ()
-                            x -> fail (show (bimap STB STB x))
+            prop "fails if the parent account doesn't exist" $
+                withFixture pm $ \keystore _ _ Fixture{..} -> do
+                    Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
+                    let (AccountIdHdRnd hdAccountId) = fixtureAccountId
+                    void $ update (fixturePw ^. wallets) (DeleteHdAccount hdAccountId)
+                    res <- Kernel.createAddress mempty fixtureAccountId fixturePw
+                    case res of
+                        Left (Kernel.CreateAddressUnknownHdAccount _) -> return ()
+                        x -> fail (show (bimap STB STB x))
 
         describe "Address creation (Servant)" $ do
-            prop "works as expected in the happy path scenario" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withFixture pm $ \keystore layer _ Fixture{..} -> do
-                        Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
-                        let (HdRootId hdRoot) = fixtureHdRootId
-                            (AccountIdHdRnd myAccountId) = fixtureAccountId
-                            wId = sformat build (view fromDb hdRoot)
-                            accIdx = Kernel.Conv.toAccountId myAccountId
-                            req = V1.NewAddress Nothing accIdx (V1.WalletId wId)
-                        res <- runExceptT . runHandler' $ Handlers.newAddress layer req
-                        (bimap identity STB res) `shouldSatisfy` isRight
+            prop "works as expected in the happy path scenario" $
+                withFixture pm $ \keystore layer _ Fixture{..} -> do
+                    Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
+                    let (HdRootId hdRoot) = fixtureHdRootId
+                        (AccountIdHdRnd myAccountId) = fixtureAccountId
+                        wId = sformat build (view fromDb hdRoot)
+                        accIdx = Kernel.Conv.toAccountId myAccountId
+                        req = V1.NewAddress Nothing accIdx (V1.WalletId wId)
+                    res <- runExceptT . runHandler' $ Handlers.newAddress layer req
+                    (bimap identity STB res) `shouldSatisfy` isRight
 
         describe "Address creation (wallet layer & kernel consistency)" $ do
-            prop "layer & kernel agrees on the result" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    res1 <- withFixture pm $ \keystore _ _ Fixture{..} -> do
-                        Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
-                        Kernel.createAddress mempty fixtureAccountId fixturePw
-                    res2 <- withFixture pm $ \keystore layer _ Fixture{..} -> do
-                        Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
-                        let (HdRootId hdRoot) = fixtureHdRootId
-                            (AccountIdHdRnd myAccountId) = fixtureAccountId
-                            wId = sformat build (view fromDb hdRoot)
-                            accIdx = Kernel.Conv.toAccountId myAccountId
-                        WalletLayer.createAddress layer (V1.NewAddress Nothing accIdx (V1.WalletId wId))
-                    case res2 of
-                         Left (WalletLayer.CreateAddressError err) ->
-                             return $ (bimap STB STB res1) `shouldBe` (bimap STB STB (Left err))
-                         Left (WalletLayer.CreateAddressAddressDecodingFailed _) ->
-                             fail "Layer & Kernel mismatch: impossible error, CreateAddressAddressDecodingFailed"
-                         Right _ -> do
-                             -- If we get and 'Address', let's check that this is the case also for
-                             -- the kernel run. Unfortunately we cannot compare the two addresses for equality
-                             -- because the random index will be generated with a seed which changes every time
-                             -- as we uses random, IO-based generation deep down the guts.
-                             return $ (bimap STB STB res1) `shouldSatisfy` isRight
+            prop "layer & kernel agrees on the result" $ do
+                res1 <- withFixture pm $ \keystore _ _ Fixture{..} -> do
+                    Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
+                    Kernel.createAddress mempty fixtureAccountId fixturePw
+                res2 <- withFixture pm $ \keystore layer _ Fixture{..} -> do
+                    Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
+                    let (HdRootId hdRoot) = fixtureHdRootId
+                        (AccountIdHdRnd myAccountId) = fixtureAccountId
+                        wId = sformat build (view fromDb hdRoot)
+                        accIdx = Kernel.Conv.toAccountId myAccountId
+                    WalletLayer.createAddress layer (V1.NewAddress Nothing accIdx (V1.WalletId wId))
+                case res2 of
+                     Left (WalletLayer.CreateAddressError err) ->
+                         (bimap STB STB res1) `shouldBe` (bimap STB STB (Left err))
+                     Left (WalletLayer.CreateAddressAddressDecodingFailed _) ->
+                         fail "Layer & Kernel mismatch: impossible error, CreateAddressAddressDecodingFailed"
+                     Right _ -> do
+                         -- If we get and 'Address', let's check that this is the case also for
+                         -- the kernel run. Unfortunately we cannot compare the two addresses for equality
+                         -- because the random index will be generated with a seed which changes every time
+                         -- as we uses random, IO-based generation deep down the guts.
+                         (bimap STB STB res1) `shouldSatisfy` isRight
 
         describe "Address listing (Servant)" $ do
-            prop "0 addresses, page 0, per page 0" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withAddressFixtures pm sp w 0 $ \_ layer _ _ -> do
-                        let pp = PaginationParams (Page 0) (PerPage 0)
-                        res <- runExceptT $ runHandler' $ do
-                           Handlers.listAddresses layer (RequestParams pp)
-                        case res of
-                           Right wr | null (wrData wr) -> pure ()
-                           _ -> fail ("Got " ++ show res)
+            prop "0 addresses, page 0, per page 0" $
+                withAddressFixtures pm sp w 0 $ \_ layer _ _ -> do
+                    let pp = PaginationParams (Page 0) (PerPage 0)
+                    res <- runExceptT $ runHandler' $ do
+                       Handlers.listAddresses layer (RequestParams pp)
+                    case res of
+                       Right wr | null (wrData wr) -> pure ()
+                       _ -> fail ("Got " ++ show res)
 
-            prop "1 addresses, page 0, per page 0" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withAddressFixtures pm sp w 1 $ \_ layer _ _ -> do
-                        let pp = PaginationParams (Page 0) (PerPage 0)
-                        res <- runExceptT $ runHandler' $ do
-                           Handlers.listAddresses layer (RequestParams pp)
-                        case res of
-                           Right wr | null (wrData wr) -> pure ()
-                           _ -> fail ("Got " ++ show res)
+            prop "1 addresses, page 0, per page 0" $
+                withAddressFixtures pm sp w 1 $ \_ layer _ _ -> do
+                    let pp = PaginationParams (Page 0) (PerPage 0)
+                    res <- runExceptT $ runHandler' $ do
+                       Handlers.listAddresses layer (RequestParams pp)
+                    case res of
+                       Right wr | null (wrData wr) -> pure ()
+                       _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 0, per page 0" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withAddressFixtures pm sp w 3 $ \_ layer _ _ -> do
-                        let pp = PaginationParams (Page 0) (PerPage 0)
-                        res <- runExceptT $ runHandler' $ do
-                           Handlers.listAddresses layer (RequestParams pp)
-                        case res of
-                           Right wr | null (wrData wr) -> pure ()
-                           _ -> fail ("Got " ++ show res)
+            prop "3 addresses, page 0, per page 0" $
+                withAddressFixtures pm sp w 3 $ \_ layer _ _ -> do
+                    let pp = PaginationParams (Page 0) (PerPage 0)
+                    res <- runExceptT $ runHandler' $ do
+                       Handlers.listAddresses layer (RequestParams pp)
+                    case res of
+                       Right wr | null (wrData wr) -> pure ()
+                       _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 1, per page 0" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withAddressFixtures pm sp w 3 $ \_ layer _ _ -> do
-                        let pp = PaginationParams (Page 1) (PerPage 0)
-                        res <- runExceptT $ runHandler' $ do
-                           Handlers.listAddresses layer (RequestParams pp)
-                        case res of
-                           Right wr | null (wrData wr) -> pure ()
-                           _ -> fail ("Got " ++ show res)
+            prop "3 addresses, page 1, per page 0" $
+                withAddressFixtures pm sp w 3 $ \_ layer _ _ -> do
+                    let pp = PaginationParams (Page 1) (PerPage 0)
+                    res <- runExceptT $ runHandler' $ do
+                       Handlers.listAddresses layer (RequestParams pp)
+                    case res of
+                       Right wr | null (wrData wr) -> pure ()
+                       _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 1, per page 1" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withAddressFixtures pm sp w 3 $ \_ layer _ [wa0, _, _] -> do
-                        let pp = PaginationParams (Page 1) (PerPage 1)
-                        res <- runExceptT $ runHandler' $ do
-                           Handlers.listAddresses layer (RequestParams pp)
-                        case res of
-                            Right wr ->
-                                wrData wr `shouldBe` [addressFixtureAddress wa0]
-                            _ -> fail ("Got " ++ show res)
+            prop "3 addresses, page 1, per page 1" $
+                withAddressFixtures pm sp w 3 $ \_ layer _ [wa0, _, _] -> do
+                    let pp = PaginationParams (Page 1) (PerPage 1)
+                    res <- runExceptT $ runHandler' $ do
+                       Handlers.listAddresses layer (RequestParams pp)
+                    case res of
+                        Right wr ->
+                            wrData wr `shouldBe` [addressFixtureAddress wa0]
+                        _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 1, per page 2" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withAddressFixtures pm sp w 3 $ \_ layer _ [wa0, wa1, _wa2] -> do
-                        let pp = PaginationParams (Page 1) (PerPage 2)
-                        res <- runExceptT $ runHandler' $ do
-                           Handlers.listAddresses layer (RequestParams pp)
-                        case res of
-                           Right wr | [wa0', wa1'] <- wrData wr
-                                    , wa0' == addressFixtureAddress wa0
-                                    , wa1' == addressFixtureAddress wa1
-                                    -> pure ()
-                           _ -> fail ("Got " ++ show res)
+            prop "3 addresses, page 1, per page 2" $
+                withAddressFixtures pm sp w 3 $ \_ layer _ [wa0, wa1, _wa2] -> do
+                    let pp = PaginationParams (Page 1) (PerPage 2)
+                    res <- runExceptT $ runHandler' $ do
+                       Handlers.listAddresses layer (RequestParams pp)
+                    case res of
+                       Right wr | [wa0', wa1'] <- wrData wr
+                                , wa0' == addressFixtureAddress wa0
+                                , wa1' == addressFixtureAddress wa1
+                                -> pure ()
+                       _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 1, per page 3" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withAddressFixtures pm sp w 3 $ \_ layer _ [wa0, wa1, wa2] -> do
-                        let pp = PaginationParams (Page 1) (PerPage 3)
-                        res <- runExceptT $ runHandler' $ do
-                           Handlers.listAddresses layer (RequestParams pp)
-                        case res of
-                           Right wr | [wa0', wa1', wa2'] <- wrData wr
-                                    , wa0' == addressFixtureAddress wa0
-                                    , wa1' == addressFixtureAddress wa1
-                                    , wa2' == addressFixtureAddress wa2
-                                    -> pure ()
-                           _ -> fail ("Got " ++ show res)
+            prop "3 addresses, page 1, per page 3" $
+                withAddressFixtures pm sp w 3 $ \_ layer _ [wa0, wa1, wa2] -> do
+                    let pp = PaginationParams (Page 1) (PerPage 3)
+                    res <- runExceptT $ runHandler' $ do
+                       Handlers.listAddresses layer (RequestParams pp)
+                    case res of
+                       Right wr | [wa0', wa1', wa2'] <- wrData wr
+                                , wa0' == addressFixtureAddress wa0
+                                , wa1' == addressFixtureAddress wa1
+                                , wa2' == addressFixtureAddress wa2
+                                -> pure ()
+                       _ -> fail ("Got " ++ show res)
 
-            prop "3 addresses, page 2, per page 2" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withAddressFixtures pm sp w 3 $ \_ layer _ [_wa0, _wa1, wa2] -> do
-                        let pp = PaginationParams (Page 2) (PerPage 2)
-                        res <- runExceptT $ runHandler' $ do
-                           Handlers.listAddresses layer (RequestParams pp)
-                        case res of
-                           Right wr | [wa2'] <- wrData wr
-                                    , wa2' == addressFixtureAddress wa2
-                                    -> pure ()
-                           _ -> fail ("Got " ++ show res)
+            prop "3 addresses, page 2, per page 2" $
+                withAddressFixtures pm sp w 3 $ \_ layer _ [_wa0, _wa1, wa2] -> do
+                    let pp = PaginationParams (Page 2) (PerPage 2)
+                    res <- runExceptT $ runHandler' $ do
+                       Handlers.listAddresses layer (RequestParams pp)
+                    case res of
+                       Right wr | [wa2'] <- wrData wr
+                                , wa2' == addressFixtureAddress wa2
+                                -> pure ()
+                       _ -> fail ("Got " ++ show res)
 
-            prop "4 addresses, page 2, per page 2" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withAddressFixtures pm sp w 4 $ \_ layer _ [_wa0, _wa1, wa2, wa3] -> do
-                        let pp = PaginationParams (Page 2) (PerPage 2)
-                        res <- runExceptT $ runHandler' $ do
-                           Handlers.listAddresses layer (RequestParams pp)
-                        case res of
-                           Right wr | [wa2', wa3'] <- wrData wr
-                                    , wa2' == addressFixtureAddress wa2
-                                    , wa3' == addressFixtureAddress wa3
-                                    -> pure ()
-                           _ -> fail ("Got " ++ show res)
+            prop "4 addresses, page 2, per page 2" $
+                withAddressFixtures pm sp w 4 $ \_ layer _ [_wa0, _wa1, wa2, wa3] -> do
+                    let pp = PaginationParams (Page 2) (PerPage 2)
+                    res <- runExceptT $ runHandler' $ do
+                       Handlers.listAddresses layer (RequestParams pp)
+                    case res of
+                       Right wr | [wa2', wa3'] <- wrData wr
+                                , wa2' == addressFixtureAddress wa2
+                                , wa3' == addressFixtureAddress wa3
+                                -> pure ()
+                       _ -> fail ("Got " ++ show res)
 
-            prop "arbitrary number of addresses, pages and per page" $ withMaxSuccess 5 $ do
+            prop "arbitrary number of addresses, pages and per page" $ withMaxSuccess 5 $
                 monadicIO $ do
                     (rNumOfAddresses :: Int) <- pick $ elements [0..15]
                     (rNumOfPages :: Int) <- pick $ elements [0..15]
                     (rNumPerPage :: Int) <- pick $ elements [0..15]
-                    withAddressFixtures pm sp w rNumOfAddresses $ \_ layer _ fixtureAddresses -> do
+                    liftIO $ withAddressFixtures pm sp w rNumOfAddresses $ \_ layer _ fixtureAddresses -> do
                         let (!>) = drop . (subtract 1)
                         let (<!) = flip take
                         let slice numOfPage numPerPage xs
@@ -425,65 +409,60 @@ spec = describe "Addresses" $ do
 
         describe "Address listing with multiple Accounts (Servant)" $ do
             let rootId = addrRoot . V1.unV1 . V1.addrId
-            prop "page 0, per page 0" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withAddressesFixtures pm sp w (DesiredNewAccs 4) (DesiredNewAddrs 4) $ \_ layer _ _ -> do
-                        let pp = PaginationParams (Page 0) (PerPage 0)
-                        res <- runExceptT $ runHandler' $ do
-                            Handlers.listAddresses layer (RequestParams pp)
-                        case res of
-                            Right wr | null (wrData wr) -> pure ()
-                            _ -> fail ("Got " ++ show res)
+            prop "page 0, per page 0" $ do
+                withAddressesFixtures pm sp w (DesiredNewAccs 4) (DesiredNewAddrs 4) $ \_ layer _ _ -> do
+                    let pp = PaginationParams (Page 0) (PerPage 0)
+                    res <- runExceptT $ runHandler' $ do
+                        Handlers.listAddresses layer (RequestParams pp)
+                    case res of
+                        Right wr | null (wrData wr) -> pure ()
+                        _ -> fail ("Got " ++ show res)
 
-            prop "it yields the correct number of results" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withAddressesFixtures pm sp w (DesiredNewAccs 3) (DesiredNewAddrs 4) $ \_ layer _ (_, total) -> do
-                        let pp = PaginationParams (Page 1) (PerPage 40)
-                        res <- runExceptT $ runHandler' $ do
-                            Handlers.listAddresses layer (RequestParams pp)
-                        case res of
-                            Right wr -> do
-                                length (wrData wr) `shouldBe` min 40 total
-                            _        -> fail ("Got " ++ show res)
+            prop "it yields the correct number of results" $ do
+                withAddressesFixtures pm sp w (DesiredNewAccs 3) (DesiredNewAddrs 4) $ \_ layer _ (_, total) -> do
+                    let pp = PaginationParams (Page 1) (PerPage 40)
+                    res <- runExceptT $ runHandler' $ do
+                        Handlers.listAddresses layer (RequestParams pp)
+                    case res of
+                        Right wr -> do
+                            length (wrData wr) `shouldBe` min 40 total
+                        _        -> fail ("Got " ++ show res)
 
-            prop "is deterministic" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withAddressesFixtures pm sp w (DesiredNewAccs 3) (DesiredNewAddrs 8) $ \_ layer _ (_, expectedTotal) -> do
-                        let ppSplit = quot expectedTotal 3 + 1
-                            mkRequest mypp = Handlers.listAddresses layer (RequestParams mypp)
-                        forM_ [(1,40), (1, ppSplit), (2, ppSplit), (3, ppSplit)] $ \(page, perPage) -> do
-                            let pp = PaginationParams (Page page) (PerPage perPage)
-                            Right (r1, r2) <- runExceptT $ runHandler' $ do
-                                              (,) <$> mkRequest pp <*> mkRequest pp
-                            r1 `shouldBe` r2
+            prop "is deterministic" $
+                withAddressesFixtures pm sp w (DesiredNewAccs 3) (DesiredNewAddrs 8) $ \_ layer _ (_, expectedTotal) -> do
+                    let ppSplit = quot expectedTotal 3 + 1
+                        mkRequest mypp = Handlers.listAddresses layer (RequestParams mypp)
+                    forM_ [(1,40), (1, ppSplit), (2, ppSplit), (3, ppSplit)] $ \(page, perPage) -> do
+                        let pp = PaginationParams (Page page) (PerPage perPage)
+                        Right (r1, r2) <- runExceptT $ runHandler' $ do
+                                          (,) <$> mkRequest pp <*> mkRequest pp
+                        r1 `shouldBe` r2
 
-            prop "yields the correct set of resutls" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                    withAddressesFixtures pm sp w (DesiredNewAccs 4) (DesiredNewAddrs 8) $ \_ layer _ (_, expectedTotal) -> do
-                        let ppSplit = quot expectedTotal 3 + 1
-                            pp = PaginationParams (Page 1) (PerPage 50)
-                            pp1 = PaginationParams (Page 1) (PerPage ppSplit)
-                            pp2 = PaginationParams (Page 2) (PerPage ppSplit)
-                            pp3 = PaginationParams (Page 3) (PerPage ppSplit)
-                        res <- runExceptT $ runHandler' $ do
-                            Handlers.listAddresses layer (RequestParams pp)
-                        res1 <- runExceptT $ runHandler' $ do
-                            Handlers.listAddresses layer (RequestParams pp1)
-                        res2 <- runExceptT $ runHandler' $ do
-                            Handlers.listAddresses layer (RequestParams pp2)
-                        res3 <- runExceptT $ runHandler' $ do
-                            Handlers.listAddresses layer (RequestParams pp3)
-                        case (res, res1, res2, res3) of
-                            (Right wr, Right wr1, Right wr2, Right wr3) -> do
-                                let con = wrData wr1 <> wrData wr2 <> wrData wr3
-                                length (wrData wr) `shouldBe` expectedTotal
-                                length con `shouldBe` expectedTotal
-                                S.fromList con `shouldBe` S.fromList (wrData wr)
-                                (rootId <$> con) `shouldBe` (rootId <$> wrData wr)
-                            _        -> fail ("Got " ++ show res)
+            prop "yields the correct set of resutls" $
+                withAddressesFixtures pm sp w (DesiredNewAccs 4) (DesiredNewAddrs 8) $ \_ layer _ (_, expectedTotal) -> do
+                    let ppSplit = quot expectedTotal 3 + 1
+                        pp = PaginationParams (Page 1) (PerPage 50)
+                        pp1 = PaginationParams (Page 1) (PerPage ppSplit)
+                        pp2 = PaginationParams (Page 2) (PerPage ppSplit)
+                        pp3 = PaginationParams (Page 3) (PerPage ppSplit)
+                    res <- runExceptT $ runHandler' $ do
+                        Handlers.listAddresses layer (RequestParams pp)
+                    res1 <- runExceptT $ runHandler' $ do
+                        Handlers.listAddresses layer (RequestParams pp1)
+                    res2 <- runExceptT $ runHandler' $ do
+                        Handlers.listAddresses layer (RequestParams pp2)
+                    res3 <- runExceptT $ runHandler' $ do
+                        Handlers.listAddresses layer (RequestParams pp3)
+                    case (res, res1, res2, res3) of
+                        (Right wr, Right wr1, Right wr2, Right wr3) -> do
+                            let con = wrData wr1 <> wrData wr2 <> wrData wr3
+                            length (wrData wr) `shouldBe` expectedTotal
+                            length con `shouldBe` expectedTotal
+                            S.fromList con `shouldBe` S.fromList (wrData wr)
+                            (rootId <$> con) `shouldBe` (rootId <$> wrData wr)
+                        _        -> fail ("Got " ++ show res)
 
-            prop "yields the correct ordered resutls when there is one account" $ withMaxSuccess 5 $ do
-                monadicIO $ do
+            prop "yields the correct ordered resutls when there is one account" $
                     withAddressesFixtures pm sp w (DesiredNewAccs 0) (DesiredNewAddrs 15) $ \_ layer _ (_, expectedTotal) -> do
                         let ppSplit = quot expectedTotal 3 + 1
                             pp = PaginationParams (Page 1) (PerPage 50)
@@ -508,49 +487,46 @@ spec = describe "Addresses" $ do
                             _        -> fail ("Got " ++ show res)
 
 
-            prop "yields the correct ordered resutls" $ withMaxSuccess 5 $ do
-                monadicIO $ do
-                  forM_ [(DesiredNewAccs 4,DesiredNewAddrs 8),
-                         (DesiredNewAccs 6,DesiredNewAddrs 6),
-                         (DesiredNewAccs 5,DesiredNewAddrs 7)] $ \(acc,adr) ->
-                    withAddressesFixtures pm sp w acc adr $ \_ layer _ (_, expectedTotal) -> do
-                        forM_ [2..10] $ \k -> do
-                            let indexes = [1..k]
-                                pagesParams = map (\i -> PaginationParams (Page i) (PerPage (quot expectedTotal k + 1)))
-                                              indexes
-                                pp = PaginationParams (Page 1) (PerPage 50)
-                            res <- runExceptT $ runHandler' $ do
-                                Handlers.listAddresses layer (RequestParams pp)
-                            eiResultsArray <- forM pagesParams $ \ppi -> runExceptT $ runHandler' $ do
-                                Handlers.listAddresses layer (RequestParams ppi)
-                            let resultsArray = sequence eiResultsArray
-                            case (res, resultsArray) of
-                                (Right wr, Right wrList) -> do
-                                    let con = mconcat $ map wrData wrList
-                                    length (wrData wr) `shouldBe` expectedTotal
-                                    length con `shouldBe` expectedTotal
-                                    S.fromList con `shouldBe` S.fromList (wrData wr)
-                                    (rootId <$> con)`shouldBe` (rootId <$> wrData wr)
-                                _        -> fail ("Got " ++ show res)
+            prop "yields the correct ordered resutls" $
+              forM_ [(DesiredNewAccs 4,DesiredNewAddrs 8),
+                     (DesiredNewAccs 6,DesiredNewAddrs 6),
+                     (DesiredNewAccs 5,DesiredNewAddrs 7)] $ \(acc,adr) ->
+                withAddressesFixtures pm sp w acc adr $ \_ layer _ (_, expectedTotal) -> do
+                    forM_ [2..10] $ \k -> do
+                        let indexes = [1..k]
+                            pagesParams = map (\i -> PaginationParams (Page i) (PerPage (quot expectedTotal k + 1)))
+                                          indexes
+                            pp = PaginationParams (Page 1) (PerPage 50)
+                        res <- runExceptT $ runHandler' $ do
+                            Handlers.listAddresses layer (RequestParams pp)
+                        eiResultsArray <- forM pagesParams $ \ppi -> runExceptT $ runHandler' $ do
+                            Handlers.listAddresses layer (RequestParams ppi)
+                        let resultsArray = sequence eiResultsArray
+                        case (res, resultsArray) of
+                            (Right wr, Right wrList) -> do
+                                let con = mconcat $ map wrData wrList
+                                length (wrData wr) `shouldBe` expectedTotal
+                                length con `shouldBe` expectedTotal
+                                S.fromList con `shouldBe` S.fromList (wrData wr)
+                                (rootId <$> con)`shouldBe` (rootId <$> wrData wr)
+                            _        -> fail ("Got " ++ show res)
 
     describe "ValidateAddress" $ do
         describe "Address validation (wallet layer)" $ do
 
-            prop "works as expected in the happy path scenario (valid address, ours)" $ withMaxSuccess 5 $
-                monadicIO $ do
-                    withAddressFixtures pm sp w 1 $ \_ layer _ [af] -> do
-                        res <- WalletLayer.validateAddress layer
-                            (sformat build (V1.unV1 $ V1.addrId $ addressFixtureAddress af))
-                        bimap STB STB res `shouldSatisfy` isRight
+            prop "works as expected in the happy path scenario (valid address, ours)" $
+                withAddressFixtures pm sp w 1 $ \_ layer _ [af] -> do
+                    res <- WalletLayer.validateAddress layer
+                        (sformat build (V1.unV1 $ V1.addrId $ addressFixtureAddress af))
+                    bimap STB STB res `shouldSatisfy` isRight
 
-            prop "rejects a malformed address" $ withMaxSuccess 5 $
-                monadicIO $ do
-                    withAddressFixtures pm sp w 1 $ \_ layer _ _ -> do
-                        res <- WalletLayer.validateAddress layer "foobar"
-                        case res of
-                             Left (WalletLayer.ValidateAddressDecodingFailed "foobar") -> return ()
-                             Left err -> fail $ "Got different error than expected: " <> show err
-                             Right _ -> fail "I was expecting a failure, but it didn't happen."
+            prop "rejects a malformed address" $
+                withAddressFixtures pm sp w 1 $ \_ layer _ _ -> do
+                    res <- WalletLayer.validateAddress layer "foobar"
+                    case res of
+                         Left (WalletLayer.ValidateAddressDecodingFailed "foobar") -> return ()
+                         Left err -> fail $ "Got different error than expected: " <> show err
+                         Right _ -> fail "I was expecting a failure, but it didn't happen."
 
             prop "returns not used/not change for an address which is not ours" $ withMaxSuccess 5 $ do
                 monadicIO $ do
@@ -563,6 +539,6 @@ spec = describe "Addresses" $ do
                           , addrChangeAddress = False
                           , addrOwnership     = V1.V1 V1.AddressAmbiguousOwnership
                           }
-                    withAddressFixtures pm sp w 1 $ \_ layer _ _ -> do
+                    liftIO $ withAddressFixtures pm sp w 1 $ \_ layer _ _ -> do
                         res <- WalletLayer.validateAddress layer (sformat build randomAddr)
                         bimap STB STB res `shouldBe` bimap STB STB (Right expected)

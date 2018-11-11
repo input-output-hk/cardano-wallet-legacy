@@ -341,7 +341,7 @@ spec = do
             monadicIO $ do
                 testMetaSTB <- pick genMeta
                 pm          <- pick arbitrary
-                Addresses.withFixture pm $ \keystore layer pwallet Addresses.Fixture{..} -> do
+                liftIO $ Addresses.withFixture pm $ \keystore layer pwallet Addresses.Fixture{..} -> do
                     liftIO $ Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
                     let (HdRootId hdRoot) = fixtureHdRootId
                         (AccountIdHdRnd myAccountId) = fixtureAccountId

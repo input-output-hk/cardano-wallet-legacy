@@ -5,6 +5,7 @@
 module Test.Spec.Fixture (
       withLayer
     , withPassiveWalletFixture
+    , withPassiveWalletFixture2
     , withActiveWalletFixture
     , GenActiveWalletFixture
     , GenPassiveWalletFixture
@@ -76,6 +77,26 @@ withPassiveWalletFixture pm prepareFixtures cc = do
             mockFInjects
             $ \layer wallet -> do
                 fixtures <- generateFixtures wallet
+                cc keystore layer wallet fixtures
+
+
+withPassiveWalletFixture2 :: MonadIO m
+                         => ProtocolMagic
+                         -> (PassiveWallet -> IO x)
+                         -> (Keystore.Keystore -> PassiveWalletLayer m -> PassiveWallet -> x -> IO a)
+                         -> IO a
+withPassiveWalletFixture2 pm prepareFixtures cc = do
+    Keystore.bracketTestKeystore $ \keystore -> do
+        mockFInjects <- mkFInjects mempty
+        WalletLayer.Kernel.bracketPassiveWallet
+            pm
+            Kernel.UseInMemory
+            devNull
+            keystore
+            mockNodeStateDef
+            mockFInjects
+            $ \layer wallet -> do
+                fixtures <- prepareFixtures wallet
                 cc keystore layer wallet fixtures
 
 withActiveWalletFixture :: MonadIO m
