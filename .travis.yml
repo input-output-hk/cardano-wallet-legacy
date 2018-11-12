@@ -91,6 +91,7 @@ jobs:
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz
     - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit --fast --coverage --ghc-options=-optl-Wl,-dead_strip_dylibs
+    - curl -sSL https://raw.github.com/ndmitchell/weeder/master/misc/travis.sh | sh -s .
     - shc cardano-wallet unit
 
   # Upload API doc automatically on each build against `develop` to `gh-pages`
