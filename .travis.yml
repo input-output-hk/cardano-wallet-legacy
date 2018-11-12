@@ -38,6 +38,7 @@ stages:
 - tooling
 - extra-dependencies
 - hlint
+- documentation
 - coverage
 
 # Install foreign dependencies required by some modules below
@@ -92,11 +93,13 @@ jobs:
     - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit --fast --coverage --ghc-options=-optl-Wl,-dead_strip_dylibs
     - shc cardano-wallet unit
 
-  # FIXME: Upload API doc automatically on each build against `develop` to `gh-pages`
-  # - stage: api-doc
-  #   if: branch = develop
-  #   script:
-  #   - travis_wait 42 stack --no-terminal build cardano-sl-wallet-new:exe:cardano-generate-swagger-file --fast --ghc-options=-optl-Wl,-dead_strip_dylibs
-  #   - stack exec -- cardano-generate-swagger-file --target wallet@v1
-  #   - git checkout gh-pages ...
-  #   - ... upload 'swagger.json' to gh-pages
+  # Upload API doc automatically on each build against `develop` to `gh-pages`
+  - stage: documentation
+    if: branch = develop AND type = push
+    script:
+    - tar xzf $HOME/.local/stack-work.tar.gz
+    - travis_wait 42 stack --no-terminal build cardano-wallet:exe:cardano-generate-swagger-file --fast --ghc-options=-optl-Wl,-dead_strip_dylibs
+    - stack exec -- cardano-generate-swagger-file --target wallet@v1
+    - git add swagger.json && git commit -m $TRAVIS_COMMIT
+    - git checkout gh-pages && git cherry-pick -X theirs -
+    - git push -f -q https://KtorZ:$GITHUB_API_KEY@github.com/input-output-hk/cardano-wallet gh-pages &>/dev/null # TODO: Create a specific CI user with its own key
