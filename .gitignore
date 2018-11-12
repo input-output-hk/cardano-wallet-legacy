@@ -23,3 +23,7 @@ cabal.project.local~
 .HTF/
 .ghc.environment.*
 .ghci
+
+### Cardano ###
+
+test_keystore.*
