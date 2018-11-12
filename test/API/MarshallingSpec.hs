@@ -49,7 +49,7 @@ import qualified Cardano.Wallet.Util as Util
 
 -- | Tests whether or not some instances (JSON, Bi, etc) roundtrips.
 spec :: HasCallStack => Spec
-spec = parallel $ describe "Marshalling & Unmarshalling" $ do
+spec = describe "Marshalling & Unmarshalling" $ do
     describe "Roundtrips" $ do
         aesonRoundtripProp @Account Proxy
         aesonRoundtripProp @AssuranceLevel Proxy
