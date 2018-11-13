@@ -7,6 +7,10 @@ os: osx
 # Generic language, we provide our custom builds
 language: generic
 
+# Only clone the repo's tip
+git:
+  depth: false
+
 # Caching so the next build will be fast too.
 cache:
   timeout: 1337
@@ -15,90 +19,132 @@ cache:
   - $HOME/.local
   - $HOME/.ghc
 
-# Only clone the repo's tip
-git:
-  depth: false
-
-# Setup some global env variables
-env:
-  global:
-  - PATH=$HOME/.local/bin:$PATH           # For binaries installed with stack
-  - HOMEBREW_NO_AUTO_UPDATE=1             # Prevent Homebrea from spending 5 minutes upgrading itself
-  - HOMEBREW_CACHE=$HOME/.local/Homebrew  # Relocate Homebrew's cache which it can actually be cached
-
 # Desactivate builds on branches but `develop` (CI is still triggered by PRs)
 branches:
   only:
   - master
   - develop
 
+# Setup some global env variables
+env:
+  global:
+  - PATH=$HOME/.local/bin:$PATH                # For binaries installed with stack
+  - HOMEBREW_NO_AUTO_UPDATE=1                  # Prevent Homebrea from spending 5 minutes upgrading itself
+  - HOMEBREW_CACHE=$HOME/.local/Homebrew       # Relocate Homebrew's cache which it can actually be cached
+  jobs:
+  - ACTION=coverage
+  - ACTION=hlint
+  - ACTION=weeder
+  - ACTION=documentation
+
 # Define custom set of stages
 stages:
+- lts
 - snapshot
-- tooling
 - extra-dependencies
-- hlint
-- weeder
-- documentation
-- coverage
+- tests
 
 # Install foreign dependencies required by some modules below
 before_install:
 - mkdir -p .stack-work
 - brew install rocksdb
+- export LTS=$(cat cardano-sl.yaml | grep resolver)
+
+# Rebuild only the snapshot. Note that, when triggered, job-concurrency should be limited
+# to 1 and we might have to re-play the build multiple times in case it couldn't build
+# everything in one go.
+# Before kicking this action, it would also be advised to cleanup the entire cache.
+lts: &lts
+  if: type != cron AND commit_message =~ /ci@update lts/
+  script:
+  - mkdir -p $HOME/.local/bin $HOME/.local/.stack-work
+  - travis_retry curl --insecure -L https://www.stackage.org/stack/osx-x86_64 | tar xz --strip-components=1 --include '*/stack' -C ~/.local/bin
+  - stack new lts && cd lts && echo $LTS > stack.yaml
+  - travis_wait 42 stack --no-terminal --install-ghc build --only-snapshot
+
+# Build out custom snapshot on top of the LTS. We separate this from the lts job to split
+# the workload and have two jobs running < 50 mins.
+snapshot: &snapshot
+  if: type != cron AND commit_message =~ /ci@update lts/
+  script:
+  - travis_wait 42 stack --no-terminal --install-ghc build --only-snapshot
+  - stack --no-terminal install cpphs
+  - git clone https://github.com/rubik/stack-hpc-coveralls && cd stack-hpc-coveralls && git checkout 3d8352d5642ab214a7a574bd797880ae39595a44
+  - echo $LTS > stack.yaml && stack install
+
+# Rebuild only the extra dependencies; mainly: cardano-sl. This isn't part of the custom
+# snapshot because we likely bumps the git hash reference more often  than other dependencies.
+# Still, we build that as a separate job and only triggers it when appropriated. It's cached
+# otherwise.
+extra-dependencies: &extra-dependencies
+  if: type != cron AND commit_message =~ /ci@update stack.yaml/
+  env:
+    - ACTION=coverage
+    - ACTION=documentation
+    - ACTION=weeder
+  script:
+  - travis_wait 42 stack --no-terminal build --fast --only-dependencies
+  - tar czf $HOME/.local/stack-work.tar.gz .stack-work
+
 
 # Build snapshot & dependencies in different jobs. This copes with Travis limit of 50 minutes per job.
 jobs:
   include:
-  # Rebuild only the snapshot. Note that, when triggered, job-concurrency should be limited
-  # to 1 and we might have to re-play the build multiple times in case it couldn't build
-  # everything in one go.
-  # Before kicking this action, it would also be advised to cleanup the entire cache. Note that
-  # we have a custom snapshot which contains also all the extra deps for cardano-sl; this way,
-  # we only have to build them once.
+  # LTS
+  - stage: lts
+    <<: *lts
+    env: ACTION=coverage
+  - stage: lts
+    <<: *lts
+    env: ACTION=documentation
+  - stage: lts
+    <<: *lts
+    env: ACTION=weeder
+
+  # SNAPSHOT
   - stage: snapshot
-    if: type != cron AND commit_message =~ /ci@update lts/
-    script:
-    - mkdir -p $HOME/.local/bin $HOME/.local/.stack-work
-    - travis_retry curl --insecure -L https://www.stackage.org/stack/osx-x86_64 | tar xz --strip-components=1 --include '*/stack' -C ~/.local/bin
-    - travis_wait 42 stack --no-terminal --install-ghc build --only-snapshot
+    <<: *snapshot
+    env: ACTION=coverage
+  - stage: snapshot
+    <<: *snapshot
+    env: ACTION=documentation
+  - stage: snapshot
+    <<: *snapshot
+    env: ACTION=weeder
 
-  # Install some extra dependencies we use to compile or in the CI.
-  # FIXME: Try to fit 'rocksdb' in there and find a way to cache it?
-  - stage: tooling
-    if: type != cron AND commit_message =~ /ci@update lts/
-    script:
-    - stack --no-terminal install cpphs
-    - git clone https://github.com/rubik/stack-hpc-coveralls && cd stack-hpc-coveralls && git checkout 3d8352d5642ab214a7a574bd797880ae39595a44
-    - "echo 'resolver: lts-11.13' > stack.yaml && stack install && stack clean"
-
-  # Rebuild only the extra dependencies; mainly: cardano-sl. This isn't part of the custom
-  # snapshot because we likely bumps the git hash reference more often  than other dependencies.
-  # Still, we build that as a separate job and only triggers it when appropriated. It's cached
-  # otherwise.
+  # EXTRA-DEPENDENCIES
   - stage: extra-dependencies
-    if: type != cron AND commit_message =~ /ci@update stack.yaml/
-    script:
-    - travis_wait 42 stack --no-terminal build --fast --only-dependencies
-    - tar czf $HOME/.local/stack-work.tar.gz .stack-work
+    <<: *extra-dependencies
+    env: ACTION=coverage
+  - stage: extra-dependencies
+    <<: *extra-dependencies
+    env: ACTION=documentation
+  - stage: extra-dependencies
+    <<: *extra-dependencies
+    env: ACTION=weeder
 
-  # Run hlint
-  - stage: hlint
+  # HLINT
+  - stage: tests
+    env: ACTION=hlint
     if: type != cron
     script:
       - curl -sL https://raw.github.com/ndmitchell/hlint/bea72e4e61da54ecd451590734d6e10423ead100/misc/travis.sh | sh -s . --cpp-define=__GLASGOW_HASKELL__=800 --cpp-define=x86_64_HOST_ARCH=1 --cpp-define=mingw32_HOST_OS=1
 
-  # Run all tests with code coverage
-  - stage: coverage
+  # COVERAGE
+  - stage: tests
+    env: ACTION=coverage
     if: type != cron
+    # Run all tests with code coverage
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz
     - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit --fast --coverage --ghc-options=-optl-Wl,-dead_strip_dylibs
     - shc cardano-wallet unit
 
-  # Upload API doc automatically on each build against `develop` to `gh-pages`
-  - stage: documentation
+  # DOCUMENTATION
+  - stage: tests
+    env: ACTION=documentation
     if: type = push AND branch = develop
+    # Upload API doc automatically on each build against `develop` to `gh-pages`
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz
     - travis_wait 42 stack --no-terminal build cardano-wallet:exe:cardano-generate-swagger-file --fast --ghc-options=-optl-Wl,-dead_strip_dylibs
@@ -107,9 +153,10 @@ jobs:
     - git checkout gh-pages && git cherry-pick -X theirs -
     - git push -f -q https://KtorZ:$GITHUB_API_KEY@github.com/input-output-hk/cardano-wallet gh-pages &>/dev/null # TODO: Create a specific CI user with its own key
 
+  # WEEDER
   allow_failures:
-  # Run weeder
   - stage: weeder
+    env: ACTION=weeder
     if: type = cron
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz
