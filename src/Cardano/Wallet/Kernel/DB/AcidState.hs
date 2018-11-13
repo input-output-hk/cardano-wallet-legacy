@@ -5,6 +5,7 @@
 module Cardano.Wallet.Kernel.DB.AcidState (
     -- * Top-level database
     DB(..)
+  , dbEosHdWallets
   , dbHdWallets
   , defDB
     -- * Acid-state operations
@@ -22,7 +23,7 @@ module Cardano.Wallet.Kernel.DB.AcidState (
     -- ** Updates on HD wallets
     -- *** CREATE
   , CreateHdWallet(..)
-  , CreateHdExternalWallet(..)
+  , CreateEosHdWallet(..)
   , RestoreHdWallet(..)
   , CreateHdAccount(..)
   , CreateHdAddress(..)
@@ -65,9 +66,12 @@ import           Pos.Chain.Block (HeaderHash)
 import           Pos.Chain.Txp (TxAux, TxId, Utxo)
 import           Pos.Chain.Update (SoftwareVersion)
 import           Pos.Core.Chrono (OldestFirst (..))
+import           Pos.Crypto (PublicKey)
 
 import           Cardano.Wallet.Kernel.DB.BlockContext
+import           Cardano.Wallet.Kernel.DB.EosHdWallet
 import           Cardano.Wallet.Kernel.DB.HdWallet
+import qualified Cardano.Wallet.Kernel.DB.EosHdWallet.Create as EosHD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Delete as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Update as HD
@@ -108,6 +112,10 @@ data DB = DB {
       -- | HD wallets with randomly assigned account and address indices
       _dbHdWallets :: !HdWallets
 
+      -- | Externally-owned sequential HD wallets (which delegate their
+      -- private key management to third party)
+    , _dbEosHdWallets :: !EosHdWallets
+
       -- | Available updates
     , _dbUpdates   :: !Updates
     }
@@ -117,7 +125,7 @@ deriveSafeCopy 1 'base ''DB
 
 -- | Default DB
 defDB :: DB
-defDB = DB initHdWallets noUpdates
+defDB = DB initHdWallets initEosHdWallets noUpdates
 
 {-------------------------------------------------------------------------------
   Custom errors
@@ -543,33 +551,22 @@ createHdWallet newRoot defaultHdAccountId defaultHdAddress utxoByAccount =
 -- for external wallets only, we don't have defaultHdAddress here (because in the current
 -- implementation we cannot create new addresses without root secret key).
 --
-createHdExternalWallet :: HdRoot
-                       -> HdAccountId
-                       -- ^ The default HdAccountId to go with this HdRoot. This
-                       -- function will take responsibility of creating the associated
-                       -- 'HdAccount'.
-                       -> Map HdAccountId (Utxo, [AddrWithId])
-                       -> Update DB (Either HD.CreateHdRootError ())
-createHdExternalWallet newRoot defaultHdAccountId utxoByAccount =
-    runUpdateDiscardSnapshot . zoom dbHdWallets $ do
-      HD.createHdRoot newRoot
-      updateAccounts_ $ map mkUpdateCreateHdWallet (Map.toList (insertDefault utxoByAccount))
+createEosHdWallet :: EosHdRoot
+                  -> [PublicKey]
+                  -> Update DB (Either EosHD.CreateEosHdRootError ())
+createEosHdWallet newEosRoot accountsPKs =
+    runUpdateDiscardSnapshot . zoom dbEosHdWallets $ do
+      EosHD.createEosHdRoot newEosRoot
+      mapM_ updateEosAccount eosAccountsUpdates
   where
-    insertDefault :: Map HdAccountId (Utxo, [AddrWithId])
-                  -> Map HdAccountId (Utxo, [AddrWithId])
-    insertDefault m = case Map.lookup defaultHdAccountId m of
-        Just _  -> m
-        Nothing ->
-            -- Completely new account, without addresses (yet).
-            Map.insert defaultHdAccountId (mempty, []) m
+    eosAccountsUpdates = map mkEosAccountUpdate accountsPKs
 
-    mkUpdateCreateHdWallet :: (HdAccountId, (Utxo, [AddrWithId]))
-                           -> AccountUpdate HD.CreateHdRootError ()
-    mkUpdateCreateHdWallet (accId, (utxo, addrs)) = AccountUpdate {
-          accountUpdateId    = accId
-        , accountUpdateNew   = AccountUpdateNewUpToDate utxo
-        , accountUpdateAddrs = addrs
-        , accountUpdate      = return () -- just need to create it, no more
+    mkEosAccountUpdate :: PublicKey
+                       -> EosAccountUpdate EosHD.CreateEosHdRootError ()
+    mkEosAccountUpdate accPK = EosAccountUpdate {
+          eosAccountUpdatePK     = accPK
+        , eosAccountUpdateRootId = _eosHdRootId newEosRoot
+        , eosAccountUpdate       = return () -- just need to create it, no more
         }
 
 -- | Begin restoration by creating an HdWallet with the given HdRoot,
@@ -649,6 +646,21 @@ data AccountUpdate e a = AccountUpdate {
     , accountUpdate      :: !(Update' e HdAccount a)
     }
 
+-- | All the information we need to update an account in EOS-wallet
+--
+-- See 'updateEosAccount' or 'updateEosAccounts'.
+data EosAccountUpdate e a = EosAccountUpdate {
+      -- | Account's public key (we obtained it from the user during wallet
+      -- creation).
+      eosAccountUpdatePK     :: !PublicKey
+
+      -- Root id of EOS-wallet this EOS-account belongs to.
+    , eosAccountUpdateRootId :: !EosHdRootId
+
+      -- | The update to run
+    , eosAccountUpdate       :: !(Update' e EosHdAccount a)
+    }
+
 -- | Information we need to create new accounts
 --
 -- NOTE: Conceptually new accounts are always created in slot 0 of epoch 0,
@@ -720,6 +732,14 @@ updateAccounts = fmap Map.fromList . mapM updateAccount
 
 updateAccounts_ :: [AccountUpdate e ()] -> Update' e HdWallets ()
 updateAccounts_ = mapM_ updateAccount
+
+updateEosAccount :: EosAccountUpdate e a -> Update' e EosHdWallets (PublicKey, a)
+updateEosAccount EosAccountUpdate{..} =
+    zoomOrCreateEosHdAccount
+        assumeEosHdRootExists
+        (EosHdAccount eosAccountUpdatePK eosAccountUpdateRootId)
+        eosAccountUpdatePK
+        ((eosAccountUpdatePK, ) <$> eosAccountUpdate)
 
 -- | Run each update, collecting all errors. Then, if there were any errors for any
 -- accounts, throw them all at once without updating the state.
@@ -865,7 +885,7 @@ makeAcidic ''DB [
     , 'createHdAddress
     , 'createHdAccount
     , 'createHdWallet
-    , 'createHdExternalWallet
+    , 'createEosHdWallet
     , 'updateHdWallet
     , 'updateHdRootPassword
     , 'updateHdAccountName

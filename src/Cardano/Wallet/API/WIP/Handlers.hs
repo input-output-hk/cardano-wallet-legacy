@@ -20,27 +20,27 @@ import           Cardano.Wallet.WalletLayer.Kernel.Conv (toInputGrouping)
 
 -- | WIP @Servant@ handlers the are not part of the offical api yet.
 handlers :: ActiveWalletLayer IO -> ServerT WIP.API Handler
-handlers awl = newExternalWallet pwl
-           :<|> deleteExternalWallet pwl
+handlers awl = newEosWallet pwl
+           :<|> deleteEosWallet pwl
            :<|> newUnsignedTransaction awl
            :<|> submitSignedTransaction awl
   where
     pwl = walletPassiveLayer awl
 
-newExternalWallet :: PassiveWalletLayer IO
-                  -> NewExternalWallet
-                  -> Handler (WalletResponse ExternalWallet)
-newExternalWallet pwl newExternalWalletRequest = do
-    res <- liftIO $ WalletLayer.createExternalWallet pwl newExternalWalletRequest
+newEosWallet :: PassiveWalletLayer IO
+             -> NewEosWallet
+             -> Handler (WalletResponse EosWallet)
+newEosWallet pwl newEosWalletRequest = do
+    res <- liftIO $ WalletLayer.createEosWallet pwl newEosWalletRequest
     case res of
         Left err     -> throwM err
         Right wallet -> return $ single wallet
 
-deleteExternalWallet :: PassiveWalletLayer IO
-                     -> PublicKeyAsBase58
-                     -> Handler NoContent
-deleteExternalWallet pwl encodedRootPK = do
-    res <- liftIO $ WalletLayer.deleteExternalWallet pwl encodedRootPK
+deleteEosWallet :: PassiveWalletLayer IO
+                -> PublicKeyAsBase58
+                -> Handler NoContent
+deleteEosWallet pwl encodedRootPK = do
+    res <- liftIO $ WalletLayer.deleteEosWallet pwl encodedRootPK
     case res of
         Left err -> throwM err
         Right () -> return NoContent

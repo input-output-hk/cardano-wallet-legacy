@@ -134,7 +134,7 @@ createUnsignedTx activeWallet grouping regulation payment = liftIO $ do
         Right (tx, addrsAndPaths) -> do
             let txInHexFormat = V1.mkTransactionAsBase16 tx
                 srcAddrsWithDerivationPaths = NE.toList $
-                    NE.map (\(addr, path) -> V1.AddressAndPath (V1.mkAddressAsBase58 addr)
+                    NE.map (\(addr, path) -> V1.AddressAndPath (V1.V1 addr)
                                                                (map V1.word32ToAddressLevel path))
                            addrsAndPaths
             return $ Right $ V1.UnsignedTransaction txInHexFormat
@@ -167,10 +167,7 @@ submitSignedTx activeWallet (V1.SignedTransaction encodedTx encodedSrcAddrsWithP
     decodeAddrAndProof :: Monad m
                        => V1.AddressWithProof
                        -> m (Either SubmitSignedTransactionError (Address, Signature TxSigData, PublicKey))
-    decodeAddrAndProof (V1.AddressWithProof encSrcAddr encSig encDerivedPK) = runExceptT $ do
-        srcAddress <- withExceptT (const SubmitSignedTransactionInvalidSrcAddress) $ ExceptT $
-            pure $ V1.mkAddressFromBase58 encSrcAddr
-
+    decodeAddrAndProof (V1.AddressWithProof srcAddr encSig encDerivedPK) = runExceptT $ do
         txSigItself <- withExceptT (const SubmitSignedTransactionSigNotBase16Format) $ ExceptT $
             pure $ B16.decode (V1.rawTransactionSignatureAsBase16 encSig)
         realTxSig <- withExceptT (const SubmitSignedTransactionInvalidSig) $ ExceptT $
@@ -180,7 +177,7 @@ submitSignedTx activeWallet (V1.SignedTransaction encodedTx encodedSrcAddrsWithP
         derivedPK <- withExceptT (const SubmitSignedTransactionInvalidPK) $ ExceptT $
             pure $ V1.mkPublicKeyFromBase58 encDerivedPK
 
-        ExceptT $ pure $ Right (srcAddress, txSignature, derivedPK)
+        ExceptT $ pure $ Right (unV1 srcAddr, txSignature, derivedPK)
 
 -- | Redeem an Ada voucher
 --
