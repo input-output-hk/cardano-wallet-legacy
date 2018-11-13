@@ -38,6 +38,7 @@ stages:
 - tooling
 - extra-dependencies
 - hlint
+- weeder
 - documentation
 - coverage
 
@@ -56,7 +57,7 @@ jobs:
   # we have a custom snapshot which contains also all the extra deps for cardano-sl; this way,
   # we only have to build them once.
   - stage: snapshot
-    if: commit_message =~ /ci@update lts/
+    if: type != cron AND commit_message =~ /ci@update lts/
     script:
     - mkdir -p $HOME/.local/bin $HOME/.local/.stack-work
     - travis_retry curl --insecure -L https://www.stackage.org/stack/osx-x86_64 | tar xz --strip-components=1 --include '*/stack' -C ~/.local/bin
@@ -65,7 +66,7 @@ jobs:
   # Install some extra dependencies we use to compile or in the CI.
   # FIXME: Try to fit 'rocksdb' in there and find a way to cache it?
   - stage: tooling
-    if: commit_message =~ /ci@update lts/
+    if: type != cron AND commit_message =~ /ci@update lts/
     script:
     - stack --no-terminal install cpphs
     - git clone https://github.com/rubik/stack-hpc-coveralls && cd stack-hpc-coveralls && git checkout 3d8352d5642ab214a7a574bd797880ae39595a44
@@ -76,18 +77,20 @@ jobs:
   # Still, we build that as a separate job and only triggers it when appropriated. It's cached
   # otherwise.
   - stage: extra-dependencies
-    if: commit_message =~ /ci@update stack.yaml/
+    if: type != cron AND commit_message =~ /ci@update stack.yaml/
     script:
     - travis_wait 42 stack --no-terminal build --fast --only-dependencies
     - tar czf $HOME/.local/stack-work.tar.gz .stack-work
 
   # Run hlint
   - stage: hlint
+    if: type != cron
     script:
       - curl -sL https://raw.github.com/ndmitchell/hlint/bea72e4e61da54ecd451590734d6e10423ead100/misc/travis.sh | sh -s . --cpp-define=__GLASGOW_HASKELL__=800 --cpp-define=x86_64_HOST_ARCH=1 --cpp-define=mingw32_HOST_OS=1
 
   # Run all tests with code coverage
   - stage: coverage
+    if: type != cron
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz
     - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit --fast --coverage --ghc-options=-optl-Wl,-dead_strip_dylibs
@@ -95,7 +98,7 @@ jobs:
 
   # Upload API doc automatically on each build against `develop` to `gh-pages`
   - stage: documentation
-    if: branch = develop AND type = push
+    if: type = push AND branch = develop
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz
     - travis_wait 42 stack --no-terminal build cardano-wallet:exe:cardano-generate-swagger-file --fast --ghc-options=-optl-Wl,-dead_strip_dylibs
@@ -103,3 +106,12 @@ jobs:
     - git add swagger.json && git commit -m $TRAVIS_COMMIT
     - git checkout gh-pages && git cherry-pick -X theirs -
     - git push -f -q https://KtorZ:$GITHUB_API_KEY@github.com/input-output-hk/cardano-wallet gh-pages &>/dev/null # TODO: Create a specific CI user with its own key
+
+  allow_failures:
+  # Run weeder
+  - stage: weeder
+    if: type = cron
+    script:
+    - tar xzf $HOME/.local/stack-work.tar.gz
+    - travis_wait 42 stack --no-terminal build --fast --ghc-options=-optl-Wl,-dead_strip_dylibs
+    - curl -sSL https://raw.github.com/ndmitchell/weeder/master/misc/travis.sh | sh -s .
