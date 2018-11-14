@@ -292,7 +292,8 @@ executable cardano-node
       -O2
 
   build-depends:
-      cardano-sl
+      base
+    , cardano-sl
     , cardano-sl-util
     , cardano-wallet
     , universum
