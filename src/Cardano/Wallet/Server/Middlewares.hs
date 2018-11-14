@@ -24,7 +24,7 @@ import           Network.Wai (Application, Middleware, Response, ifRequest,
                      modifyResponse, requestHeaders, requestMethod,
                      responseBuilder, responseLBS, responseStatus)
 import qualified Network.Wai.Middleware.Throttle as Throttle
-
+import           System.Clock (TimeSpec (..))
 
 import           Cardano.Wallet.API.Response (UnsupportedMimeTypeError (..))
 import           Cardano.Wallet.API.V1.Headers (applicationJson)
@@ -65,18 +65,19 @@ ifRequestWithBody =
 throttleMiddleware :: Maybe ThrottleSettings -> Middleware
 throttleMiddleware Nothing app = app
 throttleMiddleware (Just ts) app = \req respond -> do
-    throttler <- Throttle.initThrottler
-    Throttle.throttle throttleSettings throttler app req respond
+    throttler <- Throttle.initThrottler throttleSettings
+    Throttle.throttle throttler app req respond
   where
-    throttleSettings = Throttle.defaultThrottleSettings
-        { Throttle.onThrottled = \microsTilRetry ->
+     expirationSpec = TimeSpec 5 0 -- five seconds
+     throttleSettings = (Throttle.defaultThrottleSettings expirationSpec)
+        { Throttle.throttleSettingsOnThrottled = \microsTilRetry ->
             let
                 err = V1.RequestThrottled microsTilRetry
             in
                 responseLBS (V1.toHttpErrorStatus err) [applicationJson] (encode err)
-        , Throttle.throttleRate = fromIntegral $ tsRate ts
-        , Throttle.throttlePeriod = fromIntegral $ tsPeriod ts
-        , Throttle.throttleBurst = fromIntegral $ tsBurst ts
+        , Throttle.throttleSettingsRate = fromIntegral $ tsRate ts
+        , Throttle.throttleSettingsPeriod = fromIntegral $ tsPeriod ts
+        , Throttle.throttleSettingsBurst = fromIntegral $ tsBurst ts
         }
 
 -- | A @Middleware@ to default a specific Header when not provided
