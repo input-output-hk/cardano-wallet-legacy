@@ -1,3 +1,9 @@
+---
+name: ADR
+about: Document an Architectural Decision
+
+---
+
 # Context
 
 <What is the issue that we are seeing that is motivating this decision or
@@ -17,8 +23,10 @@ schemas and references when possible.>
 <Use standard vocabulary to describe requirement levels RFC-2119: Must-Should-May.
 e.g.: The API _must_ support creation of wallets through a dedicated endpoint.>
 
-- [ ] ...
+1. - [ ] ...
 
+
+---
 
 # PR
 
@@ -28,8 +36,6 @@ e.g.: The API _must_ support creation of wallets through a dedicated endpoint.>
 
 [PR-1]: https://github.com/input-output-hk/cardano-wallet/pull/ 
 
-
----
 
 # Consequences
 
