@@ -27,7 +27,7 @@ import qualified Cardano.Wallet.API.V1 as V1
 spec :: Spec
 spec = do
     describe "Servant Layout" $ do
-        let layoutPath = "./test/Golden/golden/api-layout.txt"
+        let layoutPath = "./test/unit/Golden/golden/api-layout.txt"
             newLayoutPath = layoutPath <> ".new"
         it "has not changed" $ do
             oldLayout <- BS.readFile layoutPath `catch` \(_err :: SomeException) -> pure ""
