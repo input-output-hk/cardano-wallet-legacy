@@ -459,6 +459,7 @@ test-suite unit
       base
     , acid-state
     , aeson
+    , async
     , bytestring
     , cardano-crypto
     , cardano-sl
