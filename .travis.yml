@@ -167,6 +167,16 @@ jobs:
     - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit --fast --coverage --ghc-options "+RTS -A256m -n2m -M3G -RTS"
     - shc cardano-wallet unit
 
+  allow_failures:
+  # WEEDER
+  - stage: weeder
+    env: ACTION=weeder
+    if: type = cron
+    script:
+    - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
+    - travis_wait 42 stack --no-terminal build --fast --ghc-options "+RTS -A256m -n2m -M3G -RTS"
+    - curl -sSL https://raw.github.com/ndmitchell/weeder/master/misc/travis.sh | sh -s .
+
   # DOCUMENTATION
   - stage: tests
     env: ACTION=documentation
@@ -179,13 +189,3 @@ jobs:
     - git add swagger.json && git commit -m $TRAVIS_COMMIT
     - git checkout gh-pages && git cherry-pick -X theirs -
     - git push -f -q https://KtorZ:$GITHUB_API_KEY@github.com/input-output-hk/cardano-wallet gh-pages &>/dev/null # TODO: Create a specific CI user with its own key
-
-  # WEEDER
-  allow_failures:
-  - stage: weeder
-    env: ACTION=weeder
-    if: type = cron
-    script:
-    - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
-    - travis_wait 42 stack --no-terminal build --fast --ghc-options=-optl-Wl,-dead_strip_dylibs
-    - curl -sSL https://raw.github.com/ndmitchell/weeder/master/misc/travis.sh | sh -s .
