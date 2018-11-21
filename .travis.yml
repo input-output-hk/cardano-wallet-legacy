@@ -1,9 +1,6 @@
 # Use new container infrastructure to enable caching
 sudo: false
 
-# Use OSX to by-pass issue with CouchDB PGP Key on Linux
-os: osx
-
 # Generic language, we provide our custom builds
 language: generic
 
@@ -25,17 +22,33 @@ branches:
   - master
   - develop
 
-# Setup some global env variables
+# Setup some global env variables to our .local folder.
+# This is because we run in an isolated container and
+# don't have access to 'sudo'; thus, we install libraries
+# and binaries on our $HOME and need to point a few variable
+# to them.
 env:
   global:
-  - PATH=$HOME/.local/bin:$PATH                # For binaries installed with stack
-  - HOMEBREW_NO_AUTO_UPDATE=1                  # Prevent Homebrea from spending 5 minutes upgrading itself
-  - HOMEBREW_CACHE=$HOME/.local/Homebrew       # Relocate Homebrew's cache which it can actually be cached
+  # Setup a bunch of ENV var necessary for librocksdb & stack to work fine
+  - PATH=$PATH:$HOME/.local/bin:$HOME/.local/lib:$HOME/.local/include
+  - LIBRARY_PATH=$LIBRARY_PATH:$PATH
+  - LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$PATH
+  - C_INCLUDE_PATH=$C_INCLUDE_PATH:$PATH
+  - CPP_INCLUDE_PATH=$CPP_INCLUDE_PATH:$PATH
+
   jobs:
   - ACTION=coverage
   - ACTION=hlint
   - ACTION=weeder
   - ACTION=documentation
+
+# Few addons available on apt needed for librocksdb (which we can't get from
+# apt because of some weak PGP key).
+addons:
+  apt:
+    packages:
+    - libsnappy-dev
+    - libgflags-dev
 
 # Define custom set of stages
 stages:
@@ -47,7 +60,6 @@ stages:
 # Install foreign dependencies required by some modules below
 before_install:
 - mkdir -p .stack-work
-- brew install rocksdb # RocksDB peer dependency for cardano
 - export LTS=$(cat cardano-sl.yaml | grep resolver) # Extract the LTS from the stack.yaml
 
 # Rebuild only the snapshot. Note that, when triggered, job-concurrency should be limited
@@ -57,12 +69,24 @@ before_install:
 snapshot-1: &snapshot-1
   if: type != cron AND commit_message =~ /ci@update lts/
   script:
+  # Prepare directories
+  - mkdir -p $HOME/.local/bin $HOME/.local/lib $HOME/.local/include
+
+  # Install librocksdb-dev
+  - git clone --depth 1 --branch=librocksdb-dev $(git remote get-url origin) /tmp/librocksdb-dev
+  - rm -rf $HOME/.local/include/rocksdb && mv /tmp/librocksdb-dev/rocksdb $HOME/.local/include
+  - rm -rf $HOME/.local/lib/librocksdb* && mv /tmp/librocksdb-dev/librocksdb* $HOME/.local/lib
+
+  # Install libstdc++
+  - git clone --depth 1 --branch=libstdc++ $(git remote get-url origin) /tmp/libstdc++
+  - rm -rf $HOME/.local/lib/libstdc* && mv /tmp/libstdc++/* $HOME/.local/lib
+
   # Install Stack
-  - mkdir -p $HOME/.local/bin $HOME/.local/.stack-work
-  - travis_retry curl --insecure -L https://www.stackage.org/stack/osx-x86_64 | tar xz --strip-components=1 --include '*/stack' -C ~/.local/bin
+  - travis_retry curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+
   # Building a subset of the snapshot, to be < 42 min build time; we strip away cardano-sl and servant packages because they're long to build
   - cat cardano-wallet.cabal | grep -v cardano-sl | grep -v servant > tmp.cabal && mv tmp.cabal cardano-wallet.cabal
-  - travis_wait 42 stack --no-terminal --install-ghc build cardano-wallet:lib --only-snapshot
+  - travis_wait 42 stack --no-terminal --install-ghc build cardano-wallet:lib --only-snapshot --ghc-options "+RTS -A256m -n2m -M3G -RTS"
 
 # Build out custom snapshot on top of the LTS. We separate this from the lts job to split
 # the workload and have two jobs running < 50 mins.
@@ -70,7 +94,7 @@ snapshot-2: &snapshot-2
   if: type != cron AND commit_message =~ /ci@update lts/
   script:
   # Install rest of the the snapshot, mostly servant and cardano-sl
-  - travis_wait 42 stack --no-terminal build --only-snapshot
+  - travis_wait 42 stack --no-terminal build --only-snapshot --ghc-options "+RTS -A256m -n2m -M3G -RTS"
   # Extra cardano-sl dependency
   - stack --no-terminal install cpphs
   # Installing shc for coverage reporting; We trick it a bit to use the same LTS as us and leverage already installed packages to speed up the process
@@ -88,10 +112,9 @@ extra-dependencies: &extra-dependencies
     - ACTION=documentation
     - ACTION=weeder
   script:
-  - travis_wait 42 stack --no-terminal build --fast --only-dependencies
   # We don't cache .stack-work, though we want to avoid rebuilding extra-dependencies on each CI run. So, we just cache it manually.
+  - travis_wait 42 stack --no-terminal build --fast --only-dependencies --ghc-options "+RTS -A256m -n2m -M3G -RTS"
   - tar czf $HOME/.local/stack-work.tar.gz .stack-work
-
 
 # Build snapshot & dependencies in different jobs. This copes with Travis limit of 50 minutes per job.
 jobs:
@@ -141,8 +164,18 @@ jobs:
     # Run all tests with code coverage
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
-    - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit --fast --coverage --ghc-options=-optl-Wl,-dead_strip_dylibs
+    - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit --fast --coverage --ghc-options "+RTS -A256m -n2m -M3G -RTS"
     - shc cardano-wallet unit
+
+  allow_failures:
+  # WEEDER
+  - stage: weeder
+    env: ACTION=weeder
+    if: type = cron
+    script:
+    - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
+    - travis_wait 42 stack --no-terminal build --fast --ghc-options "+RTS -A256m -n2m -M3G -RTS"
+    - curl -sSL https://raw.github.com/ndmitchell/weeder/master/misc/travis.sh | sh -s .
 
   # DOCUMENTATION
   - stage: tests
@@ -151,18 +184,8 @@ jobs:
     # Upload API doc automatically on each build against `develop` to `gh-pages`
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
-    - travis_wait 42 stack --no-terminal build cardano-wallet:exe:cardano-generate-swagger-file --fast --ghc-options=-optl-Wl,-dead_strip_dylibs
+    - travis_wait 42 stack --no-terminal build cardano-wallet:exe:cardano-generate-swagger-file --fast
     - stack exec -- cardano-generate-swagger-file --target wallet@v1
     - git add swagger.json && git commit -m $TRAVIS_COMMIT
     - git checkout gh-pages && git cherry-pick -X theirs -
     - git push -f -q https://KtorZ:$GITHUB_API_KEY@github.com/input-output-hk/cardano-wallet gh-pages &>/dev/null # TODO: Create a specific CI user with its own key
-
-  # WEEDER
-  allow_failures:
-  - stage: weeder
-    env: ACTION=weeder
-    if: type = cron
-    script:
-    - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
-    - travis_wait 42 stack --no-terminal build --fast --ghc-options=-optl-Wl,-dead_strip_dylibs
-    - curl -sSL https://raw.github.com/ndmitchell/weeder/master/misc/travis.sh | sh -s .
