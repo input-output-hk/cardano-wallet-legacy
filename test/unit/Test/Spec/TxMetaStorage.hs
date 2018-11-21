@@ -7,6 +7,8 @@ module Test.Spec.TxMetaStorage
 
 import           Universum
 
+import           Control.Concurrent.Async
+
 import qualified Cardano.Wallet.Kernel.DB.Sqlite as SQlite
 import           Cardano.Wallet.Kernel.DB.TxMeta
 import           Control.Exception.Safe (bracket)
@@ -161,13 +163,97 @@ sortByCreationAt direction = sortBy sortFn
         sortFn (Isomorphic a) (Isomorphic b) =
             (withDir direction compare) (a ^. txMetaCreationAt) (b ^. txMetaCreationAt)
 
-
 hasDupes :: Ord a => [a] -> Bool
 hasDupes xs = length (Set.fromList xs) /= List.length xs
+
+threadRead :: Int -> MetaDBHandle -> IO ()
+threadRead times hdl = do
+    let getNoFilters = getTxMetas hdl (Offset 0) (Limit 100) Everything Nothing NoFilterOp NoFilterOp Nothing
+    replicateM_ times getNoFilters
+
+threadWrite :: [TxMeta] -> MetaDBHandle -> IO ()
+threadWrite metas hdl = do
+    let f meta = do
+            putTxMetaT hdl meta `shouldReturn` Tx
+    mapM_ f metas
+
+-- here we try to add the same tx 2 times. The second must fail, but without crashing
+-- anything, as this is a no-op.
+threadWriteWithNoOp :: [TxMeta] -> MetaDBHandle -> IO ()
+threadWriteWithNoOp metas hdl = do
+    let f meta = do
+            putTxMetaT hdl meta `shouldReturn` Tx
+            putTxMetaT hdl meta `shouldReturn` No
+    mapM_ f metas
 
 -- | Specs which tests the persistent storage and API provided by 'TxMeta'.
 spec :: Spec
 spec = do
+    describe "synchronization" $ do
+        it "synchronized with 2 write workers and no-ops" $ withMaxSuccess 5 $  monadicIO $ do
+            -- beware of the big data.
+            testMetas <- pick (genMetas 2000)
+            let metas = unSTB <$> testMetas
+                (meta0, meta1) = splitAt (div 2000 2) metas
+            run $ withTemporaryDb $ \hdl -> do
+                t0 <- async $ threadWriteWithNoOp meta0 hdl
+                t1 <- async $ threadWriteWithNoOp meta1 hdl
+                traverse_ wait [t0, t1]
+
+        it "synchronized with 2 write workers and no-ops: correct count" $ withMaxSuccess 5 $  monadicIO $ do
+            -- beware of the big data.
+            testMetas <- pick (genMetas 200)
+            let metas = unSTB <$> testMetas
+                (meta0, meta1) = splitAt (div 200 2) metas
+            run $ withTemporaryDb $ \hdl -> do
+                t0 <- async $ threadWriteWithNoOp meta0 hdl
+                t1 <- async $ threadWriteWithNoOp meta1 hdl
+                traverse_ wait [t0, t1]
+                (ls, _count) <- getTxMetas hdl (Offset 0) (Limit 300) Everything Nothing NoFilterOp NoFilterOp Nothing
+                length ls `shouldBe` 200
+
+        it "synchronized with 2 write workers" $ withMaxSuccess 5 $  monadicIO $ do
+            -- beware of the big data.
+            testMetas <- pick (genMetas 2000)
+            let metas = unSTB <$> testMetas
+                (meta0, meta1) = splitAt (div 2000 2) metas
+            run $ withTemporaryDb $ \hdl -> do
+                t0 <- async $ threadWrite meta0 hdl
+                t1 <- async $ threadWrite meta1 hdl
+                traverse_ wait [t0, t1]
+
+        it "synchronized with 2 write workers: correct count" $ withMaxSuccess 5 $  monadicIO $ do
+            -- beware of the big data.
+            testMetas <- pick (genMetas 200)
+            let metas = unSTB <$> testMetas
+                (meta0, meta1) = splitAt (div 200 2) metas
+            run $ withTemporaryDb $ \hdl -> do
+                t0 <- async $ threadWrite meta0 hdl
+                t1 <- async $ threadWrite meta1 hdl
+                traverse_ wait [t0, t1]
+                (ls, _count) <- getTxMetas hdl (Offset 0) (Limit 300) Everything Nothing NoFilterOp NoFilterOp Nothing
+                length ls `shouldBe` 200
+
+        it "synchronized 1 write and 1 read workers" $ withMaxSuccess 5 $  monadicIO $ do
+            -- beware of the big data.
+            testMetas <- pick (genMetas 2000)
+            let metas = unSTB <$> testMetas
+            run $ withTemporaryDb $ \hdl -> do
+                t0 <- async $ threadWriteWithNoOp metas hdl
+                t1 <- async $ threadRead 2000 hdl
+                traverse_ wait [t0, t1]
+
+        it "synchronized 1 write and 1 read workers: correct count" $ withMaxSuccess 5 $  monadicIO $ do
+            -- beware of the big data.
+            testMetas <- pick (genMetas 200)
+            let metas = unSTB <$> testMetas
+            run $ withTemporaryDb $ \hdl -> do
+                t0 <- async $ threadWriteWithNoOp metas hdl
+                t1 <- async $ threadRead 200 hdl
+                traverse_ wait [t0, t1]
+                (ls, _count) <- getTxMetas hdl (Offset 0) (Limit 300) Everything Nothing NoFilterOp NoFilterOp Nothing
+                length ls `shouldBe` 200
+
     describe "SQlite transactions" $ do
         it "throws an exception when tx with double spending" $ withMaxSuccess 5 $ monadicIO $ do
             testMetaSTB <- pick genMeta
