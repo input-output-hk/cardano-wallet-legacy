@@ -56,6 +56,7 @@ stages:
 - snapshot-2
 - extra-dependencies
 - tests
+- documentation
 
 # Install foreign dependencies required by some modules below
 before_install:
@@ -67,7 +68,7 @@ before_install:
 # everything in one go.
 # Before kicking this action, it would also be advised to cleanup the entire cache.
 snapshot-1: &snapshot-1
-  if: type != cron AND commit_message =~ /ci@update lts/
+  if: commit_message =~ /ci@update lts/
   script:
   # Prepare directories
   - mkdir -p $HOME/.local/bin $HOME/.local/lib $HOME/.local/include
@@ -91,7 +92,7 @@ snapshot-1: &snapshot-1
 # Build out custom snapshot on top of the LTS. We separate this from the lts job to split
 # the workload and have two jobs running < 50 mins.
 snapshot-2: &snapshot-2
-  if: type != cron AND commit_message =~ /ci@update lts/
+  if: commit_message =~ /ci@update lts/
   script:
   # Install rest of the the snapshot, mostly servant and cardano-sl
   - travis_wait 42 stack --no-terminal build --only-snapshot --ghc-options "+RTS -A256m -n2m -M3G -RTS"
@@ -106,7 +107,7 @@ snapshot-2: &snapshot-2
 # Still, we build that as a separate job and only triggers it when appropriated. It's cached
 # otherwise.
 extra-dependencies: &extra-dependencies
-  if: type != cron AND commit_message =~ /ci@update stack.yaml/
+  if: commit_message =~ /ci@update stack.yaml/
   env:
     - ACTION=coverage
     - ACTION=documentation
@@ -153,32 +154,28 @@ jobs:
   # HLINT
   - stage: tests
     env: ACTION=hlint
-    if: type != cron
     script:
       - curl -sL https://raw.github.com/ndmitchell/hlint/bea72e4e61da54ecd451590734d6e10423ead100/misc/travis.sh | sh -s . --cpp-define=__GLASGOW_HASKELL__=800 --cpp-define=x86_64_HOST_ARCH=1 --cpp-define=mingw32_HOST_OS=1
 
   # COVERAGE
   - stage: tests
     env: ACTION=coverage
-    if: type != cron
     # Run all tests with code coverage
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
     - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit --fast --coverage --ghc-options "+RTS -A256m -n2m -M3G -RTS"
     - shc cardano-wallet unit
 
-  allow_failures:
   # WEEDER
-  - stage: weeder
+  - stage: tests
     env: ACTION=weeder
-    if: type = cron
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
-    - travis_wait 42 stack --no-terminal build --fast --ghc-options "+RTS -A256m -n2m -M3G -RTS"
+    - travis_wait 42 stack --no-terminal test --no-run-tests --fast --ghc-options "+RTS -A256m -n2m -M3G -RTS"
     - curl -sSL https://raw.github.com/ndmitchell/weeder/master/misc/travis.sh | sh -s .
 
   # DOCUMENTATION
-  - stage: tests
+  - stage: documentation
     env: ACTION=documentation
     if: type = push AND branch = develop
     # Upload API doc automatically on each build against `develop` to `gh-pages`
@@ -189,3 +186,7 @@ jobs:
     - git add swagger.json && git commit -m $TRAVIS_COMMIT
     - git checkout gh-pages && git cherry-pick -X theirs -
     - git push -f -q https://KtorZ:$GITHUB_API_KEY@github.com/input-output-hk/cardano-wallet gh-pages &>/dev/null # TODO: Create a specific CI user with its own key
+
+  allow_failures:
+    - env: ACTION=documentation
+    - env: ACTION=weeder
