@@ -220,6 +220,7 @@ library
       Cardano.Wallet.Kernel.DB.Util.Zoomable
       Cardano.Wallet.Kernel.Decrypt
       Cardano.Wallet.Kernel.Diffusion
+      Cardano.Wallet.Kernel.HdSeq
       Cardano.Wallet.Kernel.Internal
       Cardano.Wallet.Kernel.Invariants
       Cardano.Wallet.Kernel.Keystore
@@ -533,6 +534,7 @@ test-suite unit
       Test.Spec.DeltaCompression
       Test.Spec.Fixture
       Test.Spec.GetTransactions
+      Test.Spec.HdSeq
       Test.Spec.Kernel
       Test.Spec.Keystore
       Test.Spec.Models
