@@ -16,6 +16,7 @@ import           Universum
 
 import           Control.Monad.Except (throwError)
 import           Data.Coerce (coerce)
+import           Data.Default (def)
 
 import           Pos.Chain.Txp (Utxo)
 import           Pos.Core (mkCoin)
@@ -27,6 +28,7 @@ import qualified Cardano.Mnemonic as Mnemonic
 import           Cardano.Wallet.API.V1.Types (V1 (..))
 import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
+import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (dbHdWallets)
 import qualified Cardano.Wallet.Kernel.DB.EosHdWallet as EosHD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
@@ -163,7 +165,7 @@ createEosWallet :: MonadIO m
                 -> m (Either CreateEosWalletError V1.EosWallet)
 createEosWallet wallet newEosWalletRequest = runExceptT $ do
     let accountsPublicKeys = V1.neweoswalAccountsPublicKeys newEosWalletRequest
-        addressPoolGap = maybe defaultAddressPoolGap id $
+        addressPoolGap = maybe (def :: AddressPoolGap) id $
             V1.neweoswalAddressPoolGap newEosWalletRequest
         name = V1.neweoswalName newEosWalletRequest
         assuranceLevel = V1.neweoswalAssuranceLevel newEosWalletRequest
@@ -182,9 +184,6 @@ createEosWallet wallet newEosWalletRequest = runExceptT $ do
         , eoswalAssuranceLevel = assuranceLevel
         }
   where
-    -- Default value of address pool gap is taken from BIP-44 specification.
-    defaultAddressPoolGap = 20
-
     mkEosWalletId :: EosHD.EosHdRoot -> V1.EosWalletId
     mkEosWalletId root = V1.EosWalletId anId
       where (EosHD.EosHdRootId anId) = EosHD._eosHdRootId root

@@ -35,6 +35,7 @@ import           Pos.Crypto (EncryptedSecretKey, HDPassphrase, PassPhrase,
 import           Cardano.Mnemonic (Mnemonic)
 import qualified Cardano.Mnemonic as Mnemonic
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
+import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (CreateEosHdWallet (..),
                      CreateHdWallet (..), DeleteHdRoot (..), RestoreHdWallet,
                      UpdateHdRootPassword (..), UpdateHdWallet (..))
@@ -235,7 +236,7 @@ createHdWallet pw mnemonic spendingPassword assuranceLevel walletName = do
 createEosHdWallet :: PassiveWallet
                   -> [PublicKey]
                   -- ^ External wallet's accounts public keys.
-                  -> Word
+                  -> AddressPoolGap
                   -- ^ Address pool gap for this wallet.
                   -> AssuranceLevel
                   -- ^ The 'AssuranceLevel' for this wallet, namely after how many
