@@ -70,8 +70,8 @@ import           Pos.Crypto (PublicKey)
 
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.EosHdWallet
-import           Cardano.Wallet.Kernel.DB.HdWallet
 import qualified Cardano.Wallet.Kernel.DB.EosHdWallet.Create as EosHD
+import           Cardano.Wallet.Kernel.DB.HdWallet
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Delete as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Update as HD
@@ -110,14 +110,14 @@ import           UTxO.Util (markMissingMapEntries, mustBeRight)
 --  * V1 API defined in "Cardano.Wallet.API.V1.*" (in @src/@)
 data DB = DB {
       -- | HD wallets with randomly assigned account and address indices
-      _dbHdWallets :: !HdWallets
+      _dbHdWallets    :: !HdWallets
 
       -- | Externally-owned sequential HD wallets (which delegate their
       -- private key management to third party)
     , _dbEosHdWallets :: !EosHdWallets
 
       -- | Available updates
-    , _dbUpdates   :: !Updates
+    , _dbUpdates      :: !Updates
     }
 
 makeLenses ''DB

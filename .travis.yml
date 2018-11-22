@@ -60,7 +60,7 @@ stages:
 
 # Install foreign dependencies required by some modules below
 before_install:
-- mkdir -p .stack-work
+- mkdir -p .stack-work $HOME/.local/bin $HOME/.local/lib $HOME/.local/include
 - export LTS=$(cat cardano-sl.yaml | grep resolver) # Extract the LTS from the stack.yaml
 
 # Rebuild only the snapshot. Note that, when triggered, job-concurrency should be limited
@@ -70,9 +70,6 @@ before_install:
 snapshot-1: &snapshot-1
   if: commit_message =~ /ci@update lts/
   script:
-  # Prepare directories
-  - mkdir -p $HOME/.local/bin $HOME/.local/lib $HOME/.local/include
-
   # Install librocksdb-dev
   - git clone --depth 1 --branch=librocksdb-dev $(git remote get-url origin) /tmp/librocksdb-dev
   - rm -rf $HOME/.local/include/rocksdb && mv /tmp/librocksdb-dev/rocksdb $HOME/.local/include
@@ -82,7 +79,7 @@ snapshot-1: &snapshot-1
   - git clone --depth 1 --branch=libstdc++ $(git remote get-url origin) /tmp/libstdc++
   - rm -rf $HOME/.local/lib/libstdc* && mv /tmp/libstdc++/* $HOME/.local/lib
 
-  # Install Stack
+  # Install stack
   - travis_retry curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
 
   # Building a subset of the snapshot, to be < 42 min build time; we strip away cardano-sl and servant packages because they're long to build
@@ -96,8 +93,8 @@ snapshot-2: &snapshot-2
   script:
   # Install rest of the the snapshot, mostly servant and cardano-sl
   - travis_wait 42 stack --no-terminal build --only-snapshot --ghc-options "+RTS -A256m -n2m -M3G -RTS"
-  # Extra cardano-sl dependency
-  - stack --no-terminal install cpphs
+  # Install CPPHS, extra cardano-sl dependency
+  - travis_wait 42 stack --no-terminal install cpphs
   # Installing shc for coverage reporting; We trick it a bit to use the same LTS as us and leverage already installed packages to speed up the process
   - git clone https://github.com/rubik/stack-hpc-coveralls && cd stack-hpc-coveralls && git checkout 3d8352d5642ab214a7a574bd797880ae39595a44 && echo $LTS > stack.yaml #
   - travis_wait 42 stack --no-terminal install
@@ -108,10 +105,6 @@ snapshot-2: &snapshot-2
 # otherwise.
 extra-dependencies: &extra-dependencies
   if: commit_message =~ /ci@update stack.yaml/
-  env:
-    - ACTION=coverage
-    - ACTION=documentation
-    - ACTION=weeder
   script:
   # We don't cache .stack-work, though we want to avoid rebuilding extra-dependencies on each CI run. So, we just cache it manually.
   - travis_wait 42 stack --no-terminal build --fast --only-dependencies --ghc-options "+RTS -A256m -n2m -M3G -RTS"
@@ -121,6 +114,15 @@ extra-dependencies: &extra-dependencies
 jobs:
   include:
   # SNAPSHOT
+  - stage: snapshot-1
+    <<: *snapshot-1
+    env: ACTION=stylish-haskell
+    script:
+    # Install stack
+    - travis_retry curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+    # Install stylish-haskell, not sure why but stack fails to copy the binary for the first install... Go figure :|
+    - stack --no-terminal --install-ghc setup
+    - stack --no-terminal install stylish-haskell && stack --no-terminal install stylish-haskell
   - stage: snapshot-1
     <<: *snapshot-1
     env: ACTION=coverage
@@ -156,6 +158,13 @@ jobs:
     env: ACTION=hlint
     script:
       - curl -sL https://raw.github.com/ndmitchell/hlint/bea72e4e61da54ecd451590734d6e10423ead100/misc/travis.sh | sh -s . --cpp-define=__GLASGOW_HASKELL__=800 --cpp-define=x86_64_HOST_ARCH=1 --cpp-define=mingw32_HOST_OS=1
+
+  # STYLISH-HASKELL
+  - stage: tests
+    env: ACTION=stylish-haskell
+    script:
+    - find . -type f -name "*.hs" ! -path "*.stack-work*" -exec stylish-haskell -i {} \;
+    - git diff --exit-code
 
   # COVERAGE
   - stage: tests

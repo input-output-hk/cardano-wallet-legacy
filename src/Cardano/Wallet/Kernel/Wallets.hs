@@ -35,17 +35,16 @@ import           Pos.Crypto (EncryptedSecretKey, HDPassphrase, PassPhrase,
 import           Cardano.Mnemonic (Mnemonic)
 import qualified Cardano.Mnemonic as Mnemonic
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
-import           Cardano.Wallet.Kernel.DB.AcidState
-                     (CreateEosHdWallet (..), CreateHdWallet (..),
-                     DeleteHdRoot (..), RestoreHdWallet,
+import           Cardano.Wallet.Kernel.DB.AcidState (CreateEosHdWallet (..),
+                     CreateHdWallet (..), DeleteHdRoot (..), RestoreHdWallet,
                      UpdateHdRootPassword (..), UpdateHdWallet (..))
 import           Cardano.Wallet.Kernel.DB.EosHdWallet (EosHdRoot (..))
+import qualified Cardano.Wallet.Kernel.DB.EosHdWallet as EosHD
+import qualified Cardano.Wallet.Kernel.DB.EosHdWallet.Create as EosHD
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel,
                      HdAccountId (..), HdAccountIx (..), HdAddress,
                      HdAddressId (..), HdAddressIx (..), HdRoot, HdRootId,
                      WalletName, eskToHdRootId)
-import qualified Cardano.Wallet.Kernel.DB.EosHdWallet as EosHD
-import qualified Cardano.Wallet.Kernel.DB.EosHdWallet.Create as EosHD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
