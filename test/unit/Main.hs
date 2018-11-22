@@ -23,6 +23,7 @@ import qualified Test.Spec.Addresses
 import qualified Test.Spec.CoinSelection
 import qualified Test.Spec.DeltaCompression
 import qualified Test.Spec.GetTransactions
+import qualified Test.Spec.HdSeq
 import qualified Test.Spec.Kernel
 import qualified Test.Spec.Keystore
 import qualified Test.Spec.Models
@@ -61,6 +62,7 @@ main = do
         Test.Spec.CoinSelection.spec
         Test.Spec.DeltaCompression.spec
         Test.Spec.GetTransactions.spec
+        Test.Spec.HdSeq.spec
         Test.Spec.Kernel.spec
         Test.Spec.Keystore.spec
         Test.Spec.Models.spec
