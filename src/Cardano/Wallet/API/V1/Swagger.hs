@@ -257,10 +257,6 @@ instance (HasSwagger subApi) => HasSwagger (WalletRequestParams :> subApi) where
 
 instance ToParamSchema WalletId
 
-instance ToParamSchema PublicKeyAsBase58 where
-    toParamSchema _ = mempty
-        & type_ .~ SwaggerString
-
 instance ToSchema Core.Address where
     declareNamedSchema = pure . paramSchemaToNamedSchema defaultSchemaOptions
 

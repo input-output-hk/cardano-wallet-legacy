@@ -50,12 +50,12 @@ import           Cardano.Wallet.API.Request.Sort (SortOperations (..))
 import           Cardano.Wallet.API.Response (SliceOf (..), WalletResponse)
 import           Cardano.Wallet.API.V1.Types (Account, AccountBalance,
                      AccountIndex, AccountUpdate, Address,
-                     Base58PublicKeyError, EosWallet, ForceNtpCheck,
+                     EosWallet, ForceNtpCheck,
                      NewAccount, NewAddress, NewEosWallet, NewWallet,
                      NodeInfo, NodeSettings, PasswordUpdate, Payment,
-                     PublicKeyAsBase58, Redemption, SignedTransaction,
+                     Redemption, SignedTransaction,
                      SpendingPassword, Transaction, UnsignedTransaction,
-                     V1 (..), Wallet, WalletAddress, WalletId, WalletImport,
+                     V1 (..), Wallet, WalletAddress, EosWalletId, WalletId, WalletImport,
                      WalletUpdate)
 import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import qualified Cardano.Wallet.Kernel.Addresses as Kernel
@@ -96,8 +96,7 @@ instance Buildable CreateWalletError where
         bprint ("CreateWalletError " % build) kernelError
 
 data CreateEosWalletError =
-    CreateEosWalletInvalidAccountPublicKey Base58PublicKeyError  
-  | CreateEosWalletError Kernel.CreateEosWalletError
+    CreateEosWalletError Kernel.CreateEosWalletError
 
 -- | Unsound show instance needed for the 'Exception' instance.
 instance Show CreateEosWalletError where
@@ -110,8 +109,6 @@ instance Arbitrary CreateEosWalletError where
                       ]
 
 instance Buildable CreateEosWalletError where
-    build (CreateEosWalletInvalidAccountPublicKey pkError) =
-        bprint ("CreateEosWalletInvalidAccountPublicKey " % build) pkError
     build (CreateEosWalletError kernelError) =
         bprint ("CreateEosWalletError " % build) kernelError
 
@@ -192,8 +189,7 @@ instance Buildable DeleteWalletError where
         bprint ("DeleteWalletError " % build) kernelError
 
 data DeleteEosWalletError =
-      DeleteEosWalletInvalidRootPK Base58PublicKeyError
-    | DeleteEosWalletError Kernel.UnknownHdRoot
+    DeleteEosWalletError Kernel.UnknownHdRoot
 
 -- | Unsound show instance needed for the 'Exception' instance.
 instance Show DeleteEosWalletError where
@@ -202,8 +198,6 @@ instance Show DeleteEosWalletError where
 instance Exception DeleteEosWalletError
 
 instance Buildable DeleteEosWalletError where
-    build (DeleteEosWalletInvalidRootPK pkError) =
-        bprint ("DeleteEosWalletInvalidRootPK " % build) pkError
     build (DeleteEosWalletError kernelError) =
         bprint ("DeleteEosWalletError " % build) kernelError
 
@@ -440,7 +434,7 @@ data PassiveWalletLayer m = PassiveWalletLayer
                            -> PasswordUpdate
                            -> m (Either UpdateWalletPasswordError Wallet)
     , deleteWallet         :: WalletId -> m (Either DeleteWalletError ())
-    , deleteEosWallet      :: PublicKeyAsBase58 -> m (Either DeleteEosWalletError ())
+    , deleteEosWallet      :: EosWalletId -> m (Either DeleteEosWalletError ())
     , getUtxos             :: WalletId
                            -> m (Either GetUtxosError [(Account, Utxo)])
     -- accounts

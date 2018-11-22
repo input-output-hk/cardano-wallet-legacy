@@ -37,7 +37,7 @@ newEosWallet pwl newEosWalletRequest = do
         Right wallet -> return $ single wallet
 
 deleteEosWallet :: PassiveWalletLayer IO
-                -> PublicKeyAsBase58
+                -> EosWalletId
                 -> Handler NoContent
 deleteEosWallet pwl encodedRootPK = do
     res <- liftIO $ WalletLayer.deleteEosWallet pwl encodedRootPK

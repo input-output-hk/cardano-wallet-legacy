@@ -98,7 +98,7 @@ data WalletClient m
     , postEosWallet
          :: New EosWallet -> Resp m EosWallet
     , deleteEosWallet
-         :: PublicKeyAsBase58 -> m (Either ClientError ())
+         :: EosWalletId -> m (Either ClientError ())
     , postUnsignedTransaction
          :: Payment -> Resp m UnsignedTransaction
     , postSignedTransaction

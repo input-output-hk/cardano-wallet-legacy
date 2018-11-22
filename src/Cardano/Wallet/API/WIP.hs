@@ -16,7 +16,7 @@ type API = Tags '["WIP"] :>
                    :> ReqBody '[ValidJSON] (New EosWallet)
                    :> PostCreated '[ValidJSON] (WalletResponse EosWallet)
     :<|> "external-wallets"
-                   :> Capture "rootPK" PublicKeyAsBase58
+                   :> Capture "eosWalletId" EosWalletId
                    :> Summary "Deletes the given externally-owned sequential (EOS) wallet and all its accounts."
                    :> DeleteNoContent '[ValidJSON] NoContent
     :<|> "external-transactions" :> "unsigned"

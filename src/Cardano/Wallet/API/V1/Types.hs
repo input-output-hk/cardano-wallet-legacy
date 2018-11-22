@@ -41,10 +41,6 @@ module Cardano.Wallet.API.V1.Types (
   , SpendingPassword
   , EosWallet (..)
   , EosWalletId (..)
-  , PublicKeyAsBase58
-  , mkPublicKeyAsBase58
-  , mkPublicKeyFromBase58
-  , Base58PublicKeyError (..)
   , NewEosWallet (..)
   , WalletAndTxHistory (..)
   -- * Addresses
@@ -144,17 +140,17 @@ import           Data.Aeson.Types (Parser, Value (..), typeMismatch)
 import           Data.Bifunctor (first)
 import qualified Data.ByteArray as ByteArray
 import qualified Data.ByteString as BS
-import           Data.ByteString.Base58 (bitcoinAlphabet, decodeBase58,
-                     encodeBase58)
+import           Data.ByteString.Base58 (bitcoinAlphabet, decodeBase58)
 import qualified Data.Char as C
 import           Data.Default (Default (def))
 import           Data.List ((!!))
+import           Data.Maybe (fromJust)
 import           Data.Semigroup (Semigroup)
 import           Data.Swagger hiding (Example, example)
 import           Data.Text (Text, dropEnd, toLower)
 import           Data.UUID (UUID)
 import qualified Data.UUID as Uuid
-import           Formatting (bprint, build, fconst, int, sformat, stext, (%))
+import           Formatting (bprint, build, fconst, int, sformat, (%))
 import qualified Formatting.Buildable
 import           Generics.SOP.TH (deriveGeneric)
 import           Serokell.Util (listJson)
@@ -503,72 +499,6 @@ instance BuildableSafeGen NewWallet where
         newwalAssuranceLevel
         newwalName
         newwalOperation
-
--- | Type for representation of extended public key in Base58-format.
--- We use it for external wallets:
--- 1. As a root PK to identify external wallet.
--- 2. As a derived PK, please see 'AddressWithProof' type.
-newtype PublicKeyAsBase58 = PublicKeyAsBase58Unsafe
-    { eoswalPublicKeyAsBase58 :: Text
-    } deriving (Eq, Generic, Ord, Show)
-
-deriveJSON Aeson.defaultOptions ''PublicKeyAsBase58
-instance Arbitrary PublicKeyAsBase58 where
-    arbitrary = PublicKeyAsBase58Unsafe <$> pure
-        "bNfKyG8UxD5aoHyn9snKKhfyVcEnMGSFYtuiapmfD23BQMD9op65gbMoy1EXwxzzkuVqPLkD1s12MXFdfLF8ZCfnPh"
-
-instance ToSchema PublicKeyAsBase58 where
-    declareNamedSchema =
-        genericSchemaDroppingPrefix "eoswal" (\(--^) props -> props
-            & ("publicKeyAsBase58" --^ "Extended public key in Base58-format.")
-        )
-
-deriveSafeBuildable ''PublicKeyAsBase58
-instance BuildableSafeGen PublicKeyAsBase58 where
-    buildSafeGen sl PublicKeyAsBase58Unsafe{..} = bprint ("{"
-        %" publicKeyAsBase58="%buildSafe sl
-        %" }")
-        eoswalPublicKeyAsBase58
-
-instance FromHttpApiData PublicKeyAsBase58 where
-    parseQueryParam someText =
-        case decodeBase58 bitcoinAlphabet (encodeUtf8 someText) of
-            Nothing -> Left "Must be extended public key encoded in Base58-format."
-            Just _  -> Right $ PublicKeyAsBase58Unsafe someText
-
-instance ToHttpApiData PublicKeyAsBase58 where
-    toQueryParam (PublicKeyAsBase58Unsafe pk) = pk
-
--- | To be able to work with the list of encoded public keys.
-instance Buildable [PublicKeyAsBase58] where
-    build = bprint listJson
-
--- | Smart constructor for 'PublicKeyAsBase58'.
-mkPublicKeyAsBase58 :: PublicKey -> PublicKeyAsBase58
-mkPublicKeyAsBase58 (PublicKey xPub) = PublicKeyAsBase58Unsafe encodedXPub
-  where
-    encodedXPub = decodeUtf8 $ encodeBase58 bitcoinAlphabet (CC.unXPub xPub)
-
--- | Possible problems with Base58-encoded extended public key.
-data Base58PublicKeyError
-    = PublicKeyNotInBase58Form
-    | NotAPublicKey !Text
-    deriving Show
-
-instance Buildable Base58PublicKeyError where
-    build PublicKeyNotInBase58Form =
-        "Extended public key is not in Base58-format."
-    build (NotAPublicKey msg) =
-        bprint ("It is not an extended public key: "%stext) msg
-
--- | Decoder for 'PublicKey' in Base58-format.
-mkPublicKeyFromBase58 :: PublicKeyAsBase58 -> Either Base58PublicKeyError PublicKey
-mkPublicKeyFromBase58 (PublicKeyAsBase58Unsafe encodedXPub) = do
-    case (decodeBase58 bitcoinAlphabet . encodeUtf8 $ encodedXPub) of
-        Nothing -> Left PublicKeyNotInBase58Form
-        Just rawKey -> case CC.xpub rawKey of
-            Left problem -> Left $ NotAPublicKey (toText problem)
-            Right xPub   -> Right $ PublicKey xPub
 
 -- | Type for representation of serialized transaction in Base16-format.
 -- We use it for external wallets (to send/receive raw transaction during
@@ -2017,7 +1947,7 @@ data AddressWithProof = AddressWithProof
     -- ^ Source address.
     , awpTxSignature :: !TransactionSignatureAsBase16
     -- ^ Base16-encoded signature of transaction (made by derived SK).
-    , awpDerivedPK   :: !PublicKeyAsBase58
+    , awpDerivedPK   :: !PublicKey
     -- ^ Base58-encoded derived PK (corresponding to derived SK).
     } deriving (Show, Ord, Eq, Generic)
 
@@ -2041,7 +1971,7 @@ instance BuildableSafeGen AddressWithProof where
     buildSafeGen sl AddressWithProof{..} = bprint ("{"
         %" srcAddress="%buildSafe sl
         %" txSignature="%buildSafe sl
-        %" derivedPK="%buildSafe sl
+        %" derivedPK="%build -- sl
         %" }")
         awpSrcAddress
         awpTxSignature
@@ -2360,10 +2290,6 @@ instance Example NewWallet where
                         <*> pure "My Wallet"
                         <*> example
 
-instance Example PublicKeyAsBase58 where
-    example = PublicKeyAsBase58Unsafe <$> pure
-        "bNfWjshJG9xxy6VkpV2KurwGah3jQWjGb4QveDGZteaCwupdKWAi371r8uS5yFCny5i5EQuSNSLKqvRHmWEoHe45pZ"
-
 instance Example TransactionAsBase16 where
     example = TransactionAsBase16Unsafe <$> pure
         "839f8200d8185826825820de3151a2d9cd8e2bbe292a6153d679d123892ddcfbee869c4732a5c504a7554d19386cff9f8282d818582183581caeb153a5809a084507854c9f3e5795bcca89781f9c386d957748cd42a0001a87236a1f1b00780aa6c7d62110ffa0"
@@ -2373,10 +2299,17 @@ instance Example TransactionSignatureAsBase16 where
         "5840709cc240ac9ad78cbf47c3eec76df917423943e34339277593e8e2b8c9f9f2e59583023bfbd8e26c40dff6a7fa424600f9b942819533d8afee37a5ac6d813207"
 
 instance Example PublicKey where
-    example = pure examplePublicKey
+    example = PublicKey <$> pure xpub
       where
-        examplePublicKey = (rights [mkPublicKeyFromBase58 exampleAsText]) !! 0
-        exampleAsText = PublicKeyAsBase58Unsafe
+        xpub = rights
+            [ CC.xpub
+            . fromJust
+            . decodeBase58 bitcoinAlphabet
+            . encodeUtf8 $ encodedPublicKey
+            ] !! 0
+
+        encodedPublicKey :: Text
+        encodedPublicKey =
             "bNfWjshJG9xxy6VkpV2KurwGah3jQWjGb4QveDGZteaCwupdKWAi371r8uS5yFCny5i5EQuSNSLKqvRHmWEoHe45pZ"
 
 instance Example NewEosWallet where
