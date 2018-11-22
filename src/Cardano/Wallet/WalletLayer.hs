@@ -49,13 +49,12 @@ import           Cardano.Wallet.API.Request.Filter (FilterOperations (..))
 import           Cardano.Wallet.API.Request.Sort (SortOperations (..))
 import           Cardano.Wallet.API.Response (SliceOf (..), WalletResponse)
 import           Cardano.Wallet.API.V1.Types (Account, AccountBalance,
-                     AccountIndex, AccountUpdate, Address,
-                     EosWallet, ForceNtpCheck,
-                     NewAccount, NewAddress, NewEosWallet, NewWallet,
-                     NodeInfo, NodeSettings, PasswordUpdate, Payment,
-                     Redemption, SignedTransaction,
+                     AccountIndex, AccountUpdate, Address, EosWallet,
+                     EosWalletId, ForceNtpCheck, NewAccount, NewAddress,
+                     NewEosWallet, NewWallet, NodeInfo, NodeSettings,
+                     PasswordUpdate, Payment, Redemption, SignedTransaction,
                      SpendingPassword, Transaction, UnsignedTransaction,
-                     V1 (..), Wallet, WalletAddress, EosWalletId, WalletId, WalletImport,
+                     V1 (..), Wallet, WalletAddress, WalletId, WalletImport,
                      WalletUpdate)
 import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import qualified Cardano.Wallet.Kernel.Addresses as Kernel
