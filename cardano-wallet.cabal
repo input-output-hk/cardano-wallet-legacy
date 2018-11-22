@@ -49,7 +49,6 @@ library
     , aeson-pretty
     , async
     , base58-bytestring
-    , basement
     , beam-core
     , beam-migrate
     , beam-sqlite
@@ -462,7 +461,6 @@ test-suite unit
       base
     , acid-state
     , aeson
-    , async
     , bytestring
     , cardano-crypto
     , cardano-sl
@@ -486,7 +484,6 @@ test-suite unit
     , cryptonite
     , data-default
     , directory
-    , filepath
     , formatting
     , hedgehog
     , hspec
@@ -495,7 +492,6 @@ test-suite unit
     , lens
     , mtl
     , normaldistribution
-    , optparse-applicative
     , QuickCheck
     , quickcheck-instances
     , random
@@ -551,12 +547,6 @@ test-suite unit
       Util.Buildable
       Util.Buildable.Hspec
       Util.Buildable.QuickCheck
-      Util.Distr
-      Util.GenHash
-      Util.Histogram
-      Util.MultiSet
-      Util.QuickCheck
-      Util.Range
       Wallet.Abstract
       Wallet.Basic
       Wallet.Incremental
@@ -571,3 +561,59 @@ test-suite unit
       Wallet.Prefiltered
       Wallet.Rollback.Basic
       Wallet.Rollback.Full
+
+
+test-suite nightly
+  default-language:
+      Haskell2010
+  default-extensions:
+      BangPatterns
+      ConstraintKinds
+      DataKinds
+      DeriveGeneric
+      FlexibleContexts
+      FlexibleInstances
+      GADTs
+      InstanceSigs
+      LambdaCase
+      MultiParamTypeClasses
+      MultiWayIf
+      NoImplicitPrelude
+      OverloadedStrings
+      RankNTypes
+      RecordWildCards
+      ScopedTypeVariables
+      StandaloneDeriving
+      TemplateHaskell
+      TypeApplications
+      TypeFamilies
+      TypeOperators
+  ghc-options:
+      -threaded -rtsopts
+      -Wall
+      -Werror
+      -O2
+
+  build-depends:
+      base
+    , async
+    , cardano-sl-chain
+    , cardano-sl-core
+    , cardano-wallet
+    , formatting
+    , hspec
+    , hspec-core
+    , QuickCheck
+    , safe-exceptions
+    , serokell-util
+    , text
+    , universum
+
+  type:
+     exitcode-stdio-1.0
+  hs-source-dirs:
+      test/nightly
+  main-is:
+      Main.hs
+  other-modules:
+      TxMetaStorage
