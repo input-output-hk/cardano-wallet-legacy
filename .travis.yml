@@ -166,6 +166,14 @@ jobs:
     - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit --fast --coverage --ghc-options "+RTS -A256m -n2m -M3G -RTS"
     - shc cardano-wallet unit
 
+  # NIGHTLY
+  - stage: tests
+    env: ACTION=coverage
+    if: type = cron
+    script:
+    - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
+    - travis_wait 42 stack --no-terminal test cardano-wallet:test:nightly --fast --ghc-options "+RTS -A256m -n2m -M3G -RTS"
+
   # WEEDER
   - stage: tests
     env: ACTION=weeder
