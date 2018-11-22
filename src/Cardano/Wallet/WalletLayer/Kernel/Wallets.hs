@@ -239,17 +239,11 @@ deleteWallet wallet wId = runExceptT $ do
 
 -- | Deletes external wallets. Please note that there's no actions in the
 -- 'Keystore', because it contains only root secret keys.
-deleteEosWallet :: MonadIO m
-                => Kernel.PassiveWallet
-                -> V1.PublicKeyAsBase58
+deleteEosWallet :: Kernel.PassiveWallet
+                -> V1.EosWalletId
                 -> m (Either DeleteEosWalletError ())
-deleteEosWallet wallet encodedRootPK = runExceptT $ do
-    rootPK <- withExceptT DeleteEosWalletInvalidRootPK $ ExceptT $
-        pure $ V1.mkPublicKeyFromBase58 encodedRootPK
-    let nm = makeNetworkMagic (wallet ^. walletProtocolMagic)
-        rootId = HD.pkToHdRootId nm rootPK
-    withExceptT DeleteEosWalletError $ ExceptT $ liftIO $ do
-        Kernel.deleteEosHdWallet wallet rootId
+deleteEosWallet _wallet _eosWalletId =
+    error "TODO: it will be implemented in https://github.com/input-output-hk/cardano-wallet/issues/36"
 
 -- | Gets a specific wallet.
 getWallet :: MonadIO m

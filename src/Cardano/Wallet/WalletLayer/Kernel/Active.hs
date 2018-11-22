@@ -167,16 +167,12 @@ submitSignedTx activeWallet (V1.SignedTransaction encodedTx encodedSrcAddrsWithP
     decodeAddrAndProof :: Monad m
                        => V1.AddressWithProof
                        -> m (Either SubmitSignedTransactionError (Address, Signature TxSigData, PublicKey))
-    decodeAddrAndProof (V1.AddressWithProof srcAddr encSig encDerivedPK) = runExceptT $ do
+    decodeAddrAndProof (V1.AddressWithProof srcAddr encSig derivedPK) = runExceptT $ do
         txSigItself <- withExceptT (const SubmitSignedTransactionSigNotBase16Format) $ ExceptT $
             pure $ B16.decode (V1.rawTransactionSignatureAsBase16 encSig)
         realTxSig <- withExceptT (const SubmitSignedTransactionInvalidSig) $ ExceptT $
             pure $ xsignature txSigItself
         let txSignature = Signature realTxSig :: Signature TxSigData
-
-        derivedPK <- withExceptT (const SubmitSignedTransactionInvalidPK) $ ExceptT $
-            pure $ V1.mkPublicKeyFromBase58 encDerivedPK
-
         ExceptT $ pure $ Right (unV1 srcAddr, txSignature, derivedPK)
 
 -- | Redeem an Ada voucher
