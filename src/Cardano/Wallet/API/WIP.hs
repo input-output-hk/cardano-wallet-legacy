@@ -12,12 +12,12 @@ import           Cardano.Wallet.API.V1.Types
 type API = Tags '["WIP"] :>
     (
          "external-wallets"
-                   :> Summary "Creates a new or restores an existing external wallet (mobile client or hardware wallet)."
-                   :> ReqBody '[ValidJSON] (New ExternalWallet)
-                   :> PostCreated '[ValidJSON] (WalletResponse ExternalWallet)
+                   :> Summary "Creates a new externally-owned sequential (EOS) wallet."
+                   :> ReqBody '[ValidJSON] (New EosWallet)
+                   :> PostCreated '[ValidJSON] (WalletResponse EosWallet)
     :<|> "external-wallets"
                    :> Capture "rootPK" PublicKeyAsBase58
-                   :> Summary "Deletes the given external wallet and all its accounts."
+                   :> Summary "Deletes the given externally-owned sequential (EOS) wallet and all its accounts."
                    :> DeleteNoContent '[ValidJSON] NoContent
     :<|> "external-transactions" :> "unsigned"
                    :> Summary "Creates a new unsigned transaction (it will be signed externally)."

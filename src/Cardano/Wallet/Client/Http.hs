@@ -113,10 +113,10 @@ mkHttpClient baseUrl manager = WalletClient
         = \x -> run . updateWalletR x
     , getUtxoStatistics
         = run . getUtxoStatisticsR
-    , postExternalWallet
-        = run . postExternalWalletR
-    , deleteExternalWallet
-        = unNoContent . run . deleteExternalWalletR
+    , postEosWallet
+        = run . postEosWalletR
+    , deleteEosWallet
+        = unNoContent . run . deleteEosWalletR
     , postUnsignedTransaction
         = run . postUnsignedTransactionR
     , postSignedTransaction
@@ -201,8 +201,8 @@ mkHttpClient baseUrl manager = WalletClient
         :<|> getUtxoStatisticsR
         = walletsAPI
 
-    postExternalWalletR
-        :<|> deleteExternalWalletR
+    postEosWalletR
+        :<|> deleteEosWalletR
         :<|> postUnsignedTransactionR
         :<|> postSignedTransactionR
         = client (Proxy @ WIPAPI)

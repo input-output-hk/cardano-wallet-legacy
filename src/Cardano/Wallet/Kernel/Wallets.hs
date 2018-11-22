@@ -1,16 +1,16 @@
 module Cardano.Wallet.Kernel.Wallets (
       createHdWallet
-    , createExternalHdWallet
+    , createEosHdWallet
     , updateHdWallet
     , updatePassword
     , deleteHdWallet
-    , deleteExternalHdWallet
+    , deleteEosHdWallet
     , defaultHdAccountId
     , defaultHdAddressId
     , defaultHdAddress
       -- * Errors
     , CreateWalletError(..)
-    , CreateExternalWalletError(..)
+    , CreateEosWalletError(..)
     , UpdateWalletPasswordError(..)
     -- * Internal & testing use only
     , createWalletHdRnd
@@ -24,6 +24,7 @@ import qualified Formatting as F
 import qualified Formatting.Buildable
 
 import           Data.Acid.Advanced (update')
+import           Data.UUID.V4 (nextRandom)
 
 import           Pos.Core (Address, Timestamp)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
@@ -35,13 +36,16 @@ import           Cardano.Mnemonic (Mnemonic)
 import qualified Cardano.Mnemonic as Mnemonic
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
 import           Cardano.Wallet.Kernel.DB.AcidState
-                     (CreateHdExternalWallet (..), CreateHdWallet (..),
+                     (CreateEosHdWallet (..), CreateHdWallet (..),
                      DeleteHdRoot (..), RestoreHdWallet,
                      UpdateHdRootPassword (..), UpdateHdWallet (..))
+import           Cardano.Wallet.Kernel.DB.EosHdWallet (EosHdRoot (..))
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel,
                      HdAccountId (..), HdAccountIx (..), HdAddress,
                      HdAddressId (..), HdAddressIx (..), HdRoot, HdRootId,
-                     WalletName, eskToHdRootId, pkToHdRootId)
+                     WalletName, eskToHdRootId)
+import qualified Cardano.Wallet.Kernel.DB.EosHdWallet as EosHD
+import qualified Cardano.Wallet.Kernel.DB.EosHdWallet.Create as EosHD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
@@ -79,18 +83,18 @@ instance Buildable CreateWalletError where
 instance Show CreateWalletError where
     show = formatToString build
 
-data CreateExternalWalletError =
-      CreateExternalWalletFailed HD.CreateHdRootError
-      -- ^ When trying to create the 'ExternalWallet', the DB operation failed.
+data CreateEosWalletError =
+      CreateEosWalletFailed EosHD.CreateEosHdRootError
+      -- ^ When trying to create the 'EosWallet', the DB operation failed.
 
-instance Arbitrary CreateExternalWalletError where
+instance Arbitrary CreateEosWalletError where
     arbitrary = oneof []
 
-instance Buildable CreateExternalWalletError where
-    build (CreateExternalWalletFailed dbOperation) =
-        bprint ("CreateExternalWalletFailed " % F.build) dbOperation
+instance Buildable CreateEosWalletError where
+    build (CreateEosWalletFailed dbOperation) =
+        bprint ("CreateEosWalletFailed " % F.build) dbOperation
 
-instance Show CreateExternalWalletError where
+instance Show CreateEosWalletError where
     show = formatToString build
 
 data UpdateWalletPasswordError =
@@ -228,39 +232,40 @@ createHdWallet pw mnemonic spendingPassword assuranceLevel walletName = do
 
                  Right hdRoot -> return (Right hdRoot)
 
--- | Creates a new external HD 'Wallet'.
-createExternalHdWallet :: PassiveWallet
-                       -> PublicKey
-                       -- ^ Extended public key that corresponds to the root secret key of
-                       -- this external wallet (assumed that root secret key is storing
-                       -- externally, for example in the memory of Ledger device).
-                       -> AssuranceLevel
-                       -- ^ The 'AssuranceLevel' for this wallet, namely after how many
-                       -- blocks each transaction is considered 'adopted'. This translates
-                       -- in the frontend with a different threshold for the confirmation
-                       -- range (@low@, @medium@, @high@).
-                       -> WalletName
-                       -- ^ The name for this wallet.
-                       -> IO (Either CreateExternalWalletError HdRoot)
-createExternalHdWallet pw rootPK assuranceLevel walletName = do
-    created <- InDb <$> getCurrentTimestamp
-    let nm      = makeNetworkMagic (pw ^. walletProtocolMagic)
-        rootId  = pkToHdRootId nm rootPK
-        newRoot = HD.initHdRoot rootId
-                                walletName
-                                HD.NoSpendingPassword
-                                assuranceLevel
-                                created
-    -- We now have all the data we need to atomically generate a new
-    -- external wallet with a default account.
-    res <- update' (pw ^. wallets) $ CreateHdExternalWallet newRoot (defaultHdAccountId rootId) mempty
-    case either Left (const (Right newRoot)) res of
-        Left e@(HD.CreateHdRootExists _) ->
-            return . Left $ CreateExternalWalletFailed e
-        Left e@(HD.CreateHdRootDefaultAddressDerivationFailed) ->
-            return . Left $ CreateExternalWalletFailed e
-        Right hdRoot ->
-            return (Right hdRoot)
+-- | Creates a new EOS HD 'Wallet'.
+createEosHdWallet :: PassiveWallet
+                  -> [PublicKey]
+                  -- ^ External wallet's accounts public keys.
+                  -> Word
+                  -- ^ Address pool gap for this wallet.
+                  -> AssuranceLevel
+                  -- ^ The 'AssuranceLevel' for this wallet, namely after how many
+                  -- blocks each transaction is considered 'adopted'. This translates
+                  -- in the frontend with a different threshold for the confirmation
+                  -- range (@low@, @medium@, @high@).
+                  -> WalletName
+                  -- ^ The name for this wallet.
+                  -> IO (Either CreateEosWalletError EosHdRoot)
+createEosHdWallet pw accountsPKs addressPoolGap assuranceLevel walletName = do
+    -- Here, we review the definition of a wallet down to a list of account public keys with
+    -- no relationship whatsoever from the wallet's point of view. New addresses can be derived
+    -- for each account at will and discovered using the address pool discovery algorithm
+    -- described in BIP-44. Public keys are managed and provided from an external sources.
+    --
+    -- For FOS-wallets we need a root key for creating 'HdRoot'. But we don't have a root key
+    -- for EOS-wallet, so use UUID as a unique identifier of the wallet. Please note that
+    -- UUID-based solution may be changed in the future.
+    newUUID <- nextRandom
+    let newEosRoot = EosHdRoot (EosHD.EosHdRootId newUUID)
+                               walletName
+                               assuranceLevel
+                               addressPoolGap
+    res <- update' (pw ^. wallets) $ CreateEosHdWallet newEosRoot accountsPKs
+    return $ case res of
+        Left e@(EosHD.CreateEosHdRootExists _) ->
+            Left $ CreateEosWalletFailed e
+        Right _ ->
+            Right newEosRoot
 
 -- | Creates an HD wallet where new accounts and addresses are generated
 -- via random index derivation.
@@ -382,10 +387,10 @@ deleteHdWallet nm wallet rootId = do
             Keystore.delete nm (WalletIdHdRnd rootId) (wallet ^. walletKeystore)
             return $ Right ()
 
-deleteExternalHdWallet :: PassiveWallet
-                       -> HD.HdRootId
-                       -> IO (Either HD.UnknownHdRoot ())
-deleteExternalHdWallet wallet rootId = do
+deleteEosHdWallet :: PassiveWallet
+                  -> HD.HdRootId
+                  -> IO (Either HD.UnknownHdRoot ())
+deleteEosHdWallet wallet rootId = do
     -- STEP 1: Remove the HdRoot via an acid-state transaction which will
     --         also delete any associated accounts and addresses.
     res <- update' (wallet ^. wallets) $ DeleteHdRoot rootId

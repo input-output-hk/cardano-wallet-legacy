@@ -23,7 +23,7 @@ import           Cardano.Wallet.Client.Http (AddressWithProof (..),
                      Payment (..), PaymentDistribution (..),
                      PaymentSource (..), SignedTransaction (..), Transaction,
                      UnsignedTransaction (..), V1 (V1), WalletClient, accIndex,
-                     addrId, mkAddressAsBase58, mkPublicKeyAsBase58,
+                     addrId, mkPublicKeyAsBase58,
                      mkTransactionSignatureAsBase16, pdAddress, pdAmount,
                      pmtDestinations, pmtGroupingPolicy, pmtSource,
                      pmtSpendingPassword, psAccountIndex, psWalletId,
@@ -115,7 +115,7 @@ signAndPostTransactionTest
                            secretKey
                            transactionData
 
-        inputProof = AddressWithProof (mkAddressAsBase58 fromAddress)
+        inputProof = AddressWithProof (V1 fromAddress)
                                       (mkTransactionSignatureAsBase16 signature)
                                       (mkPublicKeyAsBase58 publicKey)
 

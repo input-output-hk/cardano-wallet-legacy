@@ -39,20 +39,18 @@ module Cardano.Wallet.API.V1.Types (
   , WalletType (..)
   , WalletOperation (..)
   , SpendingPassword
-  , ExternalWallet (..)
+  , EosWallet (..)
+  , EosWalletId (..)
   , PublicKeyAsBase58
   , mkPublicKeyAsBase58
   , mkPublicKeyFromBase58
   , Base58PublicKeyError (..)
-  , NewExternalWallet (..)
+  , NewEosWallet (..)
   , WalletAndTxHistory (..)
   -- * Addresses
   , AddressOwnership (..)
   , AddressIndex
   , AddressValidity (..)
-  , AddressAsBase58
-  , mkAddressAsBase58
-  , mkAddressFromBase58
   -- * Accounts
   , Account (..)
   , accountsHaveSameId
@@ -150,9 +148,12 @@ import           Data.ByteString.Base58 (bitcoinAlphabet, decodeBase58,
                      encodeBase58)
 import qualified Data.Char as C
 import           Data.Default (Default (def))
+import           Data.List ((!!))
 import           Data.Semigroup (Semigroup)
 import           Data.Swagger hiding (Example, example)
 import           Data.Text (Text, dropEnd, toLower)
+import           Data.UUID (UUID)
+import qualified Data.UUID as Uuid
 import           Formatting (bprint, build, fconst, int, sformat, stext, (%))
 import qualified Formatting.Buildable
 import           Generics.SOP.TH (deriveGeneric)
@@ -508,7 +509,7 @@ instance BuildableSafeGen NewWallet where
 -- 1. As a root PK to identify external wallet.
 -- 2. As a derived PK, please see 'AddressWithProof' type.
 newtype PublicKeyAsBase58 = PublicKeyAsBase58Unsafe
-    { ewalPublicKeyAsBase58 :: Text
+    { eoswalPublicKeyAsBase58 :: Text
     } deriving (Eq, Generic, Ord, Show)
 
 deriveJSON Aeson.defaultOptions ''PublicKeyAsBase58
@@ -518,7 +519,7 @@ instance Arbitrary PublicKeyAsBase58 where
 
 instance ToSchema PublicKeyAsBase58 where
     declareNamedSchema =
-        genericSchemaDroppingPrefix "ewal" (\(--^) props -> props
+        genericSchemaDroppingPrefix "eoswal" (\(--^) props -> props
             & ("publicKeyAsBase58" --^ "Extended public key in Base58-format.")
         )
 
@@ -527,7 +528,7 @@ instance BuildableSafeGen PublicKeyAsBase58 where
     buildSafeGen sl PublicKeyAsBase58Unsafe{..} = bprint ("{"
         %" publicKeyAsBase58="%buildSafe sl
         %" }")
-        ewalPublicKeyAsBase58
+        eoswalPublicKeyAsBase58
 
 instance FromHttpApiData PublicKeyAsBase58 where
     parseQueryParam someText =
@@ -537,6 +538,10 @@ instance FromHttpApiData PublicKeyAsBase58 where
 
 instance ToHttpApiData PublicKeyAsBase58 where
     toQueryParam (PublicKeyAsBase58Unsafe pk) = pk
+
+-- | To be able to work with the list of encoded public keys.
+instance Buildable [PublicKeyAsBase58] where
+    build = bprint listJson
 
 -- | Smart constructor for 'PublicKeyAsBase58'.
 mkPublicKeyAsBase58 :: PublicKey -> PublicKeyAsBase58
@@ -565,43 +570,11 @@ mkPublicKeyFromBase58 (PublicKeyAsBase58Unsafe encodedXPub) = do
             Left problem -> Left $ NotAPublicKey (toText problem)
             Right xPub   -> Right $ PublicKey xPub
 
--- | Type for representation address in Base58-format.
--- We use it for external wallets.
-newtype AddressAsBase58 = AddressAsBase58Unsafe
-    { ewalAddressAsBase58 :: Text
-    } deriving (Eq, Generic, Ord, Show)
-
-deriveJSON Aeson.defaultOptions ''AddressAsBase58
-instance Arbitrary AddressAsBase58 where
-    arbitrary = AddressAsBase58Unsafe <$> pure
-        "DdzFFzCqrhsxqFTw2ENzvwisYmS2DcUTujXDoMXtMrCvMFAa3DikLj8YYTWNZaEjthKZpMNWKo9RUoq3gP797yP8MP4g9qiEegvGEY9w"
-
-instance ToSchema AddressAsBase58 where
-    declareNamedSchema =
-        genericSchemaDroppingPrefix "ewal" (\(--^) props -> props
-            & ("addressAsBase58" --^ "Address in Base58-format.")
-        )
-
-deriveSafeBuildable ''AddressAsBase58
-instance BuildableSafeGen AddressAsBase58 where
-    buildSafeGen sl AddressAsBase58Unsafe{..} = bprint ("{"
-        %" addressAsBase58="%buildSafe sl
-        %" }")
-        ewalAddressAsBase58
-
--- | Smart constructor for 'AddressAsBase58'.
-mkAddressAsBase58 :: Core.Address -> AddressAsBase58
-mkAddressAsBase58 = AddressAsBase58Unsafe . decodeUtf8 . Core.addrToBase58
-
--- | Decode Base58-address to real Address.
-mkAddressFromBase58 :: AddressAsBase58 -> Either Text Core.Address
-mkAddressFromBase58 (AddressAsBase58Unsafe txtAddr) = Core.decodeTextAddress txtAddr
-
 -- | Type for representation of serialized transaction in Base16-format.
 -- We use it for external wallets (to send/receive raw transaction during
 -- external signing).
 newtype TransactionAsBase16 = TransactionAsBase16Unsafe
-    { ewalTransactionAsBase16 :: Text
+    { eoswalTransactionAsBase16 :: Text
     } deriving (Eq, Generic, Ord, Show)
 
 deriveJSON Aeson.defaultOptions ''TransactionAsBase16
@@ -611,7 +584,7 @@ instance Arbitrary TransactionAsBase16 where
 
 instance ToSchema TransactionAsBase16 where
     declareNamedSchema =
-        genericSchemaDroppingPrefix "ewal" (\(--^) props -> props
+        genericSchemaDroppingPrefix "eoswal" (\(--^) props -> props
             & ("transactionAsBase16" --^ "Serialized transaction in Base16-format.")
         )
 
@@ -620,7 +593,7 @@ instance BuildableSafeGen TransactionAsBase16 where
     buildSafeGen sl TransactionAsBase16Unsafe{..} = bprint ("{"
         %" transactionAsBase16="%buildSafe sl
         %" }")
-        ewalTransactionAsBase16
+        eoswalTransactionAsBase16
 
 -- | Type for representation of transaction signature in Base16-format.
 -- We use it for external wallet. Please note that technically there's no
@@ -652,38 +625,46 @@ mkTransactionSignatureAsBase16 :: Core.Signature Txp.TxSigData -> TransactionSig
 mkTransactionSignatureAsBase16 (Core.Signature txSig) =
     TransactionSignatureAsBase16Unsafe . Base16.encode . CC.unXSignature $ txSig
 
--- | A type modelling the request for a new 'ExternalWallet',
+instance Buildable [PublicKey] where
+    build = bprint listJson
+
+-- | A type modelling the request for a new 'EosWallet',
 -- on the mobile client or hardware wallet.
-data NewExternalWallet = NewExternalWallet
-    { newewalRootPK         :: !PublicKeyAsBase58
-    , newewalAssuranceLevel :: !AssuranceLevel
-    , newewalName           :: !WalletName
+data NewEosWallet = NewEosWallet
+    { neweoswalAccountsPublicKeys :: ![PublicKey]
+    , neweoswalAddressPoolGap     :: !(Maybe Word)
+    , neweoswalAssuranceLevel     :: !AssuranceLevel
+    , neweoswalName               :: !WalletName
     } deriving (Eq, Show, Generic)
 
-deriveJSON Aeson.defaultOptions ''NewExternalWallet
-instance Arbitrary NewExternalWallet where
-    arbitrary = NewExternalWallet <$> arbitrary
-                                  <*> arbitrary
-                                  <*> pure "My external Wallet"
+deriveJSON Aeson.defaultOptions ''NewEosWallet
+instance Arbitrary NewEosWallet where
+    arbitrary = NewEosWallet <$> arbitrary
+                             <*> arbitrary
+                             <*> arbitrary
+                             <*> pure "My EOS-wallet"
 
-instance ToSchema NewExternalWallet where
+instance ToSchema NewEosWallet where
     declareNamedSchema =
-        genericSchemaDroppingPrefix "newewal" (\(--^) props -> props
-            & ("rootPK"         --^ "Root public key to identify external wallet.")
-            & ("assuranceLevel" --^ "Desired assurance level based on the number of confirmations counter of each transaction.")
-            & ("name"           --^ "External wallet's name.")
+        genericSchemaDroppingPrefix "neweoswal" (\(--^) props -> props
+            & ("accountsPublicKeys" --^ "External wallet's accounts public keys.")
+            & ("addressPoolGap"     --^ "Address pool gap for this wallet.")
+            & ("assuranceLevel"     --^ "Desired assurance level based on the number of confirmations counter of each transaction.")
+            & ("name"               --^ "External wallet's name.")
         )
 
-deriveSafeBuildable ''NewExternalWallet
-instance BuildableSafeGen NewExternalWallet where
-    buildSafeGen sl NewExternalWallet{..} = bprint ("{"
-        %" rootPK="%buildSafe sl
+deriveSafeBuildable ''NewEosWallet
+instance BuildableSafeGen NewEosWallet where
+    buildSafeGen sl NewEosWallet{..} = bprint ("{"
+        %" accountsPublicKeys="%build
+        %" addressPoolGap="%build
         %" assuranceLevel="%buildSafe sl
         %" name="%buildSafe sl
         %" }")
-        newewalRootPK
-        newewalAssuranceLevel
-        newewalName
+        neweoswalAccountsPublicKeys
+        neweoswalAddressPoolGap
+        neweoswalAssuranceLevel
+        neweoswalName
 
 -- | A type modelling the update of an existing wallet.
 data WalletUpdate = WalletUpdate {
@@ -997,40 +978,77 @@ instance BuildableSafeGen Wallet where
 instance Buildable [Wallet] where
     build = bprint listJson
 
--- | An external wallet (mobile client or hardware wallet).
-data ExternalWallet = ExternalWallet
-    { ewalId             :: !WalletId
-    , ewalName           :: !WalletName
-    , ewalBalance        :: !(V1 Core.Coin)
-    , ewalAssuranceLevel :: !AssuranceLevel
+instance ToSchema PublicKey where
+    declareNamedSchema _ =
+        pure $ NamedSchema (Just "PublicKey") $ mempty
+            & type_ .~ SwaggerString
+            & format ?~ "base58"
+
+newtype EosWalletId = EosWalletId UUID
+    deriving (Show, Eq, Ord, Generic)
+
+deriveJSON Aeson.defaultOptions ''EosWalletId
+
+instance ToSchema EosWalletId where
+  declareNamedSchema = genericDeclareNamedSchema defaultSchemaOptions
+
+instance ToJSONKey EosWalletId
+
+instance Arbitrary EosWalletId where
+    arbitrary = EosWalletId <$> Gen.chooseAny
+
+deriveSafeBuildable ''EosWalletId
+instance BuildableSafeGen EosWalletId where
+    buildSafeGen sl (EosWalletId uuid) =
+        bprint (plainOrSecureF sl build (fconst "<eos wallet id>")) $ Uuid.toText uuid
+
+instance FromHttpApiData EosWalletId where
+    parseQueryParam rawUuid = case Uuid.fromText rawUuid of
+        Nothing   -> Left "Invalid EOS-wallet id (not a UUID)."
+        Just uuid -> Right . EosWalletId $ uuid
+
+instance ToHttpApiData EosWalletId where
+    toQueryParam (EosWalletId uuid) = Uuid.toText uuid
+
+-- | Externally-owned sequential (EOS) wallet (mobile client or hardware wallet).
+data EosWallet = EosWallet
+    { eoswalId             :: !EosWalletId
+    , eoswalName           :: !WalletName
+    , eoswalAddressPoolGap :: !Word
+    , eoswalBalance        :: !(V1 Core.Coin)
+    , eoswalAssuranceLevel :: !AssuranceLevel
     } deriving (Eq, Ord, Show, Generic)
 
-deriveJSON Aeson.defaultOptions ''ExternalWallet
-instance ToSchema ExternalWallet where
+deriveJSON Aeson.defaultOptions ''EosWallet
+instance ToSchema EosWallet where
     declareNamedSchema =
-        genericSchemaDroppingPrefix "ewal" (\(--^) props -> props
-            & ("id"             --^ "Unique wallet identifier.")
-            & ("name"           --^ "Wallet's name.")
-            & ("balance"        --^ "Current balance, in Lovelaces.")
-            & ("assuranceLevel" --^ "The assurance level of the wallet.")
+        genericSchemaDroppingPrefix "eoswal" (\(--^) props -> props
+            & ("id"                 --^ "Unique wallet's identifier.")
+            & ("name"               --^ "Wallet's name.")
+            & ("addressPoolGap"     --^ "Address pool gap for this wallet.")
+            & ("balance"            --^ "Current balance, in Lovelaces.")
+            & ("assuranceLevel"     --^ "The assurance level of the wallet.")
         )
 
-instance Arbitrary ExternalWallet where
-    arbitrary = ExternalWallet <$> arbitrary
-                               <*> pure "My external wallet"
-                               <*> arbitrary
-                               <*> arbitrary
+instance Arbitrary EosWallet where
+    arbitrary = EosWallet <$> arbitrary
+                          <*> pure "My EOS-wallet"
+                          <*> arbitrary
+                          <*> arbitrary
+                          <*> arbitrary
 
-deriveSafeBuildable ''ExternalWallet
-instance BuildableSafeGen ExternalWallet where
-  buildSafeGen sl ExternalWallet{..} = bprint ("{"
+deriveSafeBuildable ''EosWallet
+instance BuildableSafeGen EosWallet where
+  buildSafeGen sl EosWallet{..} = bprint ("{"
     %" id="%buildSafe sl
     %" name="%buildSafe sl
+    %" addressPoolGap="%build
     %" balance="%buildSafe sl
     %" }")
-    ewalId
-    ewalName
-    ewalBalance
+    eoswalId
+    eoswalName
+    eoswalAddressPoolGap
+    eoswalBalance
 
 --------------------------------------------------------------------------------
 -- Addresses
@@ -1930,7 +1948,7 @@ instance Buildable [AddressLevel] where
 
 -- | Source address and corresponding derivation path, for external wallet.
 data AddressAndPath = AddressAndPath
-    { aapSrcAddress     :: !AddressAsBase58
+    { aapSrcAddress     :: !(V1 Core.Address) -- AsBase58
     -- ^ Source address in Base58-format.
     , aapDerivationPath :: ![AddressLevel]
     -- ^ Derivation path used during generation of this address.
@@ -1995,8 +2013,8 @@ instance BuildableSafeGen UnsignedTransaction where
 -- it returns the source address, the signature and the derived PK of
 -- the transaction input.
 data AddressWithProof = AddressWithProof
-    { awpSrcAddress  :: !AddressAsBase58
-    -- ^ Base58-encoded source address.
+    { awpSrcAddress  :: !(V1 Core.Address)
+    -- ^ Source address.
     , awpTxSignature :: !TransactionSignatureAsBase16
     -- ^ Base16-encoded signature of transaction (made by derived SK).
     , awpDerivedPK   :: !PublicKeyAsBase58
@@ -2259,8 +2277,8 @@ type family New (original :: *) :: * where
         NewAccount
     New WalletAddress =
         NewAddress
-    New ExternalWallet =
-        NewExternalWallet
+    New EosWallet =
+        NewEosWallet
 
 type CaptureWalletId = Capture "walletId" WalletId
 
@@ -2282,7 +2300,7 @@ instance Example LocalTimeDifference
 instance Example PaymentDistribution
 instance Example AccountUpdate
 instance Example Wallet
-instance Example ExternalWallet
+instance Example EosWallet
 instance Example WalletUpdate
 instance Example WalletOperation
 instance Example PasswordUpdate
@@ -2296,6 +2314,9 @@ instance Example NewAddress
 instance Example ShieldedRedemptionCode
 instance Example (V1 Core.PassPhrase)
 instance Example (V1 Core.Coin)
+
+instance Example EosWalletId where
+    example = EosWalletId <$> pure (Prelude.read "c2cc10e1-57d6-4b6f-9899-38d972112d8c")
 
 -- | We have a specific 'Example' instance for @'V1' 'Address'@ because we want
 -- to control the length of the examples. It is possible for the encoded length
@@ -2339,10 +2360,6 @@ instance Example NewWallet where
                         <*> pure "My Wallet"
                         <*> example
 
-instance Example AddressAsBase58 where
-    example = AddressAsBase58Unsafe <$> pure
-        "DdzFFzCqrhszBQmhPAbCwSrk5EcZjgRurtNzrGqxU3QYrT8NyGujgzoF1z3eS8CJBJJ71hFL4MXvBQ64j3jGU4UJBDHb4KKoLtiVsUvf"
-
 instance Example PublicKeyAsBase58 where
     example = PublicKeyAsBase58Unsafe <$> pure
         "bNfWjshJG9xxy6VkpV2KurwGah3jQWjGb4QveDGZteaCwupdKWAi371r8uS5yFCny5i5EQuSNSLKqvRHmWEoHe45pZ"
@@ -2355,10 +2372,18 @@ instance Example TransactionSignatureAsBase16 where
     example = TransactionSignatureAsBase16Unsafe <$> pure
         "5840709cc240ac9ad78cbf47c3eec76df917423943e34339277593e8e2b8c9f9f2e59583023bfbd8e26c40dff6a7fa424600f9b942819533d8afee37a5ac6d813207"
 
-instance Example NewExternalWallet where
-    example = NewExternalWallet <$> example
-                                <*> example
-                                <*> pure "My external Wallet"
+instance Example PublicKey where
+    example = pure examplePublicKey
+      where
+        examplePublicKey = (rights [mkPublicKeyFromBase58 exampleAsText]) !! 0
+        exampleAsText = PublicKeyAsBase58Unsafe
+            "bNfWjshJG9xxy6VkpV2KurwGah3jQWjGb4QveDGZteaCwupdKWAi371r8uS5yFCny5i5EQuSNSLKqvRHmWEoHe45pZ"
+
+instance Example NewEosWallet where
+    example = NewEosWallet <$> example
+                           <*> pure (Just 20)
+                           <*> example
+                           <*> pure "My EOS-Wallet"
 
 instance Example PaymentSource where
     example = PaymentSource <$> example

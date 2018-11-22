@@ -129,6 +129,7 @@ library
     , universum
     , unliftio-core
     , unordered-containers
+    , uuid
     , vector
     , wai
     , wai-middleware-throttle
@@ -198,6 +199,8 @@ library
       Cardano.Wallet.Kernel.DB.BlockContext
       Cardano.Wallet.Kernel.DB.BlockMeta
       Cardano.Wallet.Kernel.DB.Compression
+      Cardano.Wallet.Kernel.DB.EosHdWallet
+      Cardano.Wallet.Kernel.DB.EosHdWallet.Create
       Cardano.Wallet.Kernel.DB.HdWallet
       Cardano.Wallet.Kernel.DB.HdWallet.Create
       Cardano.Wallet.Kernel.DB.HdWallet.Delete
