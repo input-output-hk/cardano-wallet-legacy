@@ -284,7 +284,7 @@ feeUpperBound
 feeUpperBound FeeOptions{..} inps outs chgs =
     foEstimate numInputs outputs
   where
-    numInputs = fromIntegral $ sizeToWord $ selectedSize $ foldr' select emptySelection inps
+    numInputs = fromIntegral $ sizeToWord $ selectedSize $ foldl' (flip select) emptySelection inps
     outputs = map outVal outs <> chgs
 
 
