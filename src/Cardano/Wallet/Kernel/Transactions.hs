@@ -593,7 +593,11 @@ instance Buildable SignTransactionError where
 -- in order to be able to generate an Arbitrary address we'd need to use
 -- the cardano-sl-core test package
 instance Arbitrary SignTransactionError where
-    arbitrary = oneof []
+    arbitrary = oneof
+        [ SignTransactionMissingKey <$> arbitrary
+        , SignTransactionErrorUnknownAddress <$> arbitrary
+        , SignTransactionErrorNotOwned <$> arbitrary
+        ]
 
 mkSigner :: NetworkMagic
          -> PassPhrase

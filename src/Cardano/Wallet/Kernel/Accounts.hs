@@ -51,7 +51,11 @@ data CreateAccountError =
     deriving Eq
 
 instance Arbitrary CreateAccountError where
-    arbitrary = oneof []
+    arbitrary = oneof
+        [ CreateAccountUnknownHdRoot <$> arbitrary
+        , CreateAccountKeystoreNotFound . WalletIdHdRnd <$> arbitrary
+        , CreateAccountHdRndAccountSpaceSaturated <$> arbitrary
+        ]
 
 instance Buildable CreateAccountError where
     build (CreateAccountUnknownHdRoot uRoot) =
