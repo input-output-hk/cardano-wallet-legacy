@@ -50,6 +50,7 @@ import           Test.QuickCheck.Gen (chooseAny)
 
 import qualified Pos.Crypto as Core
 
+import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.Util.AcidState
 import           Cardano.Wallet.Kernel.DB.Util.IxSet
@@ -81,7 +82,7 @@ data EosHdRoot = EosHdRoot {
       -- | Assurance level
     , _eosHdRootAssurance      :: !AssuranceLevel
       -- | Address pool gap for this wallet
-    , _eosHdRootAddressPoolGap :: !Word
+    , _eosHdRootAddressPoolGap :: !AddressPoolGap
     } deriving (Eq, Show)
 
 -- | Account in externally-owned sequential HD wallet.
@@ -113,6 +114,7 @@ makeLenses ''EosHdWallets
 
 deriveSafeCopy 1 'base ''UUID
 deriveSafeCopy 1 'base ''EosHdRootId
+deriveSafeCopy 1 'base ''AddressPoolGap
 deriveSafeCopy 1 'base ''EosHdRoot
 deriveSafeCopy 1 'base ''EosHdAccount
 deriveSafeCopy 1 'base ''EosHdWallets

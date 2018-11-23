@@ -185,6 +185,7 @@ library
       Cardano.Wallet.Kernel
       Cardano.Wallet.Kernel.Accounts
       Cardano.Wallet.Kernel.Actions
+      Cardano.Wallet.Kernel.AddressPoolGap
       Cardano.Wallet.Kernel.Addresses
       Cardano.Wallet.Kernel.BListener
       Cardano.Wallet.Kernel.CoinSelection

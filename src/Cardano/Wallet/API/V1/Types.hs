@@ -172,6 +172,7 @@ import           Cardano.Wallet.API.V1.Errors (ToHttpErrorStatus (..),
 import           Cardano.Wallet.API.V1.Generic (jsendErrorGenericParseJSON,
                      jsendErrorGenericToJSON)
 import           Cardano.Wallet.API.V1.Swagger.Example (Example, example)
+import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Types.UtxoStatistics
 import           Cardano.Wallet.Util (mkJsonKey, showApiUtcTime)
 
@@ -562,7 +563,7 @@ instance Buildable [PublicKey] where
 -- on the mobile client or hardware wallet.
 data NewEosWallet = NewEosWallet
     { neweoswalAccountsPublicKeys :: ![PublicKey]
-    , neweoswalAddressPoolGap     :: !(Maybe Word)
+    , neweoswalAddressPoolGap     :: !(Maybe AddressPoolGap)
     , neweoswalAssuranceLevel     :: !AssuranceLevel
     , neweoswalName               :: !WalletName
     } deriving (Eq, Show, Generic)
@@ -944,7 +945,7 @@ instance ToHttpApiData EosWalletId where
 data EosWallet = EosWallet
     { eoswalId             :: !EosWalletId
     , eoswalName           :: !WalletName
-    , eoswalAddressPoolGap :: !Word
+    , eoswalAddressPoolGap :: !AddressPoolGap
     , eoswalBalance        :: !(V1 Core.Coin)
     , eoswalAssuranceLevel :: !AssuranceLevel
     } deriving (Eq, Ord, Show, Generic)
@@ -2224,6 +2225,7 @@ instance Example AccountBalance
 instance Example AccountAddresses
 instance Example AddressLevel
 instance Example AddressPath
+instance Example AddressPoolGap
 instance Example WalletId
 instance Example AssuranceLevel
 instance Example LocalTimeDifference
@@ -2314,7 +2316,7 @@ instance Example PublicKey where
 
 instance Example NewEosWallet where
     example = NewEosWallet <$> example
-                           <*> pure (Just 20)
+                           <*> example
                            <*> example
                            <*> pure "My EOS-Wallet"
 
