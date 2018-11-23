@@ -72,7 +72,11 @@ data CreateWalletError =
     -- the derivation failed
 
 instance Arbitrary CreateWalletError where
-    arbitrary = oneof []
+    arbitrary = oneof
+        [ CreateWalletFailed . HD.CreateHdRootExists <$> arbitrary
+        , pure $ CreateWalletFailed HD.CreateHdRootDefaultAddressDerivationFailed
+        , pure $ CreateWalletDefaultAddressDerivationFailed
+        ]
 
 instance Buildable CreateWalletError where
     build (CreateWalletFailed dbOperation) =
@@ -88,7 +92,9 @@ data CreateEosWalletError =
       -- ^ When trying to create the 'EosWallet', the DB operation failed.
 
 instance Arbitrary CreateEosWalletError where
-    arbitrary = oneof []
+    arbitrary = oneof
+        [ CreateEosWalletFailed . EosHD.CreateEosHdRootExists <$> arbitrary
+        ]
 
 instance Buildable CreateEosWalletError where
     build (CreateEosWalletFailed dbOperation) =
@@ -112,7 +118,12 @@ data UpdateWalletPasswordError =
       -- this operation is not valid anymore.
 
 instance Arbitrary UpdateWalletPasswordError where
-    arbitrary = oneof []
+    arbitrary = oneof
+        [ UpdateWalletPasswordOldPasswordMismatch <$> arbitrary
+        , UpdateWalletPasswordKeyNotFound <$> arbitrary
+        , UpdateWalletPasswordUnknownHdRoot <$> arbitrary
+        , UpdateWalletPasswordKeystoreChangedInTheMeantime <$> arbitrary
+        ]
 
 instance Buildable UpdateWalletPasswordError where
     build (UpdateWalletPasswordOldPasswordMismatch hdRootId) =

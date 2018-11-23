@@ -56,7 +56,12 @@ data CreateAddressError =
     deriving Eq
 
 instance Arbitrary CreateAddressError where
-    arbitrary = oneof []
+    arbitrary = oneof
+        [ CreateAddressUnknownHdAccount <$> arbitrary
+        , CreateAddressKeystoreNotFound . AccountIdHdRnd <$> arbitrary
+        , CreateAddressHdRndGenerationFailed <$> arbitrary
+        , CreateAddressHdRndAddressSpaceSaturated <$> arbitrary
+        ]
 
 instance Buildable CreateAddressError where
     build (CreateAddressUnknownHdAccount uAccount) =
