@@ -9,7 +9,6 @@
 module Cardano.Wallet.Kernel.DB.EosHdWallet (
     -- * Supporting types
     EosHdWallets(..)
-  , EosHdRootId(..)
   , EosHdRoot(..)
   , EosHdAccount(..)
     -- ** Initialiser
@@ -24,7 +23,7 @@ module Cardano.Wallet.Kernel.DB.EosHdWallet (
   , eosHdAccountPK
   , eosHdAccountRootId
   -- * Zoom to parts of the EOS HD wallet
-  , zoomEosHdRootId
+  , zoomEosWalletId
     -- * Zoom variations that create on request
   , zoomOrCreateEosHdAccount
   , assumeEosHdRootExists
@@ -40,13 +39,8 @@ import           Control.Lens (at)
 import           Control.Lens.TH (makeLenses)
 import qualified Data.IxSet.Typed as IxSet (Indexable (..))
 import           Data.SafeCopy (base, deriveSafeCopy)
-import           Data.UUID (UUID)
-import qualified Data.UUID as Uuid
-import           Formatting (bprint, build, (%))
-import qualified Formatting.Buildable
 
 import           Test.QuickCheck (Arbitrary (..), oneof)
-import           Test.QuickCheck.Gen (chooseAny)
 
 import qualified Pos.Crypto as Core
 
@@ -55,20 +49,7 @@ import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.Util.AcidState
 import           Cardano.Wallet.Kernel.DB.Util.IxSet
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet hiding (Indexable)
-
--- | Currently, during EOS-wallet creation we do not receive
--- root public key of this wallet, but only the list of accounts'
--- public keys. So we cannot create 'HdRootId'. Since we need some
--- unique identifier for EOS-wallet, we use UUID.
--- Please note that UUID-based solution may be changed in the future.
-newtype EosHdRootId = EosHdRootId { getEosHdRootId :: UUID }
-    deriving (Eq, Ord, Show)
-
-instance Arbitrary EosHdRootId where
-    arbitrary = EosHdRootId <$> chooseAny
-
-instance Buildable EosHdRootId where
-    build (EosHdRootId uuid) = bprint ("EosHdRootId " % build) (Uuid.toText uuid)
+import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
 
 -- | Root of an externally-owned sequential HD wallet.
 --
@@ -76,7 +57,7 @@ instance Buildable EosHdRootId where
 -- sequentially assigned address indices.
 data EosHdRoot = EosHdRoot {
       -- | Wallet ID
-      _eosHdRootId             :: !EosHdRootId
+      _eosHdRootId             :: !EosWalletId
       -- | Wallet name
     , _eosHdRootName           :: !WalletName
       -- | Assurance level
@@ -92,7 +73,7 @@ data EosHdAccount = EosHdAccount {
       -- | Account's public key.
       _eosHdAccountPK     :: !Core.PublicKey
       -- | Id of EOS-wallet this account belongs to.
-    , _eosHdAccountRootId :: !EosHdRootId
+    , _eosHdAccountRootId :: !EosWalletId
     }
 
 -- | All wallets and accounts in the EOS HD wallets
@@ -112,8 +93,6 @@ makeLenses ''EosHdRoot
 makeLenses ''EosHdAccount
 makeLenses ''EosHdWallets
 
-deriveSafeCopy 1 'base ''UUID
-deriveSafeCopy 1 'base ''EosHdRootId
 deriveSafeCopy 1 'base ''AddressPoolGap
 deriveSafeCopy 1 'base ''EosHdRoot
 deriveSafeCopy 1 'base ''EosHdAccount
@@ -124,7 +103,7 @@ deriveSafeCopy 1 'base ''EosHdWallets
 -------------------------------------------------------------------------------}
 
 instance HasPrimKey EosHdRoot where
-    type PrimKey EosHdRoot = EosHdRootId
+    type PrimKey EosHdRoot = EosWalletId
     primKey = _eosHdRootId
 
 instance HasPrimKey EosHdAccount where
@@ -132,12 +111,12 @@ instance HasPrimKey EosHdAccount where
     primKey = _eosHdAccountPK
 
 type SecondaryEosHdRootIxs    = '[]
-type SecondaryEosHdAccountIxs = '[EosHdRootId]
+type SecondaryEosHdAccountIxs = '[EosWalletId]
 
 type instance IndicesOf EosHdRoot    = SecondaryEosHdRootIxs
 type instance IndicesOf EosHdAccount = SecondaryEosHdAccountIxs
 
-instance IxSet.Indexable (EosHdRootId ': SecondaryEosHdRootIxs)
+instance IxSet.Indexable (EosWalletId ': SecondaryEosHdRootIxs)
                          (OrdByPrimKey EosHdRoot) where
     indices = ixList
 
@@ -150,11 +129,11 @@ instance IxSet.Indexable (Core.PublicKey ': SecondaryEosHdAccountIxs)
   Zoom to existing parts of an EOS HD wallet
 -------------------------------------------------------------------------------}
 
-zoomEosHdRootId :: forall f e a. CanZoom f
-             => (UnknownEosHdRoot -> e)
-             -> EosHdRootId
-             -> f e EosHdRoot a -> f e EosHdWallets a
-zoomEosHdRootId embedErr rootId =
+zoomEosWalletId :: forall f e a. CanZoom f
+                => (UnknownEosHdRoot -> e)
+                -> EosWalletId
+                -> f e EosHdRoot a -> f e EosHdWallets a
+zoomEosWalletId embedErr rootId =
     zoomDef err (eosHdWalletsRoots . at rootId)
   where
     err :: f e EosHdWallets a
@@ -167,7 +146,7 @@ zoomEosHdRootId embedErr rootId =
 -- | Unknown EOS root
 data UnknownEosHdRoot =
     -- | Unknown root ID for EOS-wallet
-    UnknownEosHdRoot EosHdRootId
+    UnknownEosHdRoot EosWalletId
     deriving Eq
 
 instance Arbitrary UnknownEosHdRoot where
@@ -177,7 +156,7 @@ instance Arbitrary UnknownEosHdRoot where
 -- | Unknown account in EOS-wallet
 data UnknownEosHdAccount =
     -- | Unknown root ID for EOS-wallet
-    UnknownEosHdAccountRoot EosHdRootId
+    UnknownEosHdAccountRoot EosWalletId
 
     -- | Unknown account (implies the root is known)
   | UnknownEosHdAccount HdAccountId
@@ -203,7 +182,7 @@ deriveSafeCopy 1 'base ''UnknownEosHdAccount
 -- | Creates the 'EosHdAccount' if it doesn't exist
 --
 -- Precondition: @newEosAccount ^. eosHdAccountId == accountId@
-zoomOrCreateEosHdAccount :: (EosHdRootId -> Update' e EosHdWallets ())
+zoomOrCreateEosHdAccount :: (EosWalletId -> Update' e EosHdWallets ())
                          -> EosHdAccount
                          -> Core.PublicKey
                          -> Update' e EosHdAccount a
@@ -215,5 +194,5 @@ zoomOrCreateEosHdAccount checkEosRootExists newEosAccount accPK upd = do
 -- | Assume that the given EosHdRoot exists
 --
 -- Helper function which can be used as an argument to 'zoomOrCreateEosHdAccount'
-assumeEosHdRootExists :: EosHdRootId -> Update' e EosHdWallets ()
+assumeEosHdRootExists :: EosWalletId -> Update' e EosHdWallets ()
 assumeEosHdRootExists _id = return ()

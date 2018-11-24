@@ -23,6 +23,7 @@ import           Pos.Crypto (PublicKey)
 import           Cardano.Wallet.Kernel.DB.EosHdWallet
 import           Cardano.Wallet.Kernel.DB.Util.AcidState
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
+import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
 
 {-------------------------------------------------------------------------------
   Errors
@@ -31,7 +32,7 @@ import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 -- | Errors thrown by 'createEosHdWallet'
 data CreateEosHdRootError =
     -- | We already have an EOS-wallet with the specified ID
-    CreateEosHdRootExists EosHdRootId
+    CreateEosHdRootExists EosWalletId
 
 -- | Errors thrown by 'createEosHdAccount'
 data CreateEosHdAccountError =
@@ -61,7 +62,7 @@ createEosHdRoot eosHdRoot = do
 createEosHdAccount :: EosHdAccount -> Update' CreateEosHdAccountError EosHdWallets ()
 createEosHdAccount eosHdAccount = do
     -- Check that the root ID exists
-    zoomEosHdRootId CreateEosHdAccountUnknownRoot rootId $
+    zoomEosWalletId CreateEosHdAccountUnknownRoot rootId $
       return ()
 
     zoom eosHdWalletsAccounts $ do

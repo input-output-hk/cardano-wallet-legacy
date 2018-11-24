@@ -40,7 +40,6 @@ module Cardano.Wallet.API.V1.Types (
   , WalletOperation (..)
   , SpendingPassword
   , EosWallet (..)
-  , EosWalletId (..)
   , NewEosWallet (..)
   , WalletAndTxHistory (..)
   -- * Addresses
@@ -124,7 +123,8 @@ module Cardano.Wallet.API.V1.Types (
   , ErrNotEnoughMoney(..)
   , toServantError
   , toHttpErrorStatus
-
+  -- * EOS-wallet id
+  , module Cardano.Wallet.Kernel.EosWalletId
   , module Cardano.Wallet.Types.UtxoStatistics
   ) where
 
@@ -148,8 +148,6 @@ import           Data.Maybe (fromJust)
 import           Data.Semigroup (Semigroup)
 import           Data.Swagger hiding (Example, example)
 import           Data.Text (Text, dropEnd, toLower)
-import           Data.UUID (UUID)
-import qualified Data.UUID as Uuid
 import           Formatting (bprint, build, fconst, int, sformat, (%))
 import qualified Formatting.Buildable
 import           Generics.SOP.TH (deriveGeneric)
@@ -173,6 +171,7 @@ import           Cardano.Wallet.API.V1.Generic (jsendErrorGenericParseJSON,
                      jsendErrorGenericToJSON)
 import           Cardano.Wallet.API.V1.Swagger.Example (Example, example)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
+import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
 import           Cardano.Wallet.Types.UtxoStatistics
 import           Cardano.Wallet.Util (mkJsonKey, showApiUtcTime)
 
@@ -914,32 +913,6 @@ instance ToSchema PublicKey where
         pure $ NamedSchema (Just "PublicKey") $ mempty
             & type_ .~ SwaggerString
             & format ?~ "base58"
-
-newtype EosWalletId = EosWalletId UUID
-    deriving (Show, Eq, Ord, Generic)
-
-deriveJSON Aeson.defaultOptions ''EosWalletId
-
-instance ToSchema EosWalletId where
-  declareNamedSchema = genericDeclareNamedSchema defaultSchemaOptions
-
-instance ToJSONKey EosWalletId
-
-instance Arbitrary EosWalletId where
-    arbitrary = EosWalletId <$> Gen.chooseAny
-
-deriveSafeBuildable ''EosWalletId
-instance BuildableSafeGen EosWalletId where
-    buildSafeGen sl (EosWalletId uuid) =
-        bprint (plainOrSecureF sl build (fconst "<eos wallet id>")) $ Uuid.toText uuid
-
-instance FromHttpApiData EosWalletId where
-    parseQueryParam rawUuid = case Uuid.fromText rawUuid of
-        Nothing   -> Left "Invalid EOS-wallet id (not a UUID)."
-        Just uuid -> Right . EosWalletId $ uuid
-
-instance ToHttpApiData EosWalletId where
-    toQueryParam (EosWalletId uuid) = Uuid.toText uuid
 
 -- | Externally-owned sequential (EOS) wallet (mobile client or hardware wallet).
 data EosWallet = EosWallet
@@ -2246,9 +2219,6 @@ instance Example NewAddress
 instance Example ShieldedRedemptionCode
 instance Example (V1 Core.PassPhrase)
 instance Example (V1 Core.Coin)
-
-instance Example EosWalletId where
-    example = EosWalletId <$> pure (Prelude.read "c2cc10e1-57d6-4b6f-9899-38d972112d8c")
 
 -- | We have a specific 'Example' instance for @'V1' 'Address'@ because we want
 -- to control the length of the examples. It is possible for the encoded length

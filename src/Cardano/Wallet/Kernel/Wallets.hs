@@ -24,7 +24,6 @@ import qualified Formatting as F
 import qualified Formatting.Buildable
 
 import           Data.Acid.Advanced (update')
-import           Data.UUID.V4 (nextRandom)
 
 import           Pos.Core (Address, Timestamp)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
@@ -40,7 +39,6 @@ import           Cardano.Wallet.Kernel.DB.AcidState (CreateEosHdWallet (..),
                      CreateHdWallet (..), DeleteHdRoot (..), RestoreHdWallet,
                      UpdateHdRootPassword (..), UpdateHdWallet (..))
 import           Cardano.Wallet.Kernel.DB.EosHdWallet (EosHdRoot (..))
-import qualified Cardano.Wallet.Kernel.DB.EosHdWallet as EosHD
 import qualified Cardano.Wallet.Kernel.DB.EosHdWallet.Create as EosHD
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel,
                      HdAccountId (..), HdAccountIx (..), HdAddress,
@@ -51,6 +49,7 @@ import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
 import           Cardano.Wallet.Kernel.Decrypt (decryptHdLvl2DerivationPath,
                      eskToWalletDecrCredentials)
+import           Cardano.Wallet.Kernel.EosWalletId (genEosWalletId)
 import           Cardano.Wallet.Kernel.Internal (PassiveWallet, walletKeystore,
                      walletProtocolMagic, wallets)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
@@ -262,12 +261,8 @@ createEosHdWallet pw accountsPKs addressPoolGap assuranceLevel walletName = do
     -- no relationship whatsoever from the wallet's point of view. New addresses can be derived
     -- for each account at will and discovered using the address pool discovery algorithm
     -- described in BIP-44. Public keys are managed and provided from an external sources.
-    --
-    -- For FOS-wallets we need a root key for creating 'HdRoot'. But we don't have a root key
-    -- for EOS-wallet, so use UUID as a unique identifier of the wallet. Please note that
-    -- UUID-based solution may be changed in the future.
-    newUUID <- nextRandom
-    let newEosRoot = EosHdRoot (EosHD.EosHdRootId newUUID)
+    newEosWalletId <- genEosWalletId
+    let newEosRoot = EosHdRoot newEosWalletId
                                walletName
                                assuranceLevel
                                addressPoolGap

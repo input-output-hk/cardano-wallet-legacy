@@ -35,6 +35,7 @@ import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (IxSet)
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
+import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
 import           Cardano.Wallet.Kernel.Internal (walletKeystore,
                      walletProtocolMagic, _wriProgress)
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
@@ -177,16 +178,12 @@ createEosWallet wallet newEosWalletRequest = runExceptT $ do
             (fromAssuranceLevel assuranceLevel)
             (HD.WalletName name)
     return $ V1.EosWallet {
-          eoswalId             = mkEosWalletId root
+          eoswalId             = EosHD._eosHdRootId root
         , eoswalName           = name
         , eoswalAddressPoolGap = addressPoolGap
         , eoswalBalance        = V1 (mkCoin 0)
         , eoswalAssuranceLevel = assuranceLevel
         }
-  where
-    mkEosWalletId :: EosHD.EosHdRoot -> V1.EosWalletId
-    mkEosWalletId root = V1.EosWalletId anId
-      where (EosHD.EosHdRootId anId) = EosHD._eosHdRootId root
 
 -- | Updates the 'SpendingPassword' for this wallet.
 updateWallet :: MonadIO m
@@ -239,7 +236,7 @@ deleteWallet wallet wId = runExceptT $ do
 -- | Deletes external wallets. Please note that there's no actions in the
 -- 'Keystore', because it contains only root secret keys.
 deleteEosWallet :: Kernel.PassiveWallet
-                -> V1.EosWalletId
+                -> EosWalletId
                 -> m (Either DeleteEosWalletError ())
 deleteEosWallet _wallet _eosWalletId =
     error "TODO: it will be implemented in https://github.com/input-output-hk/cardano-wallet/issues/36"
