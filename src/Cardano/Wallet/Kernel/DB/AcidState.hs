@@ -85,6 +85,7 @@ import           Cardano.Wallet.Kernel.DB.Util.AcidState
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (IxSet)
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import qualified Cardano.Wallet.Kernel.DB.Util.Zoomable as Z
+import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
 import           Cardano.Wallet.Kernel.NodeStateAdaptor (SecurityParameter (..))
 import           Cardano.Wallet.Kernel.PrefilterTx (AddrWithId,
                      PrefilteredBlock (..), emptyPrefilteredBlock)
@@ -655,7 +656,7 @@ data EosAccountUpdate e a = EosAccountUpdate {
       eosAccountUpdatePK     :: !PublicKey
 
       -- Root id of EOS-wallet this EOS-account belongs to.
-    , eosAccountUpdateRootId :: !EosHdRootId
+    , eosAccountUpdateRootId :: !EosWalletId
 
       -- | The update to run
     , eosAccountUpdate       :: !(Update' e EosHdAccount a)
