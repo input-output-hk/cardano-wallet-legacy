@@ -4,15 +4,20 @@
 
 <p align="right">#</p>
 
-### Acceptance criteria:
+
+# Overview
+
+<Detail in a few bullet points the work accomplished in this PR>
 
 1. - [ ] ...
 
+
 # Comments
 
-<Additional comments or screenshots to attach>
+<Additional comments or screenshots to attach if any>
 
 ¯\\\_(ツ)\_/¯
+
 
 # Checklist
 
