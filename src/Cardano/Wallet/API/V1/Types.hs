@@ -39,6 +39,7 @@ module Cardano.Wallet.API.V1.Types (
   , WalletType (..)
   , WalletOperation (..)
   , SpendingPassword
+  , mkSpendingPassword
   , EosWallet (..)
   , NewEosWallet (..)
   , WalletAndTxHistory (..)
@@ -223,8 +224,8 @@ optsADTCamelCase = defaultOptions
 -- Versioning
 --
 
-mkPassPhrase :: Text -> Either Text Core.PassPhrase
-mkPassPhrase text =
+mkSpendingPassword :: Text -> Either Text SpendingPassword
+mkSpendingPassword text =
     case Base16.decode text of
         Left e -> Left e
         Right bs -> do
@@ -232,7 +233,7 @@ mkPassPhrase text =
             -- Currently passphrase may be either 32-byte long or empty (for
             -- unencrypted keys).
             if bl == 0 || bl == Core.passphraseLength
-                then Right $ ByteArray.convert bs
+                then Right $ V1 $ ByteArray.convert bs
                 else Left $ sformat
                      ("Expected spending password to be of either length 0 or "%int%", not "%int)
                      Core.passphraseLength bl
@@ -241,9 +242,9 @@ instance ToJSON (V1 Core.PassPhrase) where
     toJSON = String . Base16.encode . ByteArray.convert
 
 instance FromJSON (V1 Core.PassPhrase) where
-    parseJSON (String pp) = case mkPassPhrase pp of
+    parseJSON (String pp) = case mkSpendingPassword pp of
         Left e    -> fail (toString e)
-        Right pp' -> pure (V1 pp')
+        Right pp' -> pure pp'
     parseJSON x           = typeMismatch "parseJSON failed for PassPhrase" x
 
 instance Arbitrary (V1 Core.PassPhrase) where
@@ -352,6 +353,8 @@ instance Semigroup (V1 Core.PassPhrase) where
 instance Monoid (V1 Core.PassPhrase) where
     mempty = V1 mempty
     mappend = (<>)
+
+deriving newtype instance Num a => Num (V1 a)
 
 instance BuildableSafeGen SpendingPassword where
     buildSafeGen sl pwd =

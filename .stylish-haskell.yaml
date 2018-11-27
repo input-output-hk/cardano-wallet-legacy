@@ -222,7 +222,9 @@ language_extensions:
   - DefaultSignatures
   - DeriveDataTypeable
   - DeriveGeneric
+  - DerivingStrategies
   - ExistentialQuantification
+  - ExplicitNamespaces
   - FlexibleContexts
   - FlexibleInstances
   - FunctionalDependencies
@@ -232,6 +234,7 @@ language_extensions:
   - MultiParamTypeClasses
   - MultiWayIf
   - NoImplicitPrelude
+  - OverloadedLabels
   - OverloadedStrings
   - PolyKinds
   - RecordWildCards
@@ -242,4 +245,3 @@ language_extensions:
   - TypeApplications
   - TypeFamilies
   - ViewPatterns
-  - ExplicitNamespaces
