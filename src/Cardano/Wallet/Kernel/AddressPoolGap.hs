@@ -1,4 +1,7 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module Cardano.Wallet.Kernel.AddressPoolGap (
     -- ** Address pool gap (for EOS-wallets)
     AddressPoolGap
@@ -23,7 +26,8 @@ import           Test.QuickCheck
 import qualified Test.QuickCheck.Gen as Gen
 
 newtype AddressPoolGap = AddressPoolGap { getAddressPoolGap :: Word8 }
-    deriving (Eq, Generic, Ord, Show)
+    deriving (Eq, Enum, Generic, Num, Ord, Real, Show)
+    deriving newtype (Integral)
 
 instance Bounded AddressPoolGap where
     -- NOTE: these values may change in the future.
