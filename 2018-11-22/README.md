@@ -1,7 +1,7 @@
 # Wallet Backend Weekly Report 
 
 <p align="right">
-  <strong>Week 47</strong>: 19/11/2018 → 25/11/2018
+  <strong>Week 47</strong>: 16/11/2018 → 22/11/2018
 </p>
 
 # Overview
@@ -22,7 +22,7 @@ None.
 
 |                 | Start Date | Estimated End Date | Done    | In Progress | New Bugs | Fixed Bugs |
 | -----           | -----      | -----              | -----   | -----       | -----    | -----      |
-| ![][Decoupling] | 2018-10-22 | 2019-01-04         | #8, #55 | #15, #30    | -        | -          |
+| ![][Decoupling] | 2018-10-22 | 2019-01-04         | [#8](https://github.com/input-output-hk/cardano-wallet/issues/8), [#55](https://github.com/input-output-hk/cardano-wallet/issues/55) | [#15](https://github.com/input-output-hk/cardano-wallet/issues/15), [#30](https://github.com/input-output-hk/cardano-wallet/issues/30)    | -        | -          |
 
 ---
 
@@ -34,7 +34,7 @@ None.
 
 |             | Start Date | Estimated End Date | Done  | In Progress | New Bugs | Fixed Bugs |
 | -----       | -----      | -----              | ----- | -----       | -----    | -----      |
-| ![][BIP-44] | 2018-11-05 | 2019-01-04         |       | #28, #33    | -        | -          |
+| ![][BIP-44] | 2018-11-05 | 2019-01-04         |       | [#28](https://github.com/input-output-hk/cardano-wallet/issues/28), [#33](https://github.com/input-output-hk/cardano-wallet/issues/33)    | -        | -          |
 
 ---
 
@@ -46,7 +46,7 @@ None.
 
 |         | Start Date | Estimated End Date | Done     | In Progress | New Bugs | Fixed Bugs |
 | -----   | -----      | -----              | -----    | -----       | -----    | -----      |
-| ![][CI] | 2018-11-19 | 2019-01-04         | #80, #89 | #65         | -        | #81        |
+| ![][CI] | 2018-11-19 | 2019-01-04         | [#80](https://github.com/input-output-hk/cardano-wallet/issues/80), [#89](https://github.com/input-output-hk/cardano-wallet/issues/89) | [#65](https://github.com/input-output-hk/cardano-wallet/issues/65)         | -        | [#81](https://github.com/input-output-hk/cardano-wallet/issues/81)        |
 
 ---
 
@@ -59,14 +59,14 @@ None.
 
 |                    | Start Date | Estimated End Date | Done  | In Progress | New Bugs | Fixed Bugs                                       |
 | -----              | -----      | -----              | ----- | -----       | -----    | -----                                            |
-| ![][Release/2.0.0] | 2018-10-30 | 2019-11-23         | -     | -           | -        | #72, #82, #92, #93, #94, #95, #96, #97, #98, #99 |
+| ![][Release/2.0.0] | 2018-10-30 | 2018-11-23         | -     | -           | -        | [#72](https://github.com/input-output-hk/cardano-wallet/issues/72), [#82](https://github.com/input-output-hk/cardano-wallet/issues/82), [#92](https://github.com/input-output-hk/cardano-wallet/issues/92), [#93](https://github.com/input-output-hk/cardano-wallet/issues/93), [#94](https://github.com/input-output-hk/cardano-wallet/issues/94), [#95](https://github.com/input-output-hk/cardano-wallet/issues/95), [#96](https://github.com/input-output-hk/cardano-wallet/issues/96), [#97](https://github.com/input-output-hk/cardano-wallet/issues/97), [#98](https://github.com/input-output-hk/cardano-wallet/issues/98), [#99](https://github.com/input-output-hk/cardano-wallet/issues/99) |
 
 
 # Week Restrospective
 
 ## Deliverables
 
-### ![][Decoupling] #8 Implement The Node Management & Monitoring API on the Node's End
+### ![][Decoupling] [#8](https://github.com/input-output-hk/cardano-wallet/issues/8) Implement The Node Management & Monitoring API on the Node's End
 
 > **Context**  
 > The wallet currently offers some basic monitoring of the node via the
@@ -79,7 +79,7 @@ None.
 > a library (as it currently does). This enables for better code-reuse between
 > `cardano-sl` and `cardano-wallet`.
 
-### ![][Decoupling] #55 Move & Rename BIP39 Module to `cardano-sl` as `mnemonic`
+### ![][Decoupling] [#55](https://github.com/input-output-hk/cardano-wallet/issues/55) Move & Rename BIP39 Module to `cardano-sl` as `mnemonic`
 
 > **Context**  
 > We've moved the wallet into its own repository as a first step towards
@@ -96,7 +96,7 @@ None.
 > a few executables and scripts inside this new `mnemonic` package.
 
 
-### ![][CI] #80 Have Stylish Haskell as Part of the CI Checks
+### ![][CI] [#80](https://github.com/input-output-hk/cardano-wallet/issues/80) Have Stylish Haskell as Part of the CI Checks
 
 > **Context**
 > We use stylish-haskell mostly to "prettify" imports and align a few stuff
@@ -109,7 +109,7 @@ None.
 > from being merged if any stylistic change is detected. 
 
 
-### ![][CI] #89 Turn Some (Long) Unit Tests Into Nightly Tests
+### ![][CI] [#89](https://github.com/input-output-hk/cardano-wallet/issues/89) Turn Some (Long) Unit Tests Into Nightly Tests
 
 
 > **Context**
@@ -126,7 +126,7 @@ None.
 ## Bugs 
 
 
-### ![][Release/2.0.0] #72 Erroneous Documentation Description
+### ![][Release/2.0.0] [#72](https://github.com/input-output-hk/cardano-wallet/issues/72) Erroneous Documentation Description
 
 > **Context**  
 > The description of the `GET /api/v1/addresses/{address}` endpoint was erroneous.
@@ -137,7 +137,7 @@ None.
 > give it an extra look before cutting the release off.
 
 
-### ![][CI] #81 Documentation and Weeder Aren't Ran and/or Reported in the CI
+### ![][CI] [#81](https://github.com/input-output-hk/cardano-wallet/issues/81) Documentation and Weeder Aren't Ran and/or Reported in the CI
 
 > **Context**  
 > We've defined jobs in the CI for deploying the most up-to-date documentation
@@ -153,7 +153,7 @@ None.
 > we now can so there's no need for a nightly build anymore.
 
 
-### ![][Release/2.0.0] #82 Non JSEnd Response for Internal Endpoint '/api/internal/next-update'
+### ![][Release/2.0.0] [#82](https://github.com/input-output-hk/cardano-wallet/issues/82) Non JSEnd Response for Internal Endpoint '/api/internal/next-update'
 
 > **Context**  
 > The API returns responses that are jsend-compliant for all endpoints; e.g.:
@@ -177,7 +177,7 @@ None.
 > that every response from the API is JSEnd compliant.
 
 
-### ![][Release/2.0.0] #96 `hasSpendingPassword` is Wrongly Reported After DB Migration
+### ![][Release/2.0.0] [#96](https://github.com/input-output-hk/cardano-wallet/issues/96) `hasSpendingPassword` is Wrongly Reported After DB Migration
 
 > **Context**  
 > When one creates a wallet without a password on the 1.3.1 build and then
@@ -202,7 +202,7 @@ None.
 > This also removes a whole class of bugs like this one.
 
 
-### ![][Release/2.0.0] #97 Prefiltering Ignores `txId` From Inputs When Create Block Metadata
+### ![][Release/2.0.0] [#97](https://github.com/input-output-hk/cardano-wallet/issues/97) Prefiltering Ignores `txId` From Inputs When Create Block Metadata
 
 > **Context**  
 > Prefiltering seems to totally ignore txIds from Inputs while creating
@@ -217,7 +217,7 @@ None.
 > We've added a regression integration test covering this particular case later
 > on.
 
-### ![][Release/2.0.0] #98 Multithreading at SQlite is not the Greatest
+### ![][Release/2.0.0] [#98](https://github.com/input-output-hk/cardano-wallet/issues/98) Multithreading at SQlite is not the Greatest
 
 > **Context**  
 > The intermediate libraries we use make things slightly worse. We already suffer
@@ -250,7 +250,7 @@ None.
 > mechanism on top of SQLite.
 
 
-### ![][Release/2.0.0] #99 Fee Calculation Doesn't Account For Extra Inputs or Outputs 
+### ![][Release/2.0.0] [#99](https://github.com/input-output-hk/cardano-wallet/issues/99) Fee Calculation Doesn't Account For Extra Inputs or Outputs 
 
 > **Context**  
 > After the coin selection algorithm has ran, we adjust this selection and try to
