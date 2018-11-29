@@ -26,3 +26,13 @@ main = withCompileInfo $ do
 
         WalletNew p ->
             actionWithWallet p
+
+    hlintTest
+  where
+    hlintTestFn :: Int -> Int -> IO ()
+    hlintTestFn i j =
+        print i >> print j
+
+    hlintTest :: IO ()
+    hlintTest =
+        mapM_ (\(i, j) -> hlintTestFn i j ) [(14,42), (1337,666)]

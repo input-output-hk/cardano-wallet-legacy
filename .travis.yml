@@ -157,17 +157,19 @@ jobs:
   - stage: tests
     env: ACTION=hlint
     script:
-      - curl -sL https://raw.github.com/ndmitchell/hlint/bea72e4e61da54ecd451590734d6e10423ead100/misc/travis.sh | sh -s . --cpp-define=__GLASGOW_HASKELL__=800 --cpp-define=x86_64_HOST_ARCH=1 --cpp-define=mingw32_HOST_OS=1
+      - curl -sL https://raw.github.com/ndmitchell/hlint/bea72e4e61da54ecd451590734d6e10423ead100/misc/travis.sh | sh -s . --cpp-define=__GLASGOW_HASKELL__=800 --cpp-define=x86_64_HOST_ARCH=1 --cpp-define=mingw32_HOST_OS=1 # -h=.hlint.yaml
 
   # STYLISH-HASKELL
   - stage: tests
     env: ACTION=stylish-haskell
+    if: false
     script:
     - find . -type f -name "*.hs" ! -path "*.stack-work*" -exec stylish-haskell -i {} \;
     - git diff --exit-code
 
   # COVERAGE
   - stage: tests
+    if: false
     env: ACTION=coverage
     # Run all tests with code coverage
     script:
@@ -186,6 +188,7 @@ jobs:
   # WEEDER
   - stage: tests
     env: ACTION=weeder
+    if: false
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
     - travis_wait 42 stack --no-terminal test --no-run-tests --fast --ghc-options "+RTS -A256m -n2m -M3G -RTS"
