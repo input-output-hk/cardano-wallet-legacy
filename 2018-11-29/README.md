@@ -28,7 +28,7 @@ The team was greatly diminished this week (3/8 members)
 
 |                 | Start Date | Estimated End Date | Done  | In Progress | New Bugs | Fixed Bugs |
 | -----           | -----      | -----              | ----- | -----       | -----    | -----      |
-| ![][Decoupling] | 2018-10-22 | 2019-11-04         | -     | [#15](https://github.com/input-output-hk/cardano-wallet/issues/15), [#30](https://github.com/input-output-hk/cardano-wallet/issues/30)    | -        | -          |
+| ![][Decoupling] | 2018-10-22 | 2019-01-11         | -     | [#15](https://github.com/input-output-hk/cardano-wallet/issues/15), [#30](https://github.com/input-output-hk/cardano-wallet/issues/30)    | -        | -          |
 
 ---
 
@@ -40,7 +40,7 @@ The team was greatly diminished this week (3/8 members)
 
 |             | Start Date | Estimated End Date | Done  | In Progress | New Bugs | Fixed Bugs |
 | -----       | -----      | -----              | ----- | -----       | -----    | -----      |
-| ![][BIP-44] | 2018-11-05 | 2019-11-04         | [#28](https://github.com/input-output-hk/cardano-wallet/issues/28)   | [#33](https://github.com/input-output-hk/cardano-wallet/issues/33)         | -        | -          |
+| ![][BIP-44] | 2018-11-05 | 2019-01-11         | [#28](https://github.com/input-output-hk/cardano-wallet/issues/28)   | [#33](https://github.com/input-output-hk/cardano-wallet/issues/33)         | -        | -          |
 
 ---
 
@@ -52,7 +52,7 @@ The team was greatly diminished this week (3/8 members)
 
 |         | Start Date | Estimated End Date | Done  | In Progress | New Bugs | Fixed Bugs |
 | -----   | -----      | -----              | ----- | -----       | -----    | -----      |
-| ![][CI] | 2018-11-19 | 2019-11-04         | -     | [#117](https://github.com/input-output-hk/cardano-wallet/issues/117)        | -        | -          |
+| ![][CI] | 2018-11-19 | 2019-01-11         | -     | [#117](https://github.com/input-output-hk/cardano-wallet/issues/117)        | -        | -          |
 
 ---
 
