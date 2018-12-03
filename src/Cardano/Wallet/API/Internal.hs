@@ -7,14 +7,14 @@ import           Pos.Chain.Update (SoftwareVersion)
 
 import           Servant
 
-import           Cardano.Wallet.API.Response (ValidJSON, WalletResponse)
+import           Cardano.Wallet.API.Response (APIResponse, ValidJSON)
 import           Cardano.Wallet.API.Types (Tags)
 import           Cardano.Wallet.API.V1.Types (V1, Wallet, WalletImport)
 
 type API = Tags '["Internal"] :>
     (    "next-update"
         :> Summary "Version of the next update (404 if none)"
-        :> Get '[ValidJSON] (WalletResponse (V1 SoftwareVersion))
+        :> Get '[ValidJSON] (APIResponse (V1 SoftwareVersion))
 
     :<|> "apply-update"
         :> Summary "Apply the next available update"
@@ -30,5 +30,5 @@ type API = Tags '["Internal"] :>
     :<|> "import-wallet"
         :> Summary "Import a Wallet from disk."
         :> ReqBody '[ValidJSON] WalletImport
-        :> Post '[ValidJSON] (WalletResponse Wallet)
+        :> Post '[ValidJSON] (APIResponse Wallet)
     )
