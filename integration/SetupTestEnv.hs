@@ -2,11 +2,14 @@
 module SetupTestEnv where
 import           Universum
 
-import           Cardano.Wallet.Client.Http
+import           Cardano.Node.Manager (credentialLoadX509,
+                     mkHttpsManagerSettings, newManager, readSignedObject)
+import           Cardano.Wallet.Client.Http (WalletClient, liftClient,
+                     mkHttpClient, withThrottlingRetry)
 import           CLI
 import qualified Data.ByteString.Char8 as B8
-import           Data.X509.File (readSignedObject)
 import           Network.HTTP.Client (Manager)
+import           Servant.Client (BaseUrl (..), Scheme (..))
 
 setupClient :: CLIOptions -> IO (WalletClient IO, Manager)
 setupClient CLIOptions {..} = do
