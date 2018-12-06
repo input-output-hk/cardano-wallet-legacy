@@ -20,6 +20,8 @@ import qualified Golden.APILayout
 import qualified Golden.WalletError
 import qualified Test.Spec.Accounts
 import qualified Test.Spec.Addresses
+import qualified Test.Spec.AddressPool
+import qualified Test.Spec.AddressPoolGap
 import qualified Test.Spec.CoinSelection
 import qualified Test.Spec.DeltaCompression
 import qualified Test.Spec.GetTransactions
@@ -58,6 +60,8 @@ main = do
     hspec $ do
         Test.Spec.Accounts.spec
         Test.Spec.Addresses.spec
+        Test.Spec.AddressPool.spec
+        Test.Spec.AddressPoolGap.spec
         Test.Spec.CoinSelection.spec
         Test.Spec.DeltaCompression.spec
         Test.Spec.GetTransactions.spec

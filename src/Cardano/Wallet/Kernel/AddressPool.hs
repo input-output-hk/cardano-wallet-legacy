@@ -18,6 +18,8 @@ module Cardano.Wallet.Kernel.AddressPool
     ( AddressPool
     , initAddressPool
     , lookupAddressPool
+    , getAddressPoolSize
+    , getAddressPoolGap
     ) where
 
 import           Universum
@@ -102,6 +104,15 @@ lookupAddressPool target pool =
         Nothing ->
             (Nothing, pool)
 
+-- | Get the underlying pool's size
+getAddressPoolSize
+    :: AddressPool address -> Int
+getAddressPoolSize pool = Map.size $ pool ^. addresses
+
+-- | Get the underlying pool's gap
+getAddressPoolGap
+    :: AddressPool address -> AddressPoolGap
+getAddressPoolGap pool = pool ^. gap
 
 {-------------------------------------------------------------------------------
   Internals
