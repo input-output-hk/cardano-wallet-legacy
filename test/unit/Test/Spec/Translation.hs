@@ -15,8 +15,10 @@ import           Test.Hspec.QuickCheck
 import           Test.QuickCheck (withMaxSuccess)
 
 import qualified Pos.Chain.Block as Cardano
+import           Pos.Chain.Txp (TxValidationRules (..))
 import qualified Pos.Chain.Txp as Cardano
-import           Pos.Core (Coeff (..), TxSizeLinear (..))
+import           Pos.Core (Coeff (..), EpochIndex (..), EpochOrSlot (..),
+                     TxSizeLinear (..))
 
 import           Data.Validated
 import           Test.Infrastructure.Generator
@@ -297,7 +299,11 @@ intAndVerifyChain pm pc = runTranslateT pm $ do
         let chain'' = fromMaybe (error "intAndVerify: Nothing")
                     $ nonEmptyOldestFirst
                     $ chain'
-        isCardanoValid <- verifyBlocksPrefix chain''
+        isCardanoValid <- verifyBlocksPrefix chain'' (TxValidationRules
+                                                          (EpochOrSlot . Left $ EpochIndex 0)
+                                                          (EpochOrSlot . Left $ EpochIndex 1)
+                                                          128
+                                                          128)
         case (dslIsValid, isCardanoValid) of
           (Invalid _ e' , Invalid _ e) -> return $ ExpectedInvalid e' e
           (Invalid _ e' , Valid     _) -> return $ Disagreement ledger (UnexpectedValid e')
