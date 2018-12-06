@@ -529,6 +529,7 @@ test-suite unit
       Test.Infrastructure.Genesis
       Test.Spec.Accounts
       Test.Spec.AddressPool
+      Test.Spec.AddressPoolGap
       Test.Spec.Addresses
       Test.Spec.BlockMetaScenarios
       Test.Spec.CoinSelection
