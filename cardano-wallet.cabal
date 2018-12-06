@@ -186,6 +186,7 @@ library
       Cardano.Wallet.Kernel.AddressPool
       Cardano.Wallet.Kernel.AddressPoolGap
       Cardano.Wallet.Kernel.Addresses
+      Cardano.Wallet.Kernel.Ed25519Bip44
       Cardano.Wallet.Kernel.EosWalletId
       Cardano.Wallet.Kernel.BListener
       Cardano.Wallet.Kernel.CoinSelection
@@ -453,6 +454,7 @@ test-suite unit
       Test.Spec.CoinSelection
       Test.Spec.CoinSelection.Generators
       Test.Spec.DeltaCompression
+      Test.Spec.Ed25519Bip44
       Test.Spec.Fixture
       Test.Spec.GetTransactions
       Test.Spec.Kernel

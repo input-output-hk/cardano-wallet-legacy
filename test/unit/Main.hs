@@ -24,6 +24,7 @@ import qualified Test.Spec.AddressPool
 import qualified Test.Spec.AddressPoolGap
 import qualified Test.Spec.CoinSelection
 import qualified Test.Spec.DeltaCompression
+import qualified Test.Spec.Ed25519Bip44
 import qualified Test.Spec.GetTransactions
 import qualified Test.Spec.Kernel
 import qualified Test.Spec.Keystore
@@ -64,6 +65,7 @@ main = do
         Test.Spec.AddressPoolGap.spec
         Test.Spec.CoinSelection.spec
         Test.Spec.DeltaCompression.spec
+        Test.Spec.Ed25519Bip44.spec
         Test.Spec.GetTransactions.spec
         Test.Spec.Kernel.spec
         Test.Spec.Keystore.spec

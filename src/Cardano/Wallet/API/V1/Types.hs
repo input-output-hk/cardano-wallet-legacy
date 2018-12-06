@@ -61,12 +61,10 @@ module Cardano.Wallet.API.V1.Types (
   -- * Addresses
   , WalletAddress (..)
   , NewAddress (..)
-  , AddressPath
   , AddressLevel
   , addressLevelToWord32
   , word32ToAddressLevel
   , IsChangeAddress (..)
-  , mkAddressPathBIP44
   -- * Payments
   , Payment (..)
   , PaymentSource (..)
@@ -1373,81 +1371,6 @@ instance FromJSON AddressLevel where
 
 newtype IsChangeAddress = IsChangeAddress Bool deriving (Show, Eq)
 
--- | BIP44 derivation path, for work with external wallets, for example:
--- m / purpose' / coin_type' / account' / change / address_index
--- m /      44' /      1815' /       0' /      0 /             1
---
--- NOTE See:
---   - https://github.com/satoshilabs/slips/blob/master/slip-0044.md
---   - https://github.com/satoshilabs/slips/pull/123
-data AddressPath = AddressPath
-    { addrpathPurpose      :: AddressLevel
-    , addrpathCoinType     :: AddressLevel
-    , addrpathAccount      :: AddressLevel
-    , addrpathChange       :: AddressLevel
-    , addrpathAddressIndex :: AddressLevel
-    } deriving (Show, Eq, Generic)
-
-deriveJSON Aeson.defaultOptions ''AddressPath
-
-instance ToSchema AddressPath where
-    declareNamedSchema =
-        genericSchemaDroppingPrefix "addrpath" (\(--^) props -> props
-            & ("purpose"      --^ "44, refers to BIP-44.")
-            & ("coinType"     --^ "1815 for ADA (Ada Lovelace's birthdate).")
-            & ("account"      --^ "Account index, used as child index in BIP-32 derivation.")
-            & ("change"       --^ "0 if external (e.g. payment addr), 1 if internal (e.g. change addr).")
-            & ("addressIndex" --^ "Address index counter, incremental.")
-        )
-
-instance Arbitrary AddressPath where
-    arbitrary = AddressPath <$> arbitrary
-                            <*> arbitrary
-                            <*> arbitrary
-                            <*> arbitrary
-                            <*> arbitrary
-
-deriveSafeBuildable ''AddressPath
-instance BuildableSafeGen AddressPath where
-    buildSafeGen sl AddressPath{..} = bprint (""
-        %"{ purpose="%buildSafe sl
-        %", coin_type="%buildSafe sl
-        %", account="%buildSafe sl
-        %", change="%buildSafe sl
-        %", address_index="%buildSafe sl
-        %" }")
-        addrpathPurpose
-        addrpathCoinType
-        addrpathAccount
-        addrpathChange
-        addrpathAddressIndex
-
--- Smart constructor to create BIP44 derivation paths
---
--- NOTE Our account indexes are already referred to as "hardened" and
--- are therefore referred to as indexes above 2^31 == maxBound `div` 2 + 1
--- AddressPath makes it explicit whether a path should be hardened or not
--- instead of relying on a convention on number.
-mkAddressPathBIP44
-    :: IsChangeAddress   -- ^ Whether this is an internal (for change) or external address (for payments)
-    -> Account           -- ^ Underlying account
-    -> Maybe AddressPath -- ^ If 'Nothing' - address level is out-of-bound (31-byte unsigned integer).
-mkAddressPathBIP44 (IsChangeAddress isChange) acct = AddressPath
-    <$> pure (AddressLevelHardened 44)
-    <*> pure (AddressLevelHardened 1815)
-    <*> pure (word32ToAddressLevel actualIndex)
-    <*> pure (AddressLevelNormal $ if isChange then 1 else 0)
-    <*> checkWord31 AddressLevelNormal (getAddressIndex acct)
-  where
-    getAddressIndex = fromIntegral . length . accAddresses
-    checkWord31 mkLevel n =
-        if n >= hardenedValue then
-            Nothing
-        else
-            Just (mkLevel n)
-    AccountIndex actualIndex = accIndex acct
-
-
 -- | A type incapsulating a password update request.
 data PasswordUpdate = PasswordUpdate {
     pwdOld :: !SpendingPassword
@@ -2200,7 +2123,6 @@ instance Example AccountIndex
 instance Example AccountBalance
 instance Example AccountAddresses
 instance Example AddressLevel
-instance Example AddressPath
 instance Example AddressPoolGap
 instance Example WalletId
 instance Example AssuranceLevel
