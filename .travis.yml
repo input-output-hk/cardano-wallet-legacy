@@ -60,7 +60,6 @@ stages:
 
 # Install foreign dependencies required by some modules below
 before_install:
-- mkdir -p .stack-work $HOME/.local/bin $HOME/.local/lib $HOME/.local/include
 - export LTS=$(cat cardano-sl.yaml | grep resolver) # Extract the LTS from the stack.yaml
 
 # Rebuild only the snapshot. Note that, when triggered, job-concurrency should be limited
@@ -68,8 +67,11 @@ before_install:
 # everything in one go.
 # Before kicking this action, it would also be advised to cleanup the entire cache.
 snapshot-1: &snapshot-1
-  if: commit_message =~ /ci@update lts/
+  if: (type = cron) OR (commit_message =~ /ci@update lts/)
   script:
+  - test "$TRAVIS_EVENT_TYPE" = cron && rm -rf $HOME/.ghc $HOME/.stack $HOME/.local || true
+  - mkdir -p .stack-work $HOME/.ghc $HOME/.stack $HOME/.local/bin $HOME/.local/lib $HOME/.local/include
+
   # Install librocksdb-dev
   - git clone --depth 1 --branch=librocksdb-dev $(git remote get-url origin) /tmp/librocksdb-dev
   - rm -rf $HOME/.local/include/rocksdb && mv /tmp/librocksdb-dev/rocksdb $HOME/.local/include
@@ -84,15 +86,15 @@ snapshot-1: &snapshot-1
 
   # Building a subset of the snapshot, to be < 42 min build time; we strip away cardano-sl and servant packages because they're long to build
   - cat cardano-wallet.cabal | grep -v cardano-sl | grep -v servant > tmp.cabal && mv tmp.cabal cardano-wallet.cabal
-  - travis_wait 42 stack --no-terminal --install-ghc build cardano-wallet:lib --only-snapshot --ghc-options "+RTS -A256m -n2m -M3G -RTS"
+  - travis_wait 42 stack --no-terminal --install-ghc build cardano-wallet:lib --only-snapshot -j1
 
 # Build out custom snapshot on top of the LTS. We separate this from the lts job to split
 # the workload and have two jobs running < 50 mins.
 snapshot-2: &snapshot-2
-  if: commit_message =~ /ci@update lts/
+  if: (type = cron) OR (commit_message =~ /ci@update lts/)
   script:
   # Install rest of the the snapshot, mostly servant and cardano-sl
-  - travis_wait 42 stack --no-terminal build --only-snapshot --ghc-options "+RTS -A256m -n2m -M3G -RTS"
+  - travis_wait 42 stack --no-terminal build --only-snapshot -j1
   # Install CPPHS, extra cardano-sl dependency
   - travis_wait 42 stack --no-terminal install cpphs
   # Installing shc for coverage reporting; We trick it a bit to use the same LTS as us and leverage already installed packages to speed up the process
@@ -104,10 +106,10 @@ snapshot-2: &snapshot-2
 # Still, we build that as a separate job and only triggers it when appropriated. It's cached
 # otherwise.
 extra-dependencies: &extra-dependencies
-  if: commit_message =~ /ci@update stack.yaml/
+  if: (type = cron) OR (commit_message =~ /ci@update stack.yaml/)
   script:
   # We don't cache .stack-work, though we want to avoid rebuilding extra-dependencies on each CI run. So, we just cache it manually.
-  - travis_wait 42 stack --no-terminal build --fast --only-dependencies --ghc-options "+RTS -A256m -n2m -M3G -RTS"
+  - travis_wait 42 stack --no-terminal build --fast --only-dependencies -j1
   - tar czf $HOME/.local/stack-work.tar.gz .stack-work
 
 # Build snapshot & dependencies in different jobs. This copes with Travis limit of 50 minutes per job.
@@ -166,13 +168,33 @@ jobs:
     - find . -type f -name "*.hs" ! -path "*.stack-work*" -exec stylish-haskell -i {} \;
     - git diff --exit-code
 
-  # COVERAGE
+  # USUAL TESTS (unit)
   - stage: tests
+    if: type != cron
     env: ACTION=coverage
     # Run all tests with code coverage
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
-    - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit --fast --coverage --ghc-options "+RTS -A256m -n2m -M3G -RTS"
+    - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit --fast
+
+  # USUAL TESTS (integration)
+  #- stage: tests
+  #  if: type != cron
+  #  env: ACTION=coverage
+  #  # Run all tests with code coverage
+  #  script:
+  #  - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
+  #  - travis_wait 42 stack --no-terminal test cardano-wallet:test:integration --fast
+
+  # FULL COVERAGE
+  - stage: tests
+    if: type = cron
+    env: ACTION=coverage
+    # Run all tests with code coverage
+    script:
+    - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
+    - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit --fast --coverage
+    # - travis_wait 42 stack --no-terminal test cardano-wallet:test:integration --fast --coverage
     - shc cardano-wallet unit
 
   # NIGHTLY
@@ -181,14 +203,14 @@ jobs:
     if: type = cron
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
-    - travis_wait 42 stack --no-terminal test cardano-wallet:test:nightly --fast --ghc-options "+RTS -A256m -n2m -M3G -RTS"
+    - travis_wait 42 stack --no-terminal test cardano-wallet:test:nightly --fast
 
   # WEEDER
   - stage: tests
     env: ACTION=weeder
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
-    - travis_wait 42 stack --no-terminal test --no-run-tests --fast --ghc-options "+RTS -A256m -n2m -M3G -RTS"
+    - travis_wait 42 stack --no-terminal test --no-run-tests --fast
     - curl -sSL https://raw.github.com/ndmitchell/weeder/master/misc/travis.sh | sh -s .
 
   # DOCUMENTATION
