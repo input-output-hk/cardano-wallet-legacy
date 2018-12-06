@@ -120,6 +120,8 @@ jobs:
     <<: *snapshot-1
     env: ACTION=stylish-haskell
     script:
+    - test "$TRAVIS_EVENT_TYPE" = cron && rm -rf $HOME/.ghc $HOME/.stack $HOME/.local || true
+    - mkdir -p .stack-work $HOME/.ghc $HOME/.stack $HOME/.local/bin $HOME/.local/lib $HOME/.local/include
     # Install stack
     - travis_retry curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
     # Install stylish-haskell, not sure why but stack fails to copy the binary for the first install... Go figure :|
