@@ -16,6 +16,8 @@ module Cardano.Wallet.Server.Plugins
     , monitoringServer
     , acidStateSnapshots
     , updateWatcher
+    , nodeAPIServer
+    , setupNodeClient
     ) where
 
 import           Universum
@@ -60,7 +62,7 @@ import qualified Cardano.Wallet.WalletLayer as WalletLayer
 import qualified Cardano.Wallet.WalletLayer.Kernel as WalletLayer.Kernel
 
 import           Pos.Chain.Update (cpsSoftwareVersion)
-import           Pos.Infra.Diffusion.Types (Diffusion (..))
+import           Pos.Infra.Diffusion.Types (Diffusion (..), hoistDiffusion)
 import           Pos.Infra.Shutdown (HasShutdownContext (shutdownContext),
                      ShutdownContext)
 import           Pos.Launcher.Configuration (HasConfigurations)
@@ -69,6 +71,16 @@ import           Pos.Util.Wlog (logError, logInfo, modifyLoggerName,
                      usingLoggerName)
 import           Pos.Web (serveDocImpl, serveImpl)
 import qualified Pos.Web.Server
+
+
+-- TODO: Move imports to above before merging
+import           Cardano.Node.API as Node
+import           Ntp.Client (NtpConfiguration)
+import qualified Pos.Chain.Genesis as Genesis
+import           Pos.Chain.Update (updateConfiguration)
+import           Pos.Client.CLI (NodeWithApiArgs (..), getNodeApiOptions)
+import           Pos.Launcher.Resource (NodeResources (..))
+import           Pos.Util.CompileInfo (compileInfo)
 
 -- A @Plugin@ running in the monad @m@.
 type Plugin m = Diffusion m -> m ()
@@ -194,6 +206,34 @@ monitoringServer (NewWalletBackendParams WalletBackendParams{..}) =
                        Nothing
                        Nothing
 
+
+nodeAPIServer
+    :: (HasConfigurations, HasCompileInfo)
+    => NtpConfiguration
+    -> NodeResources ()
+    -> Genesis.Config
+    -> NewWalletBackendParams
+    -> Plugin Kernel.WalletMode
+nodeAPIServer
+    ntpConfig
+    nodeResources
+    genConfig
+    (NewWalletBackendParams _)
+    diffusion
+    = do
+    NodeWithApiArgs _ _ apiArgs <- liftIO $ getNodeApiOptions
+    logInfo $ "starting node api server with args: " <> (show apiArgs)
+    walletContext <- ask
+    liftIO $ Node.launchNodeServer
+        apiArgs
+        ntpConfig
+        nodeResources
+        updateConfiguration
+        compileInfo
+        genConfig
+        (hoistDiffusion (flip runReaderT walletContext) (liftIO) diffusion)
+
+
 -- | A @Plugin@ to periodically compact & snapshot the acid-state database.
 acidStateSnapshots :: AcidState db
                    -> NewWalletBackendParams
@@ -218,6 +258,8 @@ updateWatcher = const $ do
             newUpdate <- WalletLayer.waitForUpdate w
             logInfo "A new update was found!"
             WalletLayer.addUpdate w . cpsSoftwareVersion $ newUpdate
+
+
 
 instance Buildable Servant.NoContent where
     build Servant.NoContent = build ()

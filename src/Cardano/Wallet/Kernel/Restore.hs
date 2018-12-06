@@ -44,17 +44,18 @@ import           Cardano.Wallet.Kernel.Internal (WalletRestorationInfo (..),
                      WalletRestorationProgress (..), addOrReplaceRestoration,
                      cancelRestoration, lookupRestorationInfo,
                      removeRestoration, restartRestoration, walletKeystore,
-                     walletMeta, walletNode, walletProtocolMagic, wallets,
-                     wrpCurrentSlot, wrpTargetSlot, wrpThroughput)
+                     walletMeta, walletNode, walletProtocolMagic,
+                     walletProtocolParams, wallets, wrpCurrentSlot,
+                     wrpTargetSlot, wrpThroughput)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import           Cardano.Wallet.Kernel.NodeStateAdaptor (Lock, LockContext (..),
                      NodeConstraints, NodeStateAdaptor, WithNodeState,
                      defaultGetSlotStart, filterUtxo, getCoreConfig,
-                     getSecurityParameter, getSlotCount, mostRecentMainBlock,
-                     withNodeState)
+                     getSecurityParameter, mostRecentMainBlock, withNodeState)
 import           Cardano.Wallet.Kernel.PrefilterTx (PrefilteredBlock,
                      UtxoWithAddrId, prefilterBlock, prefilterUtxo',
                      toPrefilteredUtxo)
+import qualified Cardano.Wallet.Kernel.ProtocolParameters as Node
 import           Cardano.Wallet.Kernel.Read (foreignPendingByAccount,
                      getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Types (RawResolvedBlock (..),
@@ -254,7 +255,7 @@ beginRestoration pw prefilter root cur tgt restart = do
         tgtSlot = tgt ^. bcSlotId . fromDb
 
     -- Set the wallet's restoration information
-    slotCount <- getSlotCount (pw ^. walletNode)
+    slotCount <- Node.getSlotCount (pw ^. walletProtocolParams)
     let toSlotId = flattenSlotId slotCount
     progress <- newIORef $ WalletRestorationProgress
                            { _wrpCurrentSlot = maybe 0 (toSlotId . view (bcSlotId . fromDb)) cur
@@ -404,7 +405,7 @@ restoreWalletHistoryAsync wallet rootId prefilter progress start (tgtHash, tgtSl
         -- Update our progress
         now <- getCurrentTime
         let rate = Rate (fromIntegral $ length blocks) (now `diffUTCTime` startTime)
-        slotCount <- getSlotCount (wallet ^. walletNode)
+        slotCount <- Node.getSlotCount (wallet ^. walletProtocolParams)
         let flat             = flattenSlotId slotCount
             blockPerSec      = MeasuredIn $ BlockCount $ perSecond rate
         unless (null slotIds) $ modifyIORef' progress

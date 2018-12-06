@@ -2,6 +2,7 @@ module Cardano.Wallet.Action (actionWithWallet) where
 
 import           Universum
 
+import qualified Data.ByteString.Char8 as BS8
 import           Ntp.Client (NtpConfiguration, ntpClientSettings, withNtpClient)
 
 import           Pos.Chain.Genesis as Genesis (Config (..))
@@ -25,8 +26,10 @@ import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import           Cardano.Wallet.Kernel.Migration (migrateLegacyDataLayer)
 import qualified Cardano.Wallet.Kernel.Mode as Kernel.Mode
 import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
-import           Cardano.Wallet.Server.CLI (NewWalletBackendParams,
-                     getFullMigrationFlag, getWalletDbOptions, walletDbPath,
+import           Cardano.Wallet.Kernel.ProtocolParameters
+import           Cardano.Wallet.Server.CLI (NewWalletBackendParams (..),
+                     WalletBackendParams (..), getFullMigrationFlag,
+                     getWalletDbOptions, walletDbPath, walletNodeAddress,
                      walletRebuildDb)
 import           Cardano.Wallet.Server.Middlewares
                      (faultInjectionHandleIgnoreAPI, throttleMiddleware,
@@ -48,7 +51,9 @@ actionWithWallet
     -> SscParams
     -> NodeResources EmptyMempoolExt
     -> IO ()
-actionWithWallet params genesisConfig walletConfig txpConfig ntpConfig nodeParams _ nodeRes = do
+actionWithWallet
+    params@(NewWalletBackendParams (WalletBackendParams{..}))
+    genesisConfig walletConfig txpConfig ntpConfig nodeParams _ nodeRes = do
     logInfo "[Attention] Software is built with the wallet backend"
     ntpStatus <- withNtpClient (ntpClientSettings ntpConfig)
     userSecret <- readTVarIO (ncUserSecret $ nrContext nodeRes)
@@ -56,6 +61,14 @@ actionWithWallet params genesisConfig walletConfig txpConfig ntpConfig nodeParam
             genesisConfig
             nodeRes
             ntpStatus
+
+    let (nodeIp, nodePort) = walletNodeAddress
+    nodeClient <- Plugins.setupNodeClient
+         (BS8.unpack nodeIp, fromIntegral nodePort)
+         walletNodeTlsClientCert
+         walletNodeTlsCaCertPath
+         walletNodeTlsPrivKey
+    let protocolParams = newProtocolParameterAdaptor $ nodeClient
     liftIO $ Keystore.bracketLegacyKeystore userSecret $ \keystore -> do
         let dbOptions = getWalletDbOptions params
         let dbPath = walletDbPath dbOptions
@@ -66,7 +79,7 @@ actionWithWallet params genesisConfig walletConfig txpConfig ntpConfig nodeParam
             , Kernel.dbRebuild       = rebuildDB
             })
         let pm = configProtocolMagic genesisConfig
-        WalletLayer.Kernel.bracketPassiveWallet pm dbMode logMessage' keystore nodeState (npFInjects nodeParams) $ \walletLayer passiveWallet -> do
+        WalletLayer.Kernel.bracketPassiveWallet pm dbMode logMessage' keystore nodeState protocolParams (npFInjects nodeParams) $ \walletLayer passiveWallet -> do
             migrateLegacyDataLayer passiveWallet dbPath (getFullMigrationFlag params)
 
             let plugs = plugins (walletLayer, passiveWallet) dbMode

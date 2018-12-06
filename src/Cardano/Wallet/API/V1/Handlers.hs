@@ -15,6 +15,9 @@ import           Cardano.Wallet.NodeProxy (NodeHttpClient)
 import           Cardano.Wallet.WalletLayer (ActiveWalletLayer,
                      walletPassiveLayer)
 
+-- TODO: Move to proper place
+--import qualified Cardano.Node.API as Node
+
 
 handlers :: NodeHttpClient -> ActiveWalletLayer IO -> Server V1.API
 handlers nodeClient w =

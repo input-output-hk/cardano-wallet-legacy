@@ -55,12 +55,13 @@ import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.Read as Getters
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types
 import           Cardano.Wallet.Kernel.Internal (ActiveWallet (..),
-                     PassiveWallet (..), walletNode)
+                     PassiveWallet (..), walletNode, walletProtocolParams)
 import qualified Cardano.Wallet.Kernel.Internal as Internal
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
 import           Cardano.Wallet.Kernel.Pending (PartialTxMeta, newForeign,
                      newPending)
+import qualified Cardano.Wallet.Kernel.ProtocolParameters as Node
 import           Cardano.Wallet.Kernel.Read (getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Types (RawResolvedTx (..))
 import           Cardano.Wallet.Kernel.Util.Core
@@ -205,7 +206,7 @@ newUnsignedTransaction
 newUnsignedTransaction ActiveWallet{..} options accountId payees = runExceptT $ do
     snapshot <- liftIO $ getWalletSnapshot walletPassive
     initialEnv <- liftIO $ newEnvironment
-    maxTxSize  <- liftIO $ NodeStateAdaptor.getMaxTxSize (walletPassive ^. walletNode)
+    maxTxSize  <- liftIO $ Node.getMaxTxSize (walletPassive ^. walletProtocolParams)
     -- TODO: We should cache this maxInputs value
     let maxInputs = estimateMaxTxInputs maxTxSize
 
