@@ -28,3 +28,5 @@ extra-deps:
     - util/test
     - utxo
     - x509
+
+- generic-lens-1.1.0.0

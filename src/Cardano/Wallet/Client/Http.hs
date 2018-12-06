@@ -22,6 +22,8 @@ import qualified Cardano.Wallet.API.Internal as Internal
 import qualified Cardano.Wallet.API.V1 as V1
 import           Cardano.Wallet.Client
 
+-- | Just a type-alias to be aligned with Cardano.Node.Client
+type WalletHttpClient = WalletClient IO
 
 -- | Given a 'BaseUrl' and an @http-client@ 'Manager', this returns
 -- a 'WalletClient' that operates in 'IO'.
