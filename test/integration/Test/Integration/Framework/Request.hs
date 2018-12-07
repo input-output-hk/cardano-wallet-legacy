@@ -10,7 +10,7 @@ import           Universum
 import           Data.Generics.Product.Typed (HasType, typed)
 
 import           Cardano.Wallet.Client.Http (ClientError (..), WalletClient)
-import           Pos.Util.Servant (WalletResponse (..))
+import           Pos.Util.Servant (APIResponse (..))
 
 class (HasType (WalletClient IO) ctx) => HasHttpClient ctx where
     httpClient :: Lens' ctx (WalletClient IO)
@@ -40,8 +40,8 @@ class Request originalResponse where
             Right a ->
                 return a
 
-instance Request (WalletResponse a) where
-    type Response (WalletResponse a) = a
+instance Request (APIResponse a) where
+    type Response (APIResponse a) = a
     request action =
         view httpClient >>= liftIO . fmap (fmap wrData) . action
 
