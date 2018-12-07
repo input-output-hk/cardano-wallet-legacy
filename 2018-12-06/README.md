@@ -10,7 +10,7 @@
 
 ## Remarks
 
-- Ante (@akegalj) was on holiday until 2018/11/12
+- Ante (@akegalj) was on holiday until 2018/05/12
 - Ryan (@uroboros) was sick during the early weeks, therefore not at 100%
 
 
