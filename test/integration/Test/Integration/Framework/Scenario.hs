@@ -1,12 +1,11 @@
 module Test.Integration.Framework.Scenario
     ( Scenario
-    , runWithContext
     ) where
 
 import           Universum
 
-import           Test.Hspec.Core.Spec (ActionWith, Example (..), Item (..),
-                     Result (..), ResultStatus (..), Spec, SpecM, mapSpecItem)
+import           Test.Hspec.Core.Spec (Example (..), Result (..),
+                     ResultStatus (..))
 
 
 -- | A Wrapper around 'StateT' around which we define a few instances. The most
@@ -42,19 +41,7 @@ instance Example (Scenario s IO ()) where
       where
         runAndPersist :: MVar s -> IO ()
         runAndPersist mvar = do
-            s <- takeMVar mvar
-            (_, s') <- runStateT io s
-            putMVar mvar s'
-
--- | Execute all scenarios in sequence providing the given context 'ctx'
-runWithContext :: forall ctx. ctx -> SpecM ctx () -> Spec
-runWithContext ctx = mapSpecItem mapActionWith mapItem
-  where
-    mapActionWith :: ActionWith ctx -> ActionWith ()
-    mapActionWith fn = \() -> fn ctx
-
-    mapItem :: Item ctx -> Item ()
-    mapItem item = item
-        { itemExample =
-            \p action -> (itemExample item) p (action . mapActionWith)
-        }
+            let acquire = takeMVar mvar
+            let release = putMVar mvar
+            let between = runStateT io >=> (putMVar mvar . snd)
+            bracketOnError acquire release between

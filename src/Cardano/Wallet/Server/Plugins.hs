@@ -29,8 +29,9 @@ import qualified Servant
 
 import           Network.HTTP.Types.Status (badRequest400)
 import           Network.Wai (Application, Middleware, Response, responseLBS)
-import           Network.Wai.Handler.Warp (defaultSettings,
+import           Network.Wai.Handler.Warp (setOnException,
                      setOnExceptionResponse)
+import qualified Network.Wai.Handler.Warp as Warp
 
 import           Cardano.NodeIPC (startNodeJsIPC)
 import           Cardano.Wallet.API as API
@@ -65,6 +66,12 @@ import qualified Pos.Web.Server
 
 -- A @Plugin@ running in the monad @m@.
 type Plugin m = Diffusion m -> m ()
+
+-- | Override defautl Warp settings to avoid printing exception to console.
+-- They're already printing to logfile!
+defaultSettings :: Warp.Settings
+defaultSettings = Warp.defaultSettings
+    & setOnException (\_ _ -> return ())
 
 -- | A @Plugin@ to start the wallet REST server
 apiServer

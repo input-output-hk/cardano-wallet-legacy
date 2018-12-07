@@ -6,6 +6,7 @@ module Cardano.Wallet.Client.Http
     , module Cardano.Wallet.Client
     -- * Servant Client Export
     , module Servant.Client
+    , Manager
     ) where
 
 import           Universum
