@@ -1,7 +1,7 @@
 # Wallet Backend Weekly Report 
 
 <p align="right">
-  <strong>Week 47</strong>: 16/11/2018 → 22/11/2018
+  <strong>Week 47</strong>: 2018/11/16 → 2018/11/22
 </p>
 
 # Overview
