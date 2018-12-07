@@ -210,8 +210,8 @@ updateWalletPassword :: MonadIO m
 updateWalletPassword wallet
                      wId
                      (V1.PasswordUpdate
-                       (V1 oldPwd)
-                       (V1 newPwd)) = runExceptT $ do
+                       (V1.WalletPassPhrase oldPwd)
+                       (V1.WalletPassPhrase newPwd)) = runExceptT $ do
     rootId <- withExceptT UpdateWalletPasswordWalletIdDecodingFailed $
                 fromRootId wId
     v1wal <- fmap (uncurry toWallet) $

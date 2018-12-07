@@ -40,6 +40,7 @@ module Cardano.Wallet.API.V1.Types (
   , WalletOperation (..)
   , SpendingPassword
   , mkSpendingPassword
+  , WalletPassPhrase (..)
   , EosWallet (..)
   , NewEosWallet (..)
   , WalletAndTxHistory (..)
@@ -222,35 +223,29 @@ optsADTCamelCase = defaultOptions
 -- Versioning
 --
 
-mkSpendingPassword :: Text -> Either Text SpendingPassword
-mkSpendingPassword text =
-    case Base16.decode text of
-        Left e -> Left e
-        Right bs -> do
-            let bl = BS.length bs
-            -- Currently passphrase may be either 32-byte long or empty (for
-            -- unencrypted keys).
-            if bl == 0 || bl == Core.passphraseLength
-                then Right $ V1 $ ByteArray.convert bs
-                else Left $ sformat
-                     ("Expected spending password to be of either length 0 or "%int%", not "%int)
-                     Core.passphraseLength bl
+newtype WalletPassPhrase = WalletPassPhrase Core.PassPhrase
+    deriving (Show, Eq, Ord, Generic)
 
-instance ToJSON (V1 Core.PassPhrase) where
-    toJSON = String . Base16.encode . ByteArray.convert
+deriveSafeBuildable ''WalletPassPhrase
+instance BuildableSafeGen WalletPassPhrase where
+    buildSafeGen sl (WalletPassPhrase pp) =
+        bprint (plainOrSecureF sl build (fconst "<wallet passphrase>")) pp
 
-instance FromJSON (V1 Core.PassPhrase) where
+instance ToJSON WalletPassPhrase where
+    toJSON (WalletPassPhrase pp) = String . Base16.encode . ByteArray.convert $ pp
+
+instance FromJSON WalletPassPhrase where
     parseJSON (String pp) = case mkSpendingPassword pp of
         Left e    -> fail (toString e)
         Right pp' -> pure pp'
     parseJSON x           = typeMismatch "parseJSON failed for PassPhrase" x
 
-instance Arbitrary (V1 Core.PassPhrase) where
-    arbitrary = fmap V1 arbitrary
+instance Arbitrary WalletPassPhrase where
+    arbitrary = fmap WalletPassPhrase arbitrary
 
-instance ToSchema (V1 Core.PassPhrase) where
+instance ToSchema WalletPassPhrase where
     declareNamedSchema _ =
-        pure $ NamedSchema (Just "V1PassPhrase") $ mempty
+        pure $ NamedSchema (Just "WalletPassPhrase") $ mempty
             & type_ .~ SwaggerString
             & format ?~ "hex|base16"
 
@@ -343,20 +338,30 @@ instance ToSchema (V1 Core.Timestamp) where
 -- 'SpendingPassword'.
 -- Practically speaking, it's just a type synonym for a PassPhrase, which is a
 -- base16-encoded string.
-type SpendingPassword = V1 Core.PassPhrase
+type SpendingPassword = WalletPassPhrase
 
-instance Semigroup (V1 Core.PassPhrase) where
-    V1 a <> V1 b = V1 (a <> b)
+instance Semigroup WalletPassPhrase where
+    WalletPassPhrase a <> WalletPassPhrase b = WalletPassPhrase (a <> b)
 
-instance Monoid (V1 Core.PassPhrase) where
-    mempty = V1 mempty
+instance Monoid WalletPassPhrase where
+    mempty = WalletPassPhrase mempty
     mappend = (<>)
 
 deriving newtype instance Num a => Num (V1 a)
 
-instance BuildableSafeGen SpendingPassword where
-    buildSafeGen sl pwd =
-        bprint (plainOrSecureF sl build (fconst "<spending password>")) pwd
+mkSpendingPassword :: Text -> Either Text SpendingPassword
+mkSpendingPassword text =
+    case Base16.decode text of
+        Left e -> Left e
+        Right bs -> do
+            let bl = BS.length bs
+            -- Currently passphrase may be either 32-byte long or empty (for
+            -- unencrypted keys).
+            if bl == 0 || bl == Core.passphraseLength
+                then Right $ WalletPassPhrase $ ByteArray.convert bs
+                else Left $ sformat
+                     ("Expected spending password to be of either length 0 or "%int%", not "%int)
+                     Core.passphraseLength bl
 
 type WalletName = Text
 
@@ -2142,7 +2147,7 @@ instance Example NewAccount
 instance Example AddressValidity
 instance Example NewAddress
 instance Example ShieldedRedemptionCode
-instance Example (V1 Core.PassPhrase)
+instance Example WalletPassPhrase
 instance Example (V1 Core.Coin)
 
 -- | We have a specific 'Example' instance for @'V1' 'Address'@ because we want

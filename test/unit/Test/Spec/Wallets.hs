@@ -43,7 +43,6 @@ import qualified Cardano.Wallet.API.Request.Pagination as API
 import qualified Cardano.Wallet.API.Response as V1
 import           Cardano.Wallet.API.V1.Handlers.Accounts as Handlers
 import           Cardano.Wallet.API.V1.Handlers.Wallets as Handlers
-import           Cardano.Wallet.API.V1.Types (V1 (..), unV1)
 import qualified Cardano.Wallet.API.V1.Types as V1
 import           Control.Monad.Except (runExceptT)
 import           Servant.Server
@@ -336,9 +335,10 @@ spec = describe "Wallets" $ do
                         let nm  = makeNetworkMagic pm
                             wid = WalletIdHdRnd fixtureHdRootId
                         oldKey <- Keystore.lookup nm wid keystore
+                        let V1.WalletPassPhrase corePassword = fixtureSpendingPassword
                         res <- Kernel.updatePassword wallet
                                                      fixtureHdRootId
-                                                     (unV1 fixtureSpendingPassword)
+                                                     corePassword
                                                      newPwd
                         case res of
                              Left e -> fail (show e)
@@ -353,9 +353,10 @@ spec = describe "Wallets" $ do
                     newPwd <- pick arbitrary
                     pm     <- pick arbitrary
                     withNewWalletFixture pm $ \ _ _ wallet Fixture{..} -> do
+                        let V1.WalletPassPhrase corePassword = fixtureSpendingPassword
                         res <- Kernel.updatePassword wallet
                                                      fixtureHdRootId
-                                                     (unV1 fixtureSpendingPassword)
+                                                     corePassword
                                                      newPwd
                         let passphraseIsEmpty = newPwd == emptyPassphrase
                         let satisfied = \case

@@ -187,7 +187,7 @@ redeemAda aw
           V1.Redemption{
               redemptionRedemptionCode   = code
             , redemptionMnemonic         = mMnemonic
-            , redemptionSpendingPassword = V1.V1 spendingPassword
+            , redemptionSpendingPassword = V1.WalletPassPhrase spendingPassword
             , redemptionWalletId         = wId
             , redemptionAccountIndex     = accIx
             } = runExceptT $ do

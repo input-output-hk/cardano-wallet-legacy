@@ -62,7 +62,7 @@ spec = describe "Marshalling & Unmarshalling" $ do
         aesonRoundtripProp @NewWallet Proxy
         aesonRoundtripProp @NewAddress Proxy
         aesonRoundtripProp @(V1 Core.Coin) Proxy
-        aesonRoundtripProp @(V1 Crypto.PassPhrase) Proxy
+        aesonRoundtripProp @WalletPassPhrase Proxy
         aesonRoundtripProp @(V1 InputSelectionPolicy) Proxy
         aesonRoundtripProp @TimeInfo Proxy
         aesonRoundtripProp @Transaction Proxy
@@ -162,13 +162,13 @@ spec = describe "Marshalling & Unmarshalling" $ do
     describe "Invariants" $ do
         describe "password" $ do
             it "empty string decodes to empty password" $
-                jsonString "" `decodesTo` (== V1 (Crypto.emptyPassphrase))
+                jsonString "" `decodesTo` (== WalletPassPhrase (Crypto.emptyPassphrase))
             it "base-16 string of length 32 decodes to nonempty password" $
                 jsonString (fromString $ replicate 64 'a')
-                    `decodesTo` (/= V1 (Crypto.emptyPassphrase))
+                    `decodesTo` (/= WalletPassPhrase (Crypto.emptyPassphrase))
             it "invalid length password decoding fails" $
                 -- currently passphrase should be either empty or of length 32
-                decodingFails @(V1 Crypto.PassPhrase) "aabbcc" Proxy
+                decodingFails @WalletPassPhrase "aabbcc" Proxy
 
     describe "Timestamp Parsing" $ do
         describe "ToIndex" $ do
