@@ -61,6 +61,8 @@ instance Example EosWalletId where
     example = EosWalletId <$>
         pure (Prelude.read "c2cc10e1-57d6-4b6f-9899-38d972112d8c")
 
+instance NFData EosWalletId
+
 deriveJSON Aeson.defaultOptions ''EosWalletId
 
 -- | Generator for new 'EosWalletId'.

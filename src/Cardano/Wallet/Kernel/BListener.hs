@@ -333,6 +333,7 @@ switchToFork pw@PassiveWallet{..} oldest bs = do
             restoringWals = Set.fromList $
               Map.keys restorationInfo <&> \case
                 WalletIdHdRnd rootId -> rootId
+                WalletIdEOS _rootId -> error "TO BE IMPLEMENTED @uroboros #34"
         -- Stop the restorations.
         mapM_ cancelRestoration restorations
         -- Switch to the fork, retrying if another restoration begins in the meantime.

@@ -10,10 +10,14 @@ module Cardano.Wallet.Kernel.Types (
   , RawResolvedBlock(..)
   , invRawResolvedBlock
   , mkRawResolvedBlock
-  -- ** Abstract Wallet/AccountIds
+  -- ** Abstract Wallet HD key types
   , WalletId (..)
   , AccountId (..)
+  , AddressId (..)
+  , AddressIx (..)
   , accountToWalletId
+  , addrIdToAccountId
+  , mkAddressId
     -- ** From raw to derived types
   , fromRawResolvedTx
   , fromRawResolvedBlock
@@ -27,6 +31,7 @@ import           Formatting.Buildable (Buildable (..))
 import           Pos.Chain.Block (MainBlock, gbBody, mbTxs, mbWitnesses)
 import           Pos.Chain.Txp (Tx, TxAux (..), TxId, TxIn (..), txInputs)
 import qualified Pos.Core as Core
+import           Pos.Crypto (PublicKey)
 
 import           Formatting (bprint, (%))
 import qualified Formatting as F
@@ -35,6 +40,7 @@ import           Cardano.Wallet.Kernel.DB.BlockContext
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.Resolved
+import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
 import qualified Cardano.Wallet.Kernel.Util.Core as Core
 
 {-------------------------------------------------------------------------------
@@ -47,15 +53,10 @@ import qualified Cardano.Wallet.Kernel.Util.Core as Core
 -- of the Wallet public key
 data WalletId =
     -- | HD wallet with randomly generated addresses
-  WalletIdHdRnd HD.HdRootId
+    WalletIdHdRnd HD.HdRootId
 
-    {- potential future kinds of wallet IDs:
-    -- | HD wallet with sequentially generated addresses
-    | WalletIdHdSeq ...
-
-    -- | External wallet (all crypto done off-site, like hardware wallets)
-    | WalletIdExt ...
-    -}
+  -- | External wallet (all crypto done off-site, like hardware wallets)
+  | WalletIdEOS EosWalletId
 
     deriving (Eq, Ord, Generic)
 
@@ -64,6 +65,8 @@ instance NFData WalletId
 instance Buildable WalletId where
     build (WalletIdHdRnd rootId) =
         bprint ("WalletIdHdRnd " % F.build) rootId
+    build (WalletIdEOS rootId) =
+        bprint ("WalletIdEOS " % F.build) rootId
 
 accountToWalletId :: HD.HdAccountId -> WalletId
 accountToWalletId accountId
@@ -74,13 +77,52 @@ accountToWalletId accountId
 -- An Account Id can take several forms, the simplest of which is a
 -- random-indexed, hardeded HD Account.
 data AccountId =
-    -- | HD wallet with randomly generated (hardened) index.
+    -- | HD account with randomly generated (hardened) index.
     AccountIdHdRnd HD.HdAccountId
+    -- | HD account with externally held keys
+  | AccountIdEOS PublicKey
     deriving (Eq, Ord)
 
 instance Buildable AccountId where
     build (AccountIdHdRnd accountId) =
         bprint ("AccountIdHdRnd " % F.build) accountId
+    build (AccountIdEOS accountId) =
+        bprint ("AccountIdEOS " % F.build) accountId
+
+-- | Address Id
+--
+-- An Address Id can take several forms
+data AddressId =
+    -- | HD AddressId for randomly generated addresses
+    AddressIdHdRnd HD.HdAddressId
+    -- | HD AddressId for Externally Owned Sequential wallets:
+    --   account Pub Key, address Ix
+  | AddressIdEOS PublicKey Word --
+    deriving (Eq, Ord)
+
+-- | Address Ix
+--
+-- An AddressIx can take several forms
+data AddressIx =
+    -- | Randomly generated address index
+    AddressIxHdRnd HD.HdAddressIx
+    -- | Sequentially generated address index for EOS wallets
+  | AddressIxEOS Word
+    deriving (Eq, Ord)
+
+-- | Convert a generic AddressId to a generic AccountId
+addrIdToAccountId :: AddressId -> AccountId
+addrIdToAccountId (AddressIdHdRnd addrId)
+    = AccountIdHdRnd (addrId ^. HD.hdAddressIdParent)
+addrIdToAccountId (AddressIdEOS parentAccountId _)
+    = AccountIdEOS parentAccountId
+
+mkAddressId :: (AccountId, AddressIx) -> AddressId
+mkAddressId (AccountIdHdRnd accountId, AddressIxHdRnd addressIx)
+    = AddressIdHdRnd (HD.HdAddressId accountId addressIx)
+mkAddressId (AccountIdEOS accountPK, AddressIxEOS addressIx)
+    = AddressIdEOS accountPK addressIx
+mkAddressId _ = error "Cannot construct AddressId"
 
 {-------------------------------------------------------------------------------
   Input resolution: raw types

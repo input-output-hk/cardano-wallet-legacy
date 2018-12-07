@@ -93,6 +93,8 @@ createAccount spendingPassword accountName walletId pw = do
                                          esk
                                          hdRootId
                                          pw
+         WalletIdEOS _eosWalletId ->
+              error "TO BE IMPLEMENTED @uroboros #34"
 
 -- | Creates a new 'Account' using the random HD derivation under the hood.
 -- This code follows the same pattern of 'createHdRndAddress', but the two

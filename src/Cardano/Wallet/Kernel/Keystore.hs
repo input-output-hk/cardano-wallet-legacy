@@ -268,6 +268,7 @@ lookup nm wId (Keystore ks) =
 lookupKey :: NetworkMagic -> UserSecret -> WalletId -> Maybe EncryptedSecretKey
 lookupKey nm us (WalletIdHdRnd walletId) =
     Data.List.find (\k -> eskToHdRootId nm k == walletId) (us ^. usKeys)
+lookupKey _ _ (WalletIdEOS _walletId) = Nothing -- EOS wallets don't have any keys
 
 -- | Return all Keystore 'usKeys'
 getKeys :: Keystore -> IO [EncryptedSecretKey]

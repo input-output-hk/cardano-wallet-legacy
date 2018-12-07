@@ -111,6 +111,8 @@ createAddress spendingPassword accId pw = do
                   Nothing  -> return (Left $ CreateAddressKeystoreNotFound accId)
                   Just esk -> createHdRndAddress spendingPassword esk hdAccId pw
 
+         (AccountIdEOS _accountPK) -> error "TO BE IMPLEMENTED @uroboros #34"
+
 -- | Creates a new 'Address' using the random HD derivation under the hood.
 -- Being this an operation bound not only by the number of available derivation
 -- indexes \"left\" in the account, some form of short-circuiting is necessary.
