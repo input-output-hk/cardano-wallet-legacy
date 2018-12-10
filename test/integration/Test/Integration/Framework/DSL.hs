@@ -12,11 +12,13 @@ module Test.Integration.Framework.DSL
     -- * Steps
     , setup
     , request
+    , request_
     , verify
 
     -- * Requests (Only API types)
     , NewAddress(..)
     , NewWallet (..)
+    , NewAccount (..)
     , Payment (..)
     , Redemption (..)
     , Setup(..)
@@ -54,6 +56,7 @@ module Test.Integration.Framework.DSL
     , expectTxStatusEventually
     , expectTxStatusNever
     , expectWalletError
+    , expectWalletEventuallyRestored
     , expectWalletUTxO
 
     -- * Helpers
@@ -94,7 +97,7 @@ import           Pos.Core.NetworkMagic (NetworkMagic (..))
 import           Pos.Crypto (ShouldCheckPassphrase (..),
                      safeDeterministicKeyGen)
 import           Test.Integration.Framework.Request (HasHttpClient, request,
-                     successfulRequest, ($-))
+                     request_, successfulRequest, ($-))
 import           Test.Integration.Framework.Scenario (Scenario)
 
 --
@@ -420,6 +423,20 @@ expectTxStatusNever w statuses = \case
             Just _  -> fail "expectTxStatusNever: reached one of the provided statuses."
 
 
+-- | Wait until a wallet is restored, up to a certain point.
+expectWalletEventuallyRestored
+    :: (MonadIO m, MonadFail m, MonadReader ctx m, HasHttpClient ctx)
+    => Either ClientError Wallet
+    -> m ()
+expectWalletEventuallyRestored = \case
+    Left e -> wantedSuccessButError e
+    Right w -> do
+        result <- ask >>= \ctx -> timeout (60 * second) (waitForRestored ctx w)
+        case result of
+            Nothing -> fail "expectWalletEventuallyRestored: waited too long for restoration."
+            Just _  -> return ()
+
+
 expectWalletError
     :: (MonadIO m, MonadFail m, Show a)
     => WalletError
@@ -496,6 +513,21 @@ waitForTxStatus ctx w statuses txn = do
         return ()
     else
         threadDelay (5 * second) >> waitForTxStatus ctx w statuses txn
+
+-- | Wait until the given wallet is restored.
+waitForRestored
+    :: HasHttpClient ctx
+    => ctx
+    -> Wallet
+    -> IO ()
+waitForRestored ctx w = do
+    response <- flip runReaderT ctx $ successfulRequest $ Client.getWallet
+        $- w ^. walletId
+
+    case walSyncState response of
+        Synced -> return ()
+        _      -> threadDelay (5  * second) >> waitForRestored ctx w
+
 
 -- | Make a backup phrase from a raw list of words.
 mkBackupPhrase

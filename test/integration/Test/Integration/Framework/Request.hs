@@ -1,6 +1,7 @@
 module Test.Integration.Framework.Request
     ( HasHttpClient
     , request
+    , request_
     , successfulRequest
     , ($-)
     ) where
@@ -27,6 +28,14 @@ class Request originalResponse where
         :: forall m ctx. (MonadIO m, MonadReader ctx m, HasHttpClient ctx)
         => (WalletClient IO -> IO (Either ClientError originalResponse))
         -> m (Either ClientError (Response originalResponse))
+
+    -- | Run a given request and discard the response
+    request_
+        :: forall m ctx. (MonadIO m, MonadReader ctx m, HasHttpClient ctx)
+        => (WalletClient IO -> IO (Either ClientError originalResponse))
+        -> m ()
+    request_ =
+        void . request
 
     -- | Run a given request as above, but throws if it fails
     successfulRequest
