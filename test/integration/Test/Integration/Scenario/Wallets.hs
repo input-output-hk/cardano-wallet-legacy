@@ -49,7 +49,7 @@ spec = do
             [ expectWalletUTxO []
             ]
 
-    xscenario "UTxO statistics reflect wallet's activity" $ do
+    scenario "UTxO statistics reflect wallet's activity" $ do
         fixture <- setup $ defaultSetup
             & initialCoins .~ [14, 42, 1337]
 

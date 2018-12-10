@@ -439,12 +439,13 @@ expectWalletUTxO coins = \case
     Left e  -> wantedSuccessButError e
     Right stats -> do
         addr <- liftIO $ generate arbitrary
-        let utxo = Map.fromList $ flip map coins $ \coin ->
-                ( TxInUnknown 0 "arbitrary input"
+        let constructUtxoEntry input coin =
+                ( TxInUnknown input "arbitrary input"
                 , TxOutAux (TxOut addr (mkCoin coin))
                 )
-        computeUtxoStatistics log10 [utxo] `shouldBe` stats
+        let utxo = Map.fromList $ zipWith constructUtxoEntry [0..] coins
 
+        computeUtxoStatistics log10 [utxo] `shouldBe` stats
 
 --
 -- INTERNALS
