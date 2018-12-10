@@ -5,14 +5,13 @@ module Test.Integration.Framework.DSL
     (
     -- * Scenario
       scenario
+    , xscenario
     , Scenarios
     , Context(..)
-    , setupFaucets
 
     -- * Steps
     , setup
     , request
-    , successfulRequest
     , verify
 
     -- * Requests (Only API types)
@@ -72,11 +71,11 @@ module Test.Integration.Framework.DSL
 import           Universum hiding (getArgs, second)
 
 import           Control.Concurrent (threadDelay)
-import           Control.Concurrent.Async (Async, async, race, wait)
+import           Control.Concurrent.Async (race)
 import           Data.Generics.Internal.VL.Lens (lens)
 import           Data.Generics.Product.Typed (HasType, typed)
 import qualified Data.Map.Strict as Map
-import           Test.Hspec.Core.Spec (SpecM, it)
+import           Test.Hspec.Core.Spec (SpecM, it, xit)
 import           Test.Hspec.Expectations.Lifted
 import           Test.QuickCheck (arbitrary, generate)
 
@@ -107,7 +106,7 @@ import           Test.Integration.Framework.Scenario (Scenario)
 -- This helps speed up testing and isolate them.
 data Context = Context
     { _faucets
-        :: [NewWallet]
+        :: [FilePath]
         -- Already funded faucet wallets
     , _client
         :: WalletClient IO
@@ -128,12 +127,15 @@ scenario
     -> Scenarios Context
 scenario title spec = it title (successfulRequest Client.resetWalletState >> spec)
 
+xscenario
+    :: String
+    -> Scenario Context IO ()
+    -> Scenarios Context
+xscenario = xit
 
 --
 -- TYPES
 --
-
-type Getter s a = (a -> Const a a) -> s -> Const a s
 
 data DestinationChoice
     = RandomDestination
@@ -178,15 +180,9 @@ setup args = withNextFaucet $ \faucet -> do
     addrs  <- forM (RandomDestination :| []) setupDestination
     return $ Fixture wal addrs phrase
 
-
 -- | Apply 'a' to all actions in sequence
-verify
-    :: (Monad m)
-    => a
-    -> [a -> m ()]
-    -> m ()
-verify a =
-    mapM_ (a &)
+verify :: (Monad m) => a -> [a -> m ()] -> m ()
+verify a = mapM_ (a &)
 
 
 --
@@ -229,7 +225,7 @@ defaultSource
     => s
     -> PaymentSource
 defaultSource s =
-    PaymentSource (s ^. walletId) defaultAccountId
+    PaymentSource (s ^. wallet . walletId) defaultAccountId
 
 defaultSpendingPassword :: SpendingPassword
 defaultSpendingPassword = mempty
@@ -259,23 +255,14 @@ amount =
     _set :: HasType (V1 Coin) s => (s, Word64) -> s
     _set (s, v) = set typed (V1 $ mkCoin v) s
 
-assuranceLevel
-    :: HasType AssuranceLevel s
-    => Lens' s AssuranceLevel
-assuranceLevel =
-    typed
+assuranceLevel :: HasType AssuranceLevel s => Lens' s AssuranceLevel
+assuranceLevel = typed
 
-backupPhrase
-    :: HasType BackupPhrase s
-    => Lens' s BackupPhrase
-backupPhrase =
-    typed
+backupPhrase :: HasType BackupPhrase s => Lens' s BackupPhrase
+backupPhrase = typed
 
-faucets
-    :: HasType [NewWallet] s
-    => Lens' s [NewWallet]
-faucets =
-    typed
+faucets :: HasType [FilePath] s => Lens' s [FilePath]
+faucets = typed
 
 initialCoins
     :: HasType [Coin] s
@@ -288,32 +275,17 @@ initialCoins =
     _set :: HasType [Coin] s => (s, [Word64]) -> s
     _set (s, v) = set typed (map mkCoin v) s
 
-mnemonicWords
-    :: HasType (Maybe [Text]) s
-    => Lens' s (Maybe [Text])
-mnemonicWords =
-    typed
+mnemonicWords :: HasType (Maybe [Text]) s => Lens' s (Maybe [Text])
+mnemonicWords = typed
 
-wallet
-    :: HasType Wallet s
-    => Lens' s Wallet
-wallet =
-    typed
+wallet :: HasType Wallet s => Lens' s Wallet
+wallet = typed
 
-walletId
-    :: HasType Wallet s
-    => Getter s WalletId
-walletId =
-    lens _get fst
-  where
-    _get :: HasType Wallet s => s -> WalletId
-    _get = walId . view typed
+walletId :: HasType WalletId s => Lens' s WalletId
+walletId = typed
 
-walletName
-    :: HasType Text s
-    => Lens' s Text
-walletName =
-    typed
+walletName :: HasType Text s => Lens' s Text
+walletName = typed
 
 
 --
@@ -329,13 +301,13 @@ walletName =
 --       expectFieldEqual #walName "My Wallet" response
 expectFieldEqual
     :: (MonadIO m, MonadFail m, Show a, Eq a)
-    => Getter s a
+    => Lens' s a
     -> a
     -> Either ClientError s
     -> m ()
 expectFieldEqual getter a = \case
     Left e  -> wantedSuccessButError e
-    Right s -> a `shouldBe` view getter s
+    Right s -> view getter s `shouldBe` a
 
 
 -- | Expects entire equality of two types
@@ -376,7 +348,7 @@ expectTxInHistoryOf
     -> m ()
 expectTxInHistoryOf w = \case
     Left e    -> wantedSuccessButError e
-    Right txn -> tryNextPage (on (==) txId txn) 0
+    Right txn -> tryNextPage (on (==) txId txn) 1
   where
     tryNextPage predicate i = do
         txns <- successfulRequest $ Client.getTransactionIndexFilterSorts
@@ -401,7 +373,7 @@ expectAddressInIndexOf
     -> m ()
 expectAddressInIndexOf = \case
     Left e  -> wantedSuccessButError e
-    Right addr -> tryNextPage ((==) addr) 0
+    Right addr -> tryNextPage ((==) addr) 1
   where
     tryNextPage predicate i = do
         addrs <- successfulRequest $ Client.getAddressIndexPaginated
@@ -418,40 +390,31 @@ expectAddressInIndexOf = \case
 -- seconds if not.
 expectTxStatusEventually
     :: (MonadIO m, MonadFail m, MonadReader ctx m, HasHttpClient ctx)
-    => [TransactionStatus]
+    => Wallet
+    -> [TransactionStatus]
     -> Either ClientError Transaction
     -> m ()
-expectTxStatusEventually statuses = \case
+expectTxStatusEventually w statuses = \case
     Left e    -> wantedSuccessButError e
     Right txn -> do
-        result <- ask >>= \ctx -> timeout (60 * second) (waitForTxStatus ctx statuses txn)
+        result <- ask >>= \ctx -> timeout (60 * second) (waitForTxStatus ctx w statuses txn)
         case result of
             Nothing -> fail "expectTxStatusEventually: waited too long for statuses."
             Just _  -> return ()
-
-
--- | Same as expectTxStatusEventually but poll transactions in an asynchronous
--- thread.
-expectTxStatusEventuallyAsync
-    :: (MonadIO m, MonadReader ctx m, HasHttpClient ctx)
-    => [TransactionStatus]
-    -> Either ClientError Transaction
-    -> m (Async ())
-expectTxStatusEventuallyAsync s t = ask >>= \ctx ->
-    liftIO $ async $ flip runReaderT ctx $ expectTxStatusEventually s t
 
 
 -- | Checks that a transacton "never" reaches one of the given status. Never
 -- really means 60 seconds, you know...
 expectTxStatusNever
     :: (MonadIO m, MonadFail m, MonadReader ctx m, HasHttpClient ctx)
-    => [TransactionStatus]
+    => Wallet
+    -> [TransactionStatus]
     -> Either ClientError Transaction
     -> m ()
-expectTxStatusNever statuses = \case
+expectTxStatusNever w statuses = \case
     Left e    -> wantedSuccessButError e
     Right txn -> do
-        result <- ask >>= \ctx -> timeout (60 * second) (waitForTxStatus ctx statuses txn)
+        result <- ask >>= \ctx -> timeout (60 * second) (waitForTxStatus ctx w statuses txn)
         case result of
             Nothing -> return ()
             Just _  -> fail "expectTxStatusNever: reached one of the provided statuses."
@@ -464,7 +427,7 @@ expectWalletError
     -> m ()
 expectWalletError e' = \case
     Right a -> wantedErrorButSuccess a
-    Left e  -> e `shouldBe` (ClientWalletError e')
+    Left e  -> (ClientWalletError e') `shouldBe` e
 
 
 expectWalletUTxO
@@ -480,12 +443,7 @@ expectWalletUTxO coins = \case
                 ( TxInUnknown 0 "arbitrary input"
                 , TxOutAux (TxOut addr (mkCoin coin))
                 )
-        stats `shouldBe` computeUtxoStatistics log10 [utxo]
-
-
---
--- HELPERS
---
+        computeUtxoStatistics log10 [utxo] `shouldBe` stats
 
 
 --
@@ -499,7 +457,6 @@ wantedSuccessButError
 wantedSuccessButError =
     fail . ("expected a successful response but got an error: " <>) . show
 
-
 wantedErrorButSuccess
     :: (MonadFail m, Show a)
     => a
@@ -507,36 +464,30 @@ wantedErrorButSuccess
 wantedErrorButSuccess =
     fail . ("expected an error but got a successful response: " <>) . show
 
-
-waitAll :: MonadIO m => [Async a] -> m [a]
-waitAll = liftIO . traverse wait
-
-
 timeout :: (MonadIO m) => Int -> IO a -> m (Maybe a)
 timeout maxWaitingTime action = liftIO $ do
     race (threadDelay maxWaitingTime) action >>= \case
         Left _  -> return Nothing
         Right a -> return (Just a)
 
-
 second :: Int
 second = 1000000
-
 
 -- | Wait until the given transaction reaches the given status. Potentially
 -- loop ad infinitum; Caller is expected to cancel the thread at some point.
 waitForTxStatus
     :: HasHttpClient ctx
     => ctx
+    -> Wallet
     -> [TransactionStatus]
     -> Transaction
     -> IO ()
-waitForTxStatus ctx statuses txn = do
+waitForTxStatus ctx w statuses txn = do
     -- NOTE
     -- A bit tricky here, we can't just fire async operation on anything else
     -- but plain `IO`. Hence the explicit context passing here.
     txns <- flip runReaderT ctx $ successfulRequest $ Client.getTransactionIndex
-        $- Nothing
+        $- Just (walId w)
         $- Nothing
         $- Nothing
 
@@ -544,7 +495,7 @@ waitForTxStatus ctx statuses txn = do
     if ((fmap txStatus tx) `elem` (fmap Just statuses)) then
         return ()
     else
-        threadDelay (5 * second) >> waitForTxStatus ctx statuses txn
+        threadDelay (5 * second) >> waitForTxStatus ctx w statuses txn
 
 -- | Make a backup phrase from a raw list of words.
 mkBackupPhrase
@@ -569,16 +520,20 @@ withNextFaucet actionWithFaucet = do
     ctx <- get
 
     when (null $ ctx ^. faucets) $ fail $
-        "Failed to setup new scenario: there's no more available faucet\
-        \ wallets! We 'fake' cleaning up the environment by just splitting\
-        \ available funds across multiple initial wallets. Each test scenario\
-        \ uses at least one of those wallets. Increase the number of initial\
-        \ wallets should you want to right more tests :)"
+        "\nFailed to setup new scenario: there's no more available faucet wallets!\
+        \\nWe import a faucet wallet for each scenario but only have a limited\
+        \ number of them. This can be modified directly in the configuration file,\
+        \ by default in: \n\n\ttest/integration/configuration.yaml\
+        \\n\ntry increasing the number of available 'poors' wallets\
+        \\n\nspec: &default_core_genesis_spec\
+        \\n\tinitializer:\
+        \\n\t\ttestBalance:\
+        \\n\t\t\tpoors: ???\n"
 
     let acquireFaucet = do
-            let (faucet:rest) = ctx ^. faucets
+            let (key:rest) = ctx ^. faucets
             put (ctx & faucets .~ rest)
-            successfulRequest (Client.postWallet $- faucet)
+            successfulRequest $ Client.importWallet $- WalletImport Nothing key
 
     let releaseFaucet faucet = do
             successfulRequest (Client.deleteWallet $- walId faucet)
@@ -603,7 +558,7 @@ setupWallet args phrase faucet = do
     let paymentSource = PaymentSource (walId faucet) minBound
     let paymentDist (addr, coin) = pure $ PaymentDistribution (addrId addr) (V1 coin)
 
-    txns <- forM (args ^. initialCoins) $ \coin -> do
+    forM_ (args ^. initialCoins) $ \coin -> do
         -- NOTE
         -- Making payments to a different address each time to cope with
         -- grouping policy. That's actually a behavior we might want to
@@ -619,57 +574,8 @@ setupWallet args phrase faucet = do
             Nothing
             Nothing
 
-        expectTxStatusEventuallyAsync [InNewestBlocks, Persisted] txn
-
-    waitAll txns >> return wal
-
-
--- |
-setupFaucets
-    :: (MonadIO m, MonadFail m)
-    => WalletClient IO
-    -> Word64
-    -> Wallet
-    -> m [NewWallet]
-setupFaucets client n genesis = flip runReaderT (Identity client) $ do
-    -- NOTE If we ever need more funds, we can always take pull in more
-    -- genesis wallets.
-    -- So far: 37.5M Ada is available on each genesis wallet which is
-    -- probably largely enough to spread across thousands of faucet wallets for
-    -- a thousand test scenarios!
-    -- Our biggest scenario requires 240K lovelaces, which gives us 156M
-    -- faucet wallets if capped at 240K lovelaces each :) ...
-    let total = genesis ^. amount - (n * 200000) -- Gross estimation of what is available, minus fee
-    let coins = replicate (fromIntegral n) (total `div` n)
-    putTextLn $ "TOTAL: " <> show total
-    putTextLn $ "PER FAUCET: " <> show (take 1 coins)
-    phrases <- (=<<) waitAll $ forM coins $ \coin -> do
-        phrase <- liftIO (generate arbitrary)
-        faucet <- successfulRequest $ Client.postWallet $- newFaucet phrase
-        addr   <- successfulRequest $ Client.postAddress $- newAddress faucet
-        txn    <- request $ Client.postTransaction $- newPayment genesis addr coin
-        successfulRequest $ Client.deleteWallet $- walId faucet
-        fmap (fmap (const phrase)) $ expectTxStatusEventuallyAsync [InNewestBlocks, Persisted] txn
-    return $ flip map phrases $ \phrase -> (newFaucet phrase)
-        { newwalOperation = RestoreWallet }
-  where
-    newFaucet phrase = NewWallet
-        phrase
-        noSpendingPassword
-        defaultAssuranceLevel
-        "Faucet Wallet"
-        CreateWallet
-    newAddress w =
-        NewAddress noSpendingPassword defaultAccountId (walId w)
-    paymentSource w =
-        PaymentSource (walId w) defaultAccountId
-    paymentDist (a, c) =
-        pure $ PaymentDistribution (addrId a) (V1 c)
-    newPayment w a c = Payment
-        (paymentSource w)
-        (paymentDist (a, mkCoin c))
-        defaultGroupingPolicy
-        noSpendingPassword
+        expectTxStatusEventually wal [InNewestBlocks, Persisted] txn
+    return wal
 
 
 -- | Generate some destinations for payments.

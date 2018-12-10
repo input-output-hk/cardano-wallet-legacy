@@ -16,10 +16,11 @@ spec = do
             & assuranceLevel .~ StrictAssurance
 
         response <- request $ Client.getWallet
-            $- (fixture ^. walletId)
+            $- (fixture ^. wallet . walletId)
 
         verify response
-            [ expectEqual (fixture ^. wallet)
+            [ expectFieldEqual walletName "漢patate字"
+            , expectFieldEqual assuranceLevel StrictAssurance
             ]
 
     scenario "updating a wallet persists the update" $ do
@@ -27,10 +28,10 @@ spec = do
 
         [_, response] <- sequence
             [ request $ Client.updateWallet
-                $- (fixture ^. walletId)
+                $- (fixture ^. wallet . walletId)
                 $- WalletUpdate StrictAssurance "漢patate字"
             , request $ Client.getWallet
-                $- (fixture ^. walletId)
+                $- (fixture ^. wallet . walletId)
             ]
 
         verify response
@@ -42,18 +43,18 @@ spec = do
         fixture <- setup defaultSetup
 
         response <- request $ Client.getUtxoStatistics
-            $- (fixture ^. walletId)
+            $- (fixture ^. wallet . walletId)
 
         verify response
             [ expectWalletUTxO []
             ]
 
-    scenario "UTxO statistics reflect wallet's activity" $ do
+    xscenario "UTxO statistics reflect wallet's activity" $ do
         fixture <- setup $ defaultSetup
             & initialCoins .~ [14, 42, 1337]
 
         response <- request $ Client.getUtxoStatistics
-            $- (fixture ^. walletId)
+            $- (fixture ^. wallet . walletId)
 
         verify response
             [ expectWalletUTxO [14, 42, 1337]
@@ -71,7 +72,7 @@ spec = do
             CreateWallet
 
         verify response
-            [ expectWalletError (WalletAlreadyExists (fixture ^. walletId))
+            [ expectWalletError (WalletAlreadyExists (fixture ^. wallet . walletId))
             ]
 
     scenario "can't restore wallet if backupPhrase is already known" $ do
@@ -86,7 +87,7 @@ spec = do
             RestoreWallet
 
         verify response
-            [ expectWalletError (WalletAlreadyExists (fixture ^. walletId))
+            [ expectWalletError (WalletAlreadyExists (fixture ^. wallet . walletId))
             ]
   where
     testBackupPhrase :: Maybe [Text]

@@ -180,24 +180,23 @@ jobs:
     - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit --fast
 
   # USUAL TESTS (integration)
-  #- stage: tests
-  #  if: type != cron
-  #  env: ACTION=coverage
-  #  # Run all tests with code coverage
-  #  script:
-  #  - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
-  #  - travis_wait 42 stack --no-terminal test cardano-wallet:test:integration --fast
-
-  # FULL COVERAGE
   - stage: tests
-    if: type = cron
+    if: type != cron
     env: ACTION=coverage
     # Run all tests with code coverage
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
-    - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit --fast --coverage
-    # - travis_wait 42 stack --no-terminal test cardano-wallet:test:integration --fast --coverage
-    - shc cardano-wallet unit
+    - travis_wait 42 stack --no-terminal test cardano-wallet:test:integration --fast
+
+  # FULL COVERAGE
+  - stage: tests
+    if: (type = cron) OR (commit_message =~ /ci@force coveralls/)
+    env: ACTION=coverage
+    # Run all tests with code coverage
+    script:
+    - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
+    - travis_wait 42 stack --no-terminal test cardano-wallet:test:unit cardano-wallet:test:integration --fast --coverage
+    - shc cardano-wallet unit integration
 
   # NIGHTLY
   - stage: tests

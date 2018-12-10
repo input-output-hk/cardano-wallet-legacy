@@ -15,7 +15,7 @@ spec = do
         response <- request $ Client.postAddress $- NewAddress
             noSpendingPassword
             defaultAccountId
-            (fixture ^. walletId)
+            (fixture ^. wallet . walletId)
 
         verify response
             [ expectAddressInIndexOf

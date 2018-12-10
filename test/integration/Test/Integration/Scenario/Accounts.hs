@@ -14,7 +14,7 @@ spec = do
         fixture <- setup defaultSetup
 
         response <- request $ Client.getAccountBalance
-            $- (fixture ^. walletId)
+            $- (fixture ^. wallet . walletId)
             $- defaultAccountId
 
         verify response
@@ -26,18 +26,18 @@ spec = do
             & initialCoins .~ [14, 42]
 
         response <- request $ Client.getAccountBalance
-            $- (fixture ^. walletId)
+            $- (fixture ^. wallet . walletId)
             $- defaultAccountId
 
         verify response
-            [ expectFieldEqual amount 66
+            [ expectFieldEqual amount 56
             ]
 
     scenario "only account's addresses can be retrieved" $ do
         fixture <- setup defaultSetup
 
         response <- request $ Client.getAccountAddresses
-            $- (fixture ^. walletId)
+            $- (fixture ^. wallet . walletId)
             $- defaultAccountId
             $- defaultPage
             $- defaultPerPage

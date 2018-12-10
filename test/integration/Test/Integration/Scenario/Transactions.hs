@@ -12,7 +12,7 @@ spec :: Scenarios Context
 spec = do
     scenario "successful payment appears in the history" $ do
         fixture <- setup $ defaultSetup
-            & initialCoins .~ [100]
+            & initialCoins .~ [1000000]
 
         response <- request $ Client.postTransaction $- Payment
             (defaultSource fixture)
@@ -22,12 +22,12 @@ spec = do
 
         verify response
             [ expectTxInHistoryOf (fixture ^. wallet)
-            , expectTxStatusEventually [Creating, Applying, InNewestBlocks, Persisted]
+            , expectTxStatusEventually (fixture ^. wallet) [Creating, Applying, InNewestBlocks, Persisted]
             ]
 
     scenario "estimate fees of well-formed transaction returns" $ do
         fixture <- setup $ defaultSetup
-            & initialCoins .~ [100]
+            & initialCoins .~ [1000000]
 
         response <- request $ Client.getTransactionFee $- Payment
             (defaultSource fixture)
@@ -63,7 +63,7 @@ spec = do
             noSpendingPassword
 
         verify response
-            [ expectWalletError (NotEnoughMoney (ErrAvailableBalanceIsInsufficient 42))
+            [ expectWalletError (NotEnoughMoney (ErrAvailableBalanceIsInsufficient 14))
             ]
 
     scenario "payment fails when wallet cannot cover for fee" $ do
@@ -89,16 +89,16 @@ spec = do
                     (ShieldedRedemptionCode "QBYOctbb6fJT/dBDLwg4je+SAvEzEhRxA7wpLdEFhnY=")
                     noRedemptionMnemonic
                     defaultSpendingPassword
-                    (fixture ^. walletId)
+                    (fixture ^. wallet . walletId)
                     defaultAccountId
 
                 verify response
-                    [ expectTxStatusEventually [InNewestBlocks, Persisted]
+                    [ expectTxStatusEventually (fixture ^. wallet) [InNewestBlocks, Persisted]
                     ]
 
             , do -- // 2 Control The Balance
                 response <- request $ Client.getAccountBalance
-                    $- (fixture ^. walletId)
+                    $- (fixture ^. wallet . walletId)
                     $- defaultAccountId
 
                 verify response
@@ -110,7 +110,7 @@ spec = do
                     (ShieldedRedemptionCode "QBYOctbb6fJT/dBDLwg4je+SAvEzEhRxA7wpLdEFhnY=")
                     noRedemptionMnemonic
                     defaultSpendingPassword
-                    (fixture ^. walletId)
+                    (fixture ^. wallet . walletId)
                     defaultAccountId
 
                 verify response
@@ -154,7 +154,7 @@ spec = do
     --   fee+   : 171905         fee+   : 179947
     --
     --           Actual fee: 180035 (+88)
-    coinSelectionScenario "needs one extra input" [10000, 10000] 1
+    coinSelectionScenario "needs one extra input" [100000, 100000] 1
 
     -- Initial Selection:      Final Selection:
     --   inputs : [30000]        inputs : [30000, 30000, 30000, 30000,
@@ -179,5 +179,5 @@ spec = do
                 noSpendingPassword
 
             verify response
-                [ expectTxStatusEventually [InNewestBlocks, Persisted]
+                [ expectTxStatusEventually (fixture ^. wallet) [InNewestBlocks, Persisted]
                 ]
