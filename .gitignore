@@ -28,3 +28,7 @@ cabal.project.local~
 
 test_keystore.*
 state-integration
+secret.key
+secret.key.lock
+wallet-db-acid/
+wallet-db-sqlite.sqlite3
