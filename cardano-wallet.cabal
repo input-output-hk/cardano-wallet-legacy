@@ -443,6 +443,7 @@ test-suite unit
       API.SwaggerSpec
       Arbitrary
       Golden.APILayout
+      Golden.APIV1Types
       Golden.WalletError
       Test.Infrastructure.Generator
       Test.Infrastructure.Genesis
