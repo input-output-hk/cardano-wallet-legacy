@@ -17,6 +17,7 @@ import qualified API.MarshallingSpec as Marshalling
 import qualified API.RequestSpec as ReqSpec
 import qualified API.SwaggerSpec as Swagger
 import qualified Golden.APILayout
+import qualified Golden.APIV1Types
 import qualified Golden.WalletError
 import qualified Test.Spec.Accounts
 import qualified Test.Spec.Addresses
@@ -42,7 +43,8 @@ main :: IO ()
 main = do
     -- Golden tests
     runTests
-        [ Golden.WalletError.tests
+        [ Golden.APIV1Types.tests
+        , Golden.WalletError.tests
         ]
     hspec Golden.APILayout.spec
 
