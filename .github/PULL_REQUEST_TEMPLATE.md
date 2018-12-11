@@ -1,32 +1,24 @@
-# Linked Issue
-
-<Put here a reference to the issue this PR relates to and which requirements it tackles>
+<!-- Put here a reference to the issue this PR relates to and which requirements it tackles -->
 
 <p align="right">#</p>
 
-
 # Overview
 
-<Detail in a few bullet points the work accomplished in this PR>
+<!-- Detail in a few bullet points the work accomplished in this PR -->
 
-1. - [ ] ...
+- [ ] I have ...
 
 
 # Comments
 
-<Additional comments or screenshots to attach if any>
+<!-- Additional comments or screenshots to attach if any -->
 
-¯\\\_(ツ)\_/¯
+<!-- 
+Don't forget to:
 
-
-# Checklist
-
-- [ ] I've kept this PR simple, on-the-spot, free of cosmetic changes.
-- [ ] I have reviewed my commit messages and history.
-- [ ] I've assigned a reviewer.
-- [ ] I acknowledge my changes may require an update in the wiki.
-- [ ] I have added a reference to this PR to the corresponding issue.
-
----
-
-- [ ] I've checked the checklist
+ ✓ Self-review your changes to make sure nothing unexpected slipped through
+ ✓ Assign yourself to the PR
+ ✓ Assign one or several reviewer(s)
+ ✓ Once created, link this PR to its corresponding ticket
+ ✓ Acknowledge any changes required to the Wiki
+-->

@@ -4,40 +4,73 @@ about: Create a bug report
 
 ---
 
+| Release | Operating System       | Cause |
+| ---     | ---                    | ---   |
+| next    | Windows & OSX & Linux) | Code  v Configuration v Environment v Human v Unknown |
+
+
 # Context
  
-<A clear and concise description of what the bug is.>
-
-| |  |
-| --- | --- | 
-| Commit Hash / Release Tag | ... |
-| Operating System | (Windows, OSX, Linux) | 
+<!-- WHEN CREATED
+Any information that is useful to understand the bug and the subsystem
+it evolves in. References to documentation and or other tickets are 
+welcome.
+--> 
 
 # Steps to Reproduce
 
-<Steps to reproduce the behavior>
+<!-- WHEN CREATED
+Steps to reproduce the behavior
+-->
 
 1. ...
 
-# Expected behavior
+## Expected behavior
 
-<A clear and concise description of what you expected to happen.>
+<!-- WHEN CREATED
+A clear and concise description of what you expected to happen. 
+-->
 
-# Actual behavior
+## Actual behavior
  
 <A clear and concise description of what you observe instead. If applicable add screenshots to help explain your problem.>
 
+
+
+
+
 ---
+
+# Resolution Plan
+
+<!-- WHEN IN PROGRESS
+What is happening? How is this going to be fixed? Detail the approach and give,
+in the form of a TODO list steps toward the resolution of the bug. This may be
+refined as the investigation progresses.
+-->
+
 
 # PR
 
-| Number    | Base      |
-| ---       | ---       |
-| [][PR-1] | `develop` |
+<!-- WHEN IN PROGRESS
+List of all PRs related to this ticket.
 
-[PR-1]: https://github.com/input-output-hk/cardano-wallet/pull/ 
+e.g.
+
+| Number | Base            |
+| ---    | ---             |
+| #14    | `develop`       |
+| #42    | `release/2.0.0` |
+-->
+
+| Number   | Base      |
+| ---      | ---       |
+| #?       | `develop` |
 
 
-# Retrospective
+# QA 
 
-<To be completed in retrospective. What was the issue and how could this bug slip through testing.>
+<!-- WHEN IN PROGRESS
+How do we make sure the bug has been fixed? Give here manual steps or tests to
+verify the fix. How/why could this bug slip through testing?
+-->
