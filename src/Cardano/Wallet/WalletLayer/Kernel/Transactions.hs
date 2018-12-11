@@ -12,8 +12,8 @@ import           Formatting (build, sformat)
 import           GHC.TypeLits (symbolVal)
 
 import           Pos.Chain.Txp (TxId)
-import           Pos.Core (Address, Coin, SlotCount, SlotId, Timestamp,
-                     decodeTextAddress, flattenSlotId, getBlockCount)
+import           Pos.Core (Address, Coin, SlotCount, SlotId, decodeTextAddress,
+                     flattenSlotId, getBlockCount)
 import           Pos.Util.Wlog (Severity (..))
 
 import           Cardano.Wallet.API.Indices
@@ -40,7 +40,7 @@ getTransactions :: MonadIO m
                 -> Maybe V1.AccountIndex
                 -> Maybe (V1 Address)
                 -> RequestParams
-                -> FilterOperations '[V1 TxId, V1 Timestamp] V1.Transaction
+                -> FilterOperations '[V1 TxId, V1.WalletTimestamp] V1.Transaction
                 -> SortOperations V1.Transaction
                 -> m (Either GetTxError (APIResponse [V1.Transaction]))
 getTransactions wallet mbWalletId mbAccountIndex mbAddress params fop sop = liftIO $ runExceptT $ do
@@ -163,7 +163,7 @@ metaToTx db slotCount current TxMeta{..} = do
         txOutputs = outputsToPayDistr <$> _txMetaOutputs,
         txType = if _txMetaIsLocal then V1.LocalTransaction else V1.ForeignTransaction,
         txDirection = if _txMetaIsOutgoing then V1.OutgoingTransaction else V1.IncomingTransaction,
-        txCreationTime = V1 _txMetaCreationAt,
+        txCreationTime = V1.WalletTimestamp _txMetaCreationAt,
         txStatus = status
     }
         where

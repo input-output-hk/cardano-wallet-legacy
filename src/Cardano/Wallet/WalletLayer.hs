@@ -38,7 +38,7 @@ import           Test.QuickCheck (Arbitrary (..), oneof)
 import           Pos.Chain.Block (Blund)
 import           Pos.Chain.Txp (Tx, TxId, Utxo)
 import           Pos.Chain.Update (ConfirmedProposalState, SoftwareVersion)
-import           Pos.Core (Coin, Timestamp)
+import           Pos.Core (Coin)
 import qualified Pos.Core as Core (Address)
 import           Pos.Core.Chrono (NE, NewestFirst (..), OldestFirst (..))
 import           Pos.Core.NetworkMagic (NetworkMagic)
@@ -55,7 +55,7 @@ import           Cardano.Wallet.API.V1.Types (Account, AccountBalance,
                      PasswordUpdate, Payment, Redemption, SignedTransaction,
                      SpendingPassword, Transaction, UnsignedTransaction,
                      V1 (..), Wallet, WalletAddress, WalletId, WalletImport,
-                     WalletUpdate)
+                     WalletTimestamp, WalletUpdate)
 import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import qualified Cardano.Wallet.Kernel.Addresses as Kernel
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
@@ -472,7 +472,7 @@ data PassiveWalletLayer m = PassiveWalletLayer
                            -> Maybe AccountIndex
                            -> Maybe (V1 Address)
                            -> RequestParams
-                           -> FilterOperations '[V1 TxId, V1 Timestamp] Transaction
+                           -> FilterOperations '[V1 TxId, WalletTimestamp] Transaction
                            -> SortOperations Transaction
                            -> m (Either GetTxError (APIResponse [Transaction]))
     , getTxFromMeta        :: TxMeta -> m (Either Kernel.UnknownHdAccount Transaction)

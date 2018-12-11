@@ -41,6 +41,7 @@ module Cardano.Wallet.API.V1.Types (
   , SpendingPassword
   , mkSpendingPassword
   , WalletPassPhrase (..)
+  , WalletTimestamp (..)
   , EosWallet (..)
   , NewEosWallet (..)
   , WalletAndTxHistory (..)
@@ -226,6 +227,28 @@ optsADTCamelCase = defaultOptions
 newtype WalletPassPhrase = WalletPassPhrase Core.PassPhrase
     deriving (Show, Eq, Ord, Generic)
 
+-- | A 'SpendingPassword' represent a secret piece of information which can be
+-- optionally supplied by the user to encrypt the private keys. As private keys
+-- are needed to spend funds and this password secures spending, here the name
+-- 'SpendingPassword'.
+-- Practically speaking, it's just a type synonym for a PassPhrase, which is a
+-- base16-encoded string.
+type SpendingPassword = WalletPassPhrase
+
+mkSpendingPassword :: Text -> Either Text SpendingPassword
+mkSpendingPassword text =
+    case Base16.decode text of
+        Left e -> Left e
+        Right bs -> do
+            let bl = BS.length bs
+            -- Currently passphrase may be either 32-byte long or empty (for
+            -- unencrypted keys).
+            if bl == 0 || bl == Core.passphraseLength
+                then Right $ WalletPassPhrase $ ByteArray.convert bs
+                else Left $ sformat
+                     ("Expected spending password to be of either length 0 or "%int%", not "%int)
+                     Core.passphraseLength bl
+
 deriveSafeBuildable ''WalletPassPhrase
 instance BuildableSafeGen WalletPassPhrase where
     buildSafeGen sl (WalletPassPhrase pp) =
@@ -294,35 +317,43 @@ instance ToHttpApiData (V1 Core.Address) where
 deriving instance Hashable (V1 Core.Address)
 deriving instance NFData (V1 Core.Address)
 
+newtype WalletTimestamp = WalletTimestamp Core.Timestamp
+    deriving (Eq, Generic, Ord, Show)
+
+deriveSafeBuildable ''WalletTimestamp
+instance BuildableSafeGen WalletTimestamp where
+    buildSafeGen sl (WalletTimestamp ts) =
+        bprint (plainOrSecureF sl build (fconst "<wallet timestamp>")) ts
+
 -- | Represents according to 'apiTimeFormat' format.
-instance ToJSON (V1 Core.Timestamp) where
-    toJSON timestamp =
-        let utcTime = timestamp ^. _V1 . Core.timestampToUTCTimeL
+instance ToJSON WalletTimestamp where
+    toJSON (WalletTimestamp timestamp) =
+        let utcTime = timestamp ^. Core.timestampToUTCTimeL
         in  String $ showApiUtcTime utcTime
 
-instance ToHttpApiData (V1 Core.Timestamp) where
-    toQueryParam = view (_V1 . Core.timestampToUTCTimeL . to showApiUtcTime)
+instance ToHttpApiData WalletTimestamp where
+    toQueryParam (WalletTimestamp timestamp) = view (Core.timestampToUTCTimeL . to showApiUtcTime) $ timestamp
 
-instance FromHttpApiData (V1 Core.Timestamp) where
+instance FromHttpApiData WalletTimestamp where
     parseQueryParam t =
         maybe
             (Left ("Couldn't parse timestamp or datetime out of: " <> t))
-            (Right . V1)
+            (Right . WalletTimestamp)
             (Core.parseTimestamp t)
 
 -- | Parses from both UTC time in 'apiTimeFormat' format and a fractional
 -- timestamp format.
-instance FromJSON (V1 Core.Timestamp) where
+instance FromJSON WalletTimestamp where
     parseJSON = withText "Timestamp" $ \t ->
         maybe
             (fail ("Couldn't parse timestamp or datetime out of: " <> toString t))
-            (pure . V1)
+            (pure . WalletTimestamp)
             (Core.parseTimestamp t)
 
-instance Arbitrary (V1 Core.Timestamp) where
-    arbitrary = fmap V1 arbitrary
+instance Arbitrary WalletTimestamp where
+    arbitrary = fmap WalletTimestamp arbitrary
 
-instance ToSchema (V1 Core.Timestamp) where
+instance ToSchema WalletTimestamp where
     declareNamedSchema _ =
         pure $ NamedSchema (Just "Timestamp") $ mempty
             & type_ .~ SwaggerString
@@ -332,14 +363,6 @@ instance ToSchema (V1 Core.Timestamp) where
 -- Domain-specific types, mostly placeholders.
 --
 
--- | A 'SpendingPassword' represent a secret piece of information which can be
--- optionally supplied by the user to encrypt the private keys. As private keys
--- are needed to spend funds and this password secures spending, here the name
--- 'SpendingPassword'.
--- Practically speaking, it's just a type synonym for a PassPhrase, which is a
--- base16-encoded string.
-type SpendingPassword = WalletPassPhrase
-
 instance Semigroup WalletPassPhrase where
     WalletPassPhrase a <> WalletPassPhrase b = WalletPassPhrase (a <> b)
 
@@ -348,20 +371,6 @@ instance Monoid WalletPassPhrase where
     mappend = (<>)
 
 deriving newtype instance Num a => Num (V1 a)
-
-mkSpendingPassword :: Text -> Either Text SpendingPassword
-mkSpendingPassword text =
-    case Base16.decode text of
-        Left e -> Left e
-        Right bs -> do
-            let bl = BS.length bs
-            -- Currently passphrase may be either 32-byte long or empty (for
-            -- unencrypted keys).
-            if bl == 0 || bl == Core.passphraseLength
-                then Right $ WalletPassPhrase $ ByteArray.convert bs
-                else Left $ sformat
-                     ("Expected spending password to be of either length 0 or "%int%", not "%int)
-                     Core.passphraseLength bl
 
 type WalletName = Text
 
@@ -847,8 +856,8 @@ data Wallet = Wallet {
     , walName                       :: !WalletName
     , walBalance                    :: !(V1 Core.Coin)
     , walHasSpendingPassword        :: !Bool
-    , walSpendingPasswordLastUpdate :: !(V1 Core.Timestamp)
-    , walCreatedAt                  :: !(V1 Core.Timestamp)
+    , walSpendingPasswordLastUpdate :: !WalletTimestamp
+    , walCreatedAt                  :: !WalletTimestamp
     , walAssuranceLevel             :: !AssuranceLevel
     , walSyncState                  :: !SyncState
     , walType                       :: !WalletType
@@ -1716,7 +1725,7 @@ data Transaction = Transaction
     -- ^ The type for this transaction (e.g local, foreign, etc).
   , txDirection     :: !TransactionDirection
     -- ^ The direction for this transaction (e.g incoming, outgoing).
-  , txCreationTime  :: !(V1 Core.Timestamp)
+  , txCreationTime  :: !WalletTimestamp
     -- ^ The time when transaction was created.
   , txStatus        :: !TransactionStatus
   } deriving (Show, Ord, Eq, Generic)
