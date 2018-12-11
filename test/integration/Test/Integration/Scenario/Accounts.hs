@@ -1,6 +1,6 @@
 module Test.Integration.Scenario.Accounts
-  ( spec
-  ) where
+    ( spec
+    ) where
 
 import           Universum
 

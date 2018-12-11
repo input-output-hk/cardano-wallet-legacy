@@ -19,13 +19,12 @@ import           Cardano.Cluster (MaxWaitingTime (..), NodeName (..),
                      NodeType (..), startNode)
 import           Cardano.Cluster.Environment (Artifact (..), Env,
                      prepareEnvironment, withSystemStart)
-import           Cardano.Cluster.Util (execParserEnv, ntwrkAddrToBaseUrl,
-                     oneSecond, runAsync, stripFilterPrefix,
-                     unsafeNetworkAddressFromString, varFromParser)
+import           Cardano.Cluster.Util (execParserEnv, oneSecond, runAsync,
+                     stripFilterPrefix, varFromParser)
 import           Cardano.Wallet.Action (actionWithWallet)
-import           Cardano.Wallet.Client.Http (ClientError (..),
+import           Cardano.Wallet.Client.Http (ClientError (..), Manager,
                      ServantError (..), WalletClient (getNodeInfo),
-                     WalletHttpClient, mkHttpClient)
+                     WalletHttpClient)
 import           Cardano.Wallet.Server.CLI (NewWalletBackendParams (..),
                      walletBackendParamsParser)
 import           Pos.Chain.Genesis (GeneratedSecrets (..),
@@ -52,6 +51,7 @@ defaultIntegrationEnv = Map.fromList
     , ("STATE_DIR", "./state-integration")
     , ("REBUILD_DB", "True")
     , ("WALLET_ADDRESS", "127.0.0.1:8090")
+    , ("WALLET_DOC_ADDRESS", "127.0.0.1:8190")
     , ("WALLET_DB_PATH", "./state-integration/wallet-db/edge")
     , ("WALLET_REBUILD_DB", "True")
     ]
@@ -63,7 +63,7 @@ defaultIntegrationEnv = Map.fromList
 -- independently.
 startCluster
     :: [(NodeName, NodeType)]
-    -> IO ([FilePath], WalletHttpClient)
+    -> IO (Env, [FilePath], Manager)
 startCluster nodes = do
     env0 <- getEnvironment >>= withSystemStart
         . Map.union defaultIntegrationEnv
@@ -72,7 +72,6 @@ startCluster nodes = do
     let stateDir   = env0 ! "STATE_DIR" -- Safe, we just defaulted it above
     let configFile = env0 ! "CONFIGURATION_FILE" -- Safe, we just defaulted it above
     let configKey  = env0 ! "CONFIGURATION_KEY" -- Safe, we just defaulted it above
-    let walletAddr = env0 ! "WALLET_ADDRESS" -- Safe, we just defaulted it above
     handles <- forM nodes $ \node@(_, nodeType) -> runAsync $ \yield -> do
         let (artifacts, nodeEnv) = prepareEnvironment node nodes stateDir env0
         let (genesis, topology, logger, tls) = artifacts
@@ -85,17 +84,15 @@ startCluster nodes = do
                 yield Nothing >> startNode node nodeEnv
             NodeEdge -> do
                 manager <- init topology >> init logger >> init tls
-                let waddr  = unsafeNetworkAddressFromString walletAddr
-                let client = mkHttpClient (ntwrkAddrToBaseUrl waddr) manager
-                yield (Just client) >> startWallet node nodeEnv
-    let client = Prelude.head $ catMaybes (map snd handles)
+                yield (Just (nodeEnv, manager)) >> startWallet node nodeEnv
+    let (env, manager) = Prelude.head $ catMaybes (map snd handles)
     let configOpts = ConfigurationOptions
             { cfoFilePath    = configFile
             , cfoKey         = toText configKey
             , cfoSystemStart = Just 0
             , cfoSeed        = Nothing
             }
-    (, client) <$> getGenesisKeys stateDir configOpts
+    (env,,manager) <$> getGenesisKeys stateDir configOpts
   where
     init :: Artifact a b -> IO b
     init = initializeArtifact

@@ -6,6 +6,7 @@
 module Cardano.Wallet.Client
     ( -- * The abstract client
       WalletClient(..)
+    , WalletDocClient(..)
     , getWalletIndex
     , getAccounts
     , getWallets
@@ -37,6 +38,7 @@ import           Universum
 
 import           Control.Concurrent (threadDelay)
 import           Control.Exception (Exception (..))
+import           Data.Swagger (Swagger)
 import           Servant.Client (GenResponse (..), Response, ServantError (..))
 
 import qualified Pos.Chain.Txp as Core
@@ -157,6 +159,12 @@ data WalletClient m
         :: m (Either ClientError ())
     , importWallet
         :: WalletImport -> Resp m Wallet
+    } deriving Generic
+
+
+data WalletDocClient m = WalletDocClient
+    { getSwaggerJson
+        :: m Swagger
     } deriving Generic
 
 -- | Paginates through all request pages and concatenates the result.
