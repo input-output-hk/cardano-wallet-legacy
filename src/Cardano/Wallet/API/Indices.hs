@@ -50,16 +50,16 @@ instance ToIndex Wallet Core.Coin where
         Just c                        -> Just (Core.mkCoin c)
     accessIx Wallet{..} = let (V1 balance) = walBalance in balance
 
-instance ToIndex Wallet (V1 Core.Timestamp) where
-    toIndex _ = fmap V1 . Core.parseTimestamp
+instance ToIndex Wallet WalletTimestamp where
+    toIndex _ = fmap WalletTimestamp . Core.parseTimestamp
     accessIx = walCreatedAt
 
 instance ToIndex Transaction (V1 Txp.TxId) where
     toIndex _ = fmap V1 . rightToMaybe . decodeHash
     accessIx Transaction{..} = txId
 
-instance ToIndex Transaction (V1 Core.Timestamp) where
-    toIndex _ = fmap V1 . Core.parseTimestamp
+instance ToIndex Transaction WalletTimestamp where
+    toIndex _ = fmap WalletTimestamp . Core.parseTimestamp
     accessIx Transaction{..} = txCreationTime
 
 instance ToIndex WalletAddress (V1 Core.Address) where
@@ -87,8 +87,8 @@ instance HasPrimKey WalletAddress where
     primKey = addrId
 
 -- | The secondary indices for each major resource.
-type SecondaryWalletIxs        = '[Core.Coin, V1 Core.Timestamp]
-type SecondaryTransactionIxs   = '[V1 Core.Timestamp]
+type SecondaryWalletIxs        = '[Core.Coin, WalletTimestamp]
+type SecondaryTransactionIxs   = '[WalletTimestamp]
 type SecondaryAccountIxs       = '[]
 type SecondaryWalletAddressIxs = '[]
 
@@ -137,12 +137,12 @@ type family IndexToQueryParam resource ix where
 
     IndexToQueryParam Wallet  Core.Coin               = "balance"
     IndexToQueryParam Wallet  WalletId                = "id"
-    IndexToQueryParam Wallet  (V1 Core.Timestamp)     = "created_at"
+    IndexToQueryParam Wallet  WalletTimestamp         = "created_at"
 
     IndexToQueryParam WalletAddress (V1 Core.Address) = "address"
 
     IndexToQueryParam Transaction (V1 Txp.TxId)      = "id"
-    IndexToQueryParam Transaction (V1 Core.Timestamp) = "created_at"
+    IndexToQueryParam Transaction WalletTimestamp    = "created_at"
 
     -- This is the fallback case. It will trigger a type error if you use
     -- 'IndexToQueryParam'' with a pairing that is invalid. We want this to
@@ -167,7 +167,7 @@ class KnownSymbol (IndexToQueryParam resource ix) => KnownQueryParam resource ix
 instance KnownQueryParam Account AccountIndex
 instance KnownQueryParam Wallet Core.Coin
 instance KnownQueryParam Wallet WalletId
-instance KnownQueryParam Wallet (V1 Core.Timestamp)
+instance KnownQueryParam Wallet WalletTimestamp
 instance KnownQueryParam WalletAddress (V1 Core.Address)
 instance KnownQueryParam Transaction (V1 Txp.TxId)
-instance KnownQueryParam Transaction (V1 Core.Timestamp)
+instance KnownQueryParam Transaction WalletTimestamp

@@ -66,7 +66,7 @@ spec = describe "Marshalling & Unmarshalling" $ do
         aesonRoundtripProp @(V1 InputSelectionPolicy) Proxy
         aesonRoundtripProp @TimeInfo Proxy
         aesonRoundtripProp @Transaction Proxy
-        aesonRoundtripProp @(V1 Core.Timestamp) Proxy
+        aesonRoundtripProp @WalletTimestamp Proxy
         aesonRoundtripProp @TransactionDirection Proxy
         aesonRoundtripProp @TransactionType Proxy
         aesonRoundtripProp @TransactionStatus Proxy
@@ -92,7 +92,7 @@ spec = describe "Marshalling & Unmarshalling" $ do
         httpApiDataRoundtripProp @AccountIndex Proxy
         httpApiDataRoundtripProp @(V1 Txp.TxId) Proxy
         httpApiDataRoundtripProp @WalletId Proxy
-        httpApiDataRoundtripProp @(V1 Core.Timestamp) Proxy
+        httpApiDataRoundtripProp @WalletTimestamp Proxy
         httpApiDataRoundtripProp @(V1 Core.Address) Proxy
         httpApiDataRoundtripProp @PerPage Proxy
         httpApiDataRoundtripProp @Page Proxy
@@ -172,13 +172,13 @@ spec = describe "Marshalling & Unmarshalling" $ do
 
     describe "Timestamp Parsing" $ do
         describe "ToIndex" $ do
-            let toIndex' :: Text -> Maybe (V1 Core.Timestamp)
+            let toIndex' :: Text -> Maybe WalletTimestamp
                 toIndex' = toIndex (Proxy @Transaction)
             it "can parse an ISO8601 UTC formatted date" $ do
                 toIndex' "1999-10-12"
                     `shouldBe`
                         Just (UTCTime (fromGregorian 1999 10 12) 0
-                            ^. from Core.timestampToUTCTimeL . to V1
+                            ^. from Core.timestampToUTCTimeL . to WalletTimestamp
                             )
             it "can parse an ISO8601 UTC formatted datetime (seconds)" $ do
                 toIndex' "1999-10-12T22:15:31.123"
@@ -187,7 +187,7 @@ spec = describe "Marshalling & Unmarshalling" $ do
                             UTCTime
                                 (fromGregorian 1999 10 12)
                                 ((22 * 60 * 60) + (15 * 60) + 31.123)
-                            ^. from Core.timestampToUTCTimeL . to V1
+                            ^. from Core.timestampToUTCTimeL . to WalletTimestamp
                             )
             it "can parse an ISO8601 UTC formatted datetime (fractional)" $ do
                 toIndex' "1999-10-12T22:15:37"
@@ -196,19 +196,19 @@ spec = describe "Marshalling & Unmarshalling" $ do
                             UTCTime
                                 (fromGregorian 1999 10 12)
                                 ((22 * 60 * 60) + (15 * 60) + 37)
-                            ^. from Core.timestampToUTCTimeL . to V1
+                            ^. from Core.timestampToUTCTimeL . to WalletTimestamp
                             )
             it "can parse an integral timestamp" $ do
                 toIndex' "123456789"
                     `shouldBe`
                         Just ((123456789 :: POSIXTime)
-                            ^. from Core.timestampSeconds . to V1
+                            ^. from Core.timestampSeconds . to WalletTimestamp
                             )
             it "can parse an fractional timestamp" $ do
                 toIndex' "123456789.123"
                     `shouldBe`
                         Just ((123456789.123 :: POSIXTime)
-                            ^. from Core.timestampSeconds . to V1
+                            ^. from Core.timestampSeconds . to WalletTimestamp
                             )
 
 aesonRoundtrip :: (Arbitrary a, ToJSON a, FromJSON a, Eq a, Show a) => proxy a -> Property

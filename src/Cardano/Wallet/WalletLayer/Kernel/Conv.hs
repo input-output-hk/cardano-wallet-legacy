@@ -165,8 +165,8 @@ toWallet db hdRoot = V1.Wallet {
                                               . to HD.getWalletName
     , walBalance                    = V1 (Kernel.rootTotalBalance db rootId)
     , walHasSpendingPassword        = hasSpendingPassword
-    , walSpendingPasswordLastUpdate = V1 lastUpdate
-    , walCreatedAt                  = V1 createdAt
+    , walSpendingPasswordLastUpdate = V1.WalletTimestamp lastUpdate
+    , walCreatedAt                  = V1.WalletTimestamp createdAt
     , walAssuranceLevel             = v1AssuranceLevel
     , walSyncState                  = V1.Synced
     -- FIXME: Now we have 2 types of wallet: regular and external.

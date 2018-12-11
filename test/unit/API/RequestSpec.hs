@@ -20,7 +20,7 @@ sortSpec :: Spec
 sortSpec =
     describe "parseSortOperation" $ do
         describe "Transaction" $ do
-            let ptimestamp = Proxy @(V1 Core.Timestamp)
+            let ptimestamp = Proxy @WalletTimestamp
                 pt = Proxy @Transaction
 
             it "knows the query param" $ do

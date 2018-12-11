@@ -20,9 +20,9 @@ type API = Tags '["Transactions"] :>
                         :> QueryParam "address" (V1 Core.Address)
                         :> WalletRequestParams
                         :> FilterBy '[ V1 Txp.TxId
-                                     , V1 Core.Timestamp
+                                     , WalletTimestamp
                                      ] Transaction
-                        :> SortBy   '[ V1 Core.Timestamp
+                        :> SortBy   '[ WalletTimestamp
                                      ] Transaction
                         :> Get '[ValidJSON] (APIResponse [Transaction])
     :<|> "transactions" :> "fees"

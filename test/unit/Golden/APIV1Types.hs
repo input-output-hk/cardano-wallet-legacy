@@ -7,7 +7,9 @@ import           Universum
 import           Hedgehog (Property)
 import qualified Hedgehog as H
 
-import           Cardano.Wallet.API.V1.Types (WalletPassPhrase (..))
+import           Cardano.Wallet.API.V1.Types (WalletPassPhrase (..),
+                     WalletTimestamp (..))
+import           Pos.Core (Timestamp, parseTimestamp)
 import           Pos.Crypto (PassPhrase (..))
 
 import           Test.Pos.Util.Golden (discoverGolden, goldenTestJSON)
@@ -30,6 +32,12 @@ golden_WalletPassPhrase =
         (WalletPassPhrase examplePassPhrase)
         "test/unit/Golden/golden/apiV1Types/json/PassPhrase"
 
+golden_WalletTimestamp :: Property
+golden_WalletTimestamp =
+    goldenTestJSON
+        (WalletTimestamp exampleTimestamp)
+        "test/unit/Golden/golden/apiV1Types/json/Timestamp"
+
 -------------------------------------------------------------------------------
 -- Examples
 -------------------------------------------------------------------------------
@@ -37,3 +45,8 @@ golden_WalletPassPhrase =
 -- | Currently PassPhrase should be 32 bytes long.
 examplePassPhrase :: PassPhrase
 examplePassPhrase = PassPhrase "hello_new_awesome_cardano_wallet"
+
+exampleTimestamp :: Timestamp
+exampleTimestamp = timestamp
+  where
+    Just timestamp = parseTimestamp "2018-12-11T08:09:10"

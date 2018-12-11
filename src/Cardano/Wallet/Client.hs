@@ -132,7 +132,7 @@ data WalletClient m
          -> Maybe (V1 Core.Address)
          -> Maybe Page
          -> Maybe PerPage
-         -> FilterOperations '[V1 Core.TxId, V1 Core.Timestamp] Transaction
+         -> FilterOperations '[V1 Core.TxId, WalletTimestamp] Transaction
          -> SortOperations Transaction
          -> Resp m [Transaction]
     , getTransactionFee
