@@ -40,7 +40,7 @@ import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import           Cardano.Wallet.Kernel.DB.Resolved (ResolvedBlock)
 import qualified Cardano.Wallet.Kernel.DB.Spec.Update as Spec
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types
-import           Cardano.Wallet.Kernel.Decrypt (decryptAddress,
+import           Cardano.Wallet.Kernel.Decrypt (WalletDecrCredentials, decryptAddress,
                      eskToWalletDecrCredentials)
 import           Cardano.Wallet.Kernel.Internal (WalletRestorationInfo (..),
                      WalletRestorationProgress (..), addOrReplaceRestoration,
@@ -55,9 +55,9 @@ import           Cardano.Wallet.Kernel.NodeStateAdaptor (Lock, LockContext (..),
                      getSecurityParameter, getSlotCount, mostRecentMainBlock,
                      withNodeState)
 import           Cardano.Wallet.Kernel.PrefilterTx (AddrWithId,
-                     PrefilteredBlock, UtxoWithAddrId, WalletKey,
-                     prefilterBlock, prefilterUtxo', toHdAddressId,
-                     toPrefilteredUtxo)
+                     PrefilteredBlock, PrefilterKey (..), UtxoWithAddrId,
+                     prefilterBlockHdRnd, prefilterUtxoHdRnd, addressIdFromMeta,
+                     toHdRndPrefKey', toPrefilteredUtxoHdRnd)
 import           Cardano.Wallet.Kernel.Read (foreignPendingByAccount,
                      getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Types (RawResolvedBlock (..),
@@ -175,8 +175,9 @@ mkPrefilter nm esk wallet wId blund = do
     foreignPendings <- foreignPendingByAccount <$> getWalletSnapshot wallet
     blundToResolvedBlock (wallet ^. Kernel.walletNode) blund <&> \case
         Nothing -> (M.empty, [])
-        Just rb -> prefilterBlock nm foreignPendings rb [(wId,esk)]
-
+        Just rb -> prefilterBlockHdRnd [toHdRndPrefKey' nm (wId,esk)]
+                                       foreignPendings
+                                       rb
 
 -- | Begin a restoration for a wallet that is already known. This is used
 -- to put an existing wallet back into a restoration state when something has
@@ -330,21 +331,20 @@ data WalletInitInfo =
 -- isn't empty).
 getWalletInitInfo :: NodeConstraints
                   => Genesis.Config
-                  -> WalletKey
+                  -> (WalletId, WalletDecrCredentials)
                   -> Lock (WithNodeState IO)
                   -> WithNodeState IO WalletInitInfo
-getWalletInitInfo coreConfig wKey@(wId, wdc) lock = do
+getWalletInitInfo coreConfig (wId, wdc) lock = do
     -- Find all of the current UTXO that this wallet owns.
     -- We lock the node state to be sure the tip header and the UTxO match
     (tipHeader, curUtxo :: Map HD.HdAccountId (Utxo, [AddrWithId])) <-
-        fmap (second (fmap toPrefilteredUtxo . mergeUtxos)) $
+        fmap (second (fmap toPrefilteredUtxoHdRnd . mergeUtxos)) $
           lock NotYetLocked $ \tip -> (tip, ) <$> filterUtxo isOurs
 
     -- Find genesis UTxO for this wallet
     let genUtxo :: Map HD.HdAccountId (Utxo, [AddrWithId])
-        genUtxo = fmap toPrefilteredUtxo . snd $
-                    prefilterUtxo' wKey
-                                   (genesisUtxo $ configGenesisData coreConfig)
+        genUtxo = prefilterUtxoHdRnd (PrefilterKeyHdRnd wId wdc)
+                                     (genesisUtxo $ configGenesisData coreConfig)
 
     -- Get the tip
     let gh = configGenesisHash coreConfig
@@ -371,7 +371,7 @@ getWalletInitInfo coreConfig wKey@(wId, wdc) lock = do
     isOurs :: (TxIn, TxOutAux) -> Maybe (HD.HdAccountId, UtxoWithAddrId)
     isOurs (inp, out@(TxOutAux (TxOut addr _))) = do
         wam <- decryptAddress wdc addr
-        let addrId = toHdAddressId wId wam
+        let addrId = addressIdFromMeta wId wam
         return (addrId ^. HD.hdAddressIdParent, M.singleton inp (out, addrId))
 
 -- | Restore a wallet's transaction history.

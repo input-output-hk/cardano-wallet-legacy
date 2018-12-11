@@ -42,7 +42,7 @@ import qualified Cardano.Wallet.Kernel.Internal as Internal
 import           Cardano.Wallet.Kernel.Invariants as Kernel
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import qualified Cardano.Wallet.Kernel.Pending as Kernel
-import           Cardano.Wallet.Kernel.PrefilterTx (prefilterUtxo)
+import           Cardano.Wallet.Kernel.PrefilterTx (prefilterUtxoHdRnd, toHdRndPrefKey)
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import           Cardano.Wallet.Kernel.Transactions (toMeta)
 
@@ -245,7 +245,8 @@ equivalentT useWW activeWallet esk = \mkWallet w ->
                 Left $ DB.CreateHdWallet root
                                          defaultAccount
                                          defAddress
-                                         (prefilterUtxo nm (root ^. HD.hdRootId) esk utxo)
+                                         (prefilterUtxoHdRnd (toHdRndPrefKey nm (root ^. HD.hdRootId) esk)
+                                                              utxo)
             )
         case res of
              Left e -> createWalletErr (STB e)
@@ -258,7 +259,8 @@ equivalentT useWW activeWallet esk = \mkWallet w ->
             walletName       = HD.WalletName "(test wallet)"
             assuranceLevel   = HD.AssuranceLevelNormal
 
-            utxoByAccount = prefilterUtxo nm rootId esk utxo
+            prefKey       = toHdRndPrefKey nm rootId esk
+            utxoByAccount = prefilterUtxoHdRnd prefKey utxo
             accountIds    = Map.keys utxoByAccount
             rootId        = HD.eskToHdRootId nm esk
 

@@ -28,9 +28,8 @@ import           Cardano.Wallet.Kernel.DB.HdWallet.Create (initHdAddress)
 import           Cardano.Wallet.Kernel.DB.InDb
 import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending
 import           Cardano.Wallet.Kernel.DB.TxMeta (TxMeta, putTxMeta)
-import           Cardano.Wallet.Kernel.Decrypt (eskToWalletDecrCredentials)
 import           Cardano.Wallet.Kernel.Internal
-import           Cardano.Wallet.Kernel.PrefilterTx (filterOurs)
+import           Cardano.Wallet.Kernel.PrefilterTx (filterOursHdRnd, toHdRndPrefKey')
 import           Cardano.Wallet.Kernel.Read (getWalletCredentials)
 import           Cardano.Wallet.Kernel.Submission (Cancelled, addPending)
 import           Cardano.Wallet.Kernel.Types (WalletId (..))
@@ -116,12 +115,11 @@ newTx ActiveWallet{..} accountId tx partialMeta upd = do
         allOurs = concatMap ourAddrs
 
         ourAddrs :: (WalletId, EncryptedSecretKey) -> [(HdAddress,Coin)]
-        ourAddrs (wid, esk) =
-            map f $ filterOurs wKey txOutAddress txOut
+        ourAddrs wKey =
+            map f $ filterOursHdRnd (toHdRndPrefKey' nm wKey) txOutAddress txOut
             where
                 nm = makeNetworkMagic $ walletPassive ^. walletProtocolMagic
                 f (txOut',addressId) = (initHdAddress addressId (txOutAddress txOut'), txOutValue txOut')
-                wKey = (wid, eskToWalletDecrCredentials nm esk)
 
         submitTx :: IO ()
         submitTx = modifyMVar_ (walletPassive ^. walletSubmission) $

@@ -44,7 +44,7 @@ import           Cardano.Wallet.Kernel.DB.TxMeta.Types
 import           Cardano.Wallet.Kernel.Internal
 import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
 import           Cardano.Wallet.Kernel.PrefilterTx (PrefilteredBlock (..),
-                     prefilterBlock)
+                     prefilterBlockHdRnd, toHdRndPrefKeys)
 import           Cardano.Wallet.Kernel.Read (foreignPendingByAccount,
                      getWalletCredentials, getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Restore
@@ -75,8 +75,9 @@ prefilterBlocks pw bs = do
     res <- getWalletCredentials pw
     foreignPendings <- foreignPendingByAccount <$> getWalletSnapshot pw
     return $ case res of
-         [] -> Nothing
-         xs -> Just $ map (\b -> first (b ^. rbContext,) $ prefilterBlock nm foreignPendings b xs) bs
+         []   -> Nothing
+         wKeys -> Just $ map (\b -> first (b ^. rbContext,) $ prefilterBlockHdRnd (toHdRndPrefKeys nm wKeys) foreignPendings b)
+                             bs
 
 data BackfillFailed
     = SuccessorChanged BlockContext (Maybe BlockContext)

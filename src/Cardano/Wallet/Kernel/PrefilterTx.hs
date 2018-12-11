@@ -4,17 +4,22 @@
 {-# LANGUAGE TypeFamilies        #-}
 
 module Cardano.Wallet.Kernel.PrefilterTx
-       ( PrefilteredBlock(..)
-       , emptyPrefilteredBlock
+       ( PrefilteredBlock (..)
+       , PrefilterKey (..)
        , AddrWithId
-       , prefilterBlock
-       , prefilterUtxo
        , UtxoWithAddrId
-       , prefilterUtxo'
-       , filterOurs
-       , toHdAddressId
-       , WalletKey
-       , toPrefilteredUtxo
+       -- Prefilter API
+       , filterOursHdRnd        -- TODO #34 deprecate -> use filterOurs
+       , prefilterBlockHdRnd    -- TODO #34 deprecate -> use prefilterBlock
+       , prefilterUtxoHdRnd     -- TODO #34 deprecate -> use prefilterUtxo
+       -- HdRnd Helpers         -- TODO #34 move to PrefilterHdRnd
+       , addressIdFromMeta
+       , toHdRndPrefKey
+       , toHdRndPrefKey'
+       , toHdRndPrefKeys
+       -- Auxiliary
+       , emptyPrefilteredBlock
+       , toPrefilteredUtxoHdRnd -- TODO #34 deprecate -> use toPrefilteredUtxo
        ) where
 
 import           Universum
@@ -34,7 +39,7 @@ import           Pos.Chain.Txp (TxId, TxIn (..), TxOut (..), TxOutAux (..),
                      Utxo)
 import           Pos.Core (Address (..), Coin, SlotId)
 import           Pos.Core.NetworkMagic (NetworkMagic)
-import           Pos.Crypto (EncryptedSecretKey)
+import           Pos.Crypto (EncryptedSecretKey,PublicKey)
 
 import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel.DB.BlockContext
@@ -48,26 +53,25 @@ import           Cardano.Wallet.Kernel.DB.Spec.Pending (Pending)
 import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types
 import           Cardano.Wallet.Kernel.Decrypt (WalletDecrCredentials,
-                     eskToWalletDecrCredentials, selectOwnAddresses)
+                     decryptAddress, eskToWalletDecrCredentials)
 import           Cardano.Wallet.Kernel.Types (AccountId (..), AddressId (..),
                     WalletId (..), addrIdToAccountId)
 import           Cardano.Wallet.Kernel.Util.Core
 
 {-------------------------------------------------------------------------------
- Pre-filter Tx Inputs and Outputs; pre-filter a block of transactions.
+ Core prefiltering types
 -------------------------------------------------------------------------------}
 
--- | Address extended with an HdAddressId, which embeds information that places
---   the Address in the context of the Wallet/Accounts/Addresses hierarchy.
+-- | Address extended with an AddressId, which includes a reference to the parent
+--   AccountId in the HD hierarchy.
+-- TODO #34 deprecate -> replace with AddrWithId__
 type AddrWithId = (HdAddressId,Address)
-
--- TODO @uroboros #34-part2 this must replace AddrWithId
-type AddrWithId__ = (AddressId,Address)
 
 -- | Prefiltered block
 --
 -- A prefiltered block is a block that contains only inputs and outputs from
 -- the block that are relevant to the wallet.
+-- TODO #34 deprecate -> replace with PrefilteredBlock__
 data PrefilteredBlock = PrefilteredBlock {
       -- | Relevant inputs
       pfbInputs        :: !(Set TxIn)
@@ -88,27 +92,6 @@ data PrefilteredBlock = PrefilteredBlock {
     , pfbContext       :: !BlockContext
     }
 
--- TODO @uroboros #34-part2 this must replace PrefilteredBlock
-data PrefilteredBlock__ = PrefilteredBlock__ {
-      -- | Relevant inputs
-      pfbInputs__        :: !(Set TxIn)
-
-      -- | Relevant foreign inputs
-    , pfbForeignInputs__ :: !(Set TxIn)
-
-      -- | Relevant outputs
-    , pfbOutputs__       :: !Utxo
-
-      -- | all output addresses present in the Utxo
-    , pfbAddrs__         :: ![AddrWithId__]
-
-      -- | Prefiltered block metadata
-    , pfbMeta__          :: !LocalBlockMeta
-
-      -- | Block context
-    , pfbContext__       :: !BlockContext
-    }
-
 deriveSafeCopy 1 'base ''PrefilteredBlock
 
 -- | Empty prefiltered block
@@ -125,8 +108,6 @@ emptyPrefilteredBlock context = PrefilteredBlock {
     , pfbMeta           = emptyLocalBlockMeta
     , pfbContext        = context
     }
-
-type WalletKey = (WalletId, WalletDecrCredentials)
 
 -- | Summary of an address as it appears in a transaction.
 --   NOTE: Since an address can occur in multiple transactions, there could be
@@ -147,17 +128,88 @@ data AddressSummary = AddressSummary {
 
 -- | Extended Utxo with each output paired with an HdAddressId, required for
 --   discovering new Addresses during prefiltering
+-- TODO #34 deprecate -> replace with UtxoWithAddrId__
 type UtxoWithAddrId = Map TxIn (TxOutAux,HdAddressId)
-
--- TODO @uroboros #34-part2 this must replace UtxoWithAddrId
-type UtxoWithAddrId__ = Map TxIn (TxOutAux,AddressId)
 
 -- | Extended Utxo where each output is paired with an AddressSummary. Provides
 --   the required metadata for computing address meta data for BlockMeta.
 type UtxoSummaryRaw = Map TxIn (TxOutAux,AddressSummary)
 
 {-------------------------------------------------------------------------------
+ These types use abstract Account/Address ids and will replace
+ the Deprecated Types above
+ -------------------------------------------------------------------------------}
+
+type AddrWithId__ = (AddressId,Address)
+
+data PrefilteredBlock__ = PrefilteredBlock__ {
+      -- | Relevant inputs
+      pfbInputs__        :: !(Set TxIn)
+
+      -- | Relevant foreign inputs
+    , pfbForeignInputs__ :: !(Set TxIn)
+
+      -- | Relevant outputs
+    , pfbOutputs__       :: !Utxo
+
+      -- | all output addresses present in the Utxo
+    , pfbAddrs__         :: ![AddrWithId__]
+
+      -- | Prefiltered block metadata
+    , pfbMeta__          :: !LocalBlockMeta
+
+      -- | Block context
+    , pfbContext__       :: !BlockContext
+    }
+
+type UtxoWithAddrId__ = Map TxIn (TxOutAux,AddressId)
+
+{-------------------------------------------------------------------------------
+ Core definitions of discovery of "our" addresses
+-------------------------------------------------------------------------------}
+
+-- | We assume that the AddressId provides access to AccountId
+type IsOurs = Address -> Maybe AddressId
+
+-- | For each wallet type, captures all the data necessary to discover "our" addresses.
+--   This type provides the basis for defining a polymorphic isOurs for different
+--   wallet types.
+data PrefilterKey
+    = PrefilterKeyHdRnd WalletId WalletDecrCredentials
+    -- ^ for HdRnd wallets, the WalletId is based on the HdRootId
+    -- and the credentials are derived from the EncryptedSecretKey
+    | PrefilterKeyEOS V1.EosWalletId PublicKey
+    -- ^ for EOS wallets, we need the root EosWalletId and the account public key
+
+-- | Filter items for addresses given an isOurs predicate.
+--   Returns the matching AddressId, which embeds the parent AccountId
+--   discovered for the matching item.
+--
+-- TODO(@uroboros/ryan) `selectOwnAddresses` calls `decryptAddress`, which extracts
+-- the AccountId from the Tx Attributes. This is not sufficient since it
+-- doesn't actually _verify_ that the Tx belongs to the AccountId.
+-- We need to add verification (see `deriveLvl2KeyPair`).
+filterOurs
+    :: IsOurs
+    -> (item -> Address)      -- ^ address getter
+    -> [item]                 -- ^ list to filter
+    -> [(item, AddressId)]  -- ^ matching items
+filterOurs ours selectAddr items
+    = mapMaybe ours_ items
+    where
+        ours_ item = (item,) <$> ours (selectAddr item)
+
+filterOursWithKey
+    :: PrefilterKey
+    -> (item -> Address)      -- ^ address getter
+    -> [item]                 -- ^ list to filter
+    -> [(item, AddressId)]  -- ^ matching items
+filterOursWithKey prefKey
+    = filterOurs (isOurs prefKey)
+
+{-------------------------------------------------------------------------------
  Pre-filter Tx Inputs and Outputs to those that belong to the given Wallet.
+ Includes prefiltering of Utxo.
 -------------------------------------------------------------------------------}
 
 -- | Prefilter the inputs and outputs of a resolved transaction.
@@ -166,19 +218,21 @@ type UtxoSummaryRaw = Map TxIn (TxOutAux,AddressSummary)
 --   This returns a list of TxMeta, because TxMeta also includes
 --   AccountId information, so the same Tx may belong to multiple
 --   Accounts.
-prefilterTx :: WalletKey
-            -> ResolvedTx
-            -> ((Map AccountId (Set (TxIn, TxId))
-              , Map AccountId UtxoSummaryRaw)
-              , [TxMeta])
-            -- ^ prefiltered inputs, prefiltered output utxo, extended with address summary
-prefilterTx wKey tx = ((prefInps',prefOuts'),metas)
+prefilterTx
+    :: IsOurs
+    -> ResolvedTx
+    -- prefiltered inputs, prefiltered output utxo, extended with address summary
+    -> ( ( Map AccountId (Set (TxIn, TxId))
+         , Map AccountId UtxoSummaryRaw)
+       , [TxMeta])
+prefilterTx ours tx
+    = ((prefInps',prefOuts'),metas)
     where
         inps = toList (tx ^. rtxInputs  . fromDb)
         outs =         tx ^. rtxOutputs . fromDb
 
-        (onlyOurInps,prefInps) = prefilterInputs wKey inps
-        (onlyOurOuts,prefOuts) = prefilterUtxoWithKey__  wKey outs
+        (onlyOurInps,prefInps) = prefilterInputs ours inps
+        (onlyOurOuts,prefOuts) = prefilterUtxoWithOurs  ours outs
 
         prefOuts' = Map.map (extendWithSummary (onlyOurInps,onlyOurOuts))
                             prefOuts
@@ -194,10 +248,10 @@ prefilterTx wKey tx = ((prefInps',prefOuts'),metas)
                                 (nothingToZero acc prefInCoins)
                                 (nothingToZero acc prefOutCoins)
                                 (onlyOurInps && onlyOurOuts)
-                                (forceToHdAccountId acc))
+                                (coerceHdAccountId acc))
                     allAccounts
 
--- | Prefilter the transaction with each wallet key respectively and
+-- | Prefilter the transaction with each isOurs predicate respectively and
 --   combine the results.
 --
 -- NOTE: we can rely on a Monoidal fold here to combine the maps
@@ -209,16 +263,16 @@ prefilterTx wKey tx = ((prefInps',prefOuts'),metas)
 -- The foreign transactions are identified by picking the input transactions from the resolved one
 -- that happen to be in foreign pending set.
 prefilterTxForWallets
-    :: [WalletKey]
+    :: [IsOurs]
     -> Map TxIn AccountId
     -> ResolvedTx
     -> ((Map AccountId (Set (TxIn, TxId), Set (TxIn, TxId))
         , Map AccountId UtxoSummaryRaw)
        , [TxMeta])
-prefilterTxForWallets wKeys foreignPendingByTransaction tx =
+prefilterTxForWallets oursForWallets foreignPendingByTransaction tx =
     ((extend inputsE foreignInputsE, outputs),meta)
   where
-    ((inputs,outputs),meta) = mconcat $ map ((flip prefilterTx) tx) wKeys
+    ((inputs,outputs),meta) = mconcat $ map ((flip prefilterTx) tx) oursForWallets
 
     txId :: TxId
     txId = fst $ tx ^. rtxMeta . fromDb
@@ -253,77 +307,48 @@ prefilterTxForWallets wKeys foreignPendingByTransaction tx =
           f :: TxIn -> AccountId -> (AccountId, Set TxIn)
           f txin accId = (accId, Set.singleton txin)
 
-
--- | Prefilter inputs of a transaction
-prefilterInputs :: WalletKey
-                -> [(TxIn, ResolvedInput)]
-                -> (Bool, Map AccountId (Set (TxIn,Coin)))
-prefilterInputs wKey inps
-    = prefilterResolvedTxPairs wKey mergeF inps
+-- | Prefilter inputs of a transaction with the isOurs predicate
+prefilterInputs
+    :: IsOurs
+    -> [(TxIn, ResolvedInput)]
+    -> (Bool, Map AccountId (Set (TxIn,Coin)))
+prefilterInputs ours inps
+    = prefilterResolvedTxPairs ours mergeF inps
     where
         mergeF = Map.fromListWith Set.union . (map f)
 
         f ((txIn, out),addrId) = ( addrIdToAccountId addrId
                                  , Set.singleton (txIn, toCoin out))
 
--- | Prefilter utxo using wallet key
-prefilterUtxo' :: WalletKey -> Utxo -> (Bool, Map HdAccountId UtxoWithAddrId)
-prefilterUtxo' wKey utxo
-    = (prefilterUtxoWithKey__ wKey utxo)
-        & _2 %~ Map.mapKeys forceToHdAccountId . (map coerceUtxoWithAddrId)
+-- | Prefilter utxo with a prefilter key
+prefilterUtxoWithKey
+    :: PrefilterKey
+    -> Utxo
+    -> Map AccountId (Utxo,[AddrWithId__])
+prefilterUtxoWithKey prefKey@(PrefilterKeyHdRnd _ _) utxo
+    = map toPrefilteredUtxo
+          (snd $ prefilterUtxoWithOurs (isOurs prefKey) utxo)
+prefilterUtxoWithKey _ _
+    = error "TODO Implement for EOS"
 
--- | Prefilter utxo using walletId and esk
-prefilterUtxo :: NetworkMagic -> HdRootId -> EncryptedSecretKey -> Utxo -> Map HdAccountId (Utxo,[AddrWithId])
-prefilterUtxo nm rootId esk utxo
-    = Map.mapKeys forceToHdAccountId
-        $ map f (prefilterUtxo__ nm rootId esk utxo)
-    where
-        f x = x & _2 %~ map coerceAddrWithId
-
-toPrefilteredUtxo :: UtxoWithAddrId -> (Utxo,[AddrWithId])
-toPrefilteredUtxo utxoWithAddrs
-    = (toPrefilteredUtxo__ $ coerceUtxoWithAddrId' utxoWithAddrs)
-        & _2 %~ map coerceAddrWithId
-
--- | Prefilter utxo using wallet key
--- TODO @uroboros #34-part2 this must replace prefilterUtxo'
-prefilterUtxoWithKey__
-    :: WalletKey
+-- | Prefilter utxo with an isOurs predicate
+prefilterUtxoWithOurs
+    :: IsOurs
     -> Utxo
     -> (Bool, Map AccountId UtxoWithAddrId__)
-prefilterUtxoWithKey__ wKey utxo
-    = prefilterResolvedTxPairs wKey mergeF (Map.toList utxo)
+prefilterUtxoWithOurs ours utxo
+    = prefilterResolvedTxPairs ours mergeF (Map.toList utxo)
     where
         mergeF = Map.fromListWith Map.union . (map f)
 
         f ((txIn, txOut),addrId) = (addrIdToAccountId addrId,
                                     Map.singleton txIn (txOut, addrId))
 
--- | Prefilter utxo using walletId and esk
--- TODO @uroboros #34-part2 this must replace prefilterUtxo
-prefilterUtxo__
-    :: NetworkMagic
-    -> HdRootId
-    -> EncryptedSecretKey
-    -> Utxo
-    -> Map AccountId (Utxo,[AddrWithId__])
-prefilterUtxo__ nm rootId esk utxo
-    = map toPrefilteredUtxo__ prefUtxo
-    where
-        prefUtxo = snd $ prefilterUtxoWithKey__ (mkWalletKey nm rootId esk) utxo
-
-mkWalletKey
-    :: NetworkMagic
-    -> HdRootId
-    -> EncryptedSecretKey
-    -> WalletKey
-mkWalletKey nm rootId esk
-    = (WalletIdHdRnd rootId, eskToWalletDecrCredentials nm esk)
-
 -- | Produce Utxo along with all (extended) addresses occurring in the Utxo
--- TODO @uroboros #34-part2 this must replace toPrefilteredUtxo
-toPrefilteredUtxo__ :: UtxoWithAddrId__ -> (Utxo,[AddrWithId__])
-toPrefilteredUtxo__ utxoWithAddrs = (Map.fromList utxoL, addrs)
+toPrefilteredUtxo
+    :: UtxoWithAddrId__
+    -> (Utxo,[AddrWithId__])
+toPrefilteredUtxo utxoWithAddrs = (Map.fromList utxoL, addrs)
     where
         toUtxo (txIn,(txOutAux,_))         = (txIn,txOutAux)
         toAddr (_   ,(txOutAux,addressId)) = (addressId, txOutAddress . toaOut $ txOutAux)
@@ -337,57 +362,26 @@ toPrefilteredUtxo__ utxoWithAddrs = (Map.fromList utxoL, addrs)
 
 -- | Prefilter resolved transaction pairs.
 --   Also returns a Boolean indicating whether @all@ pairs are "ours"
-prefilterResolvedTxPairs :: WalletKey
-                         -> ([((TxIn, TxOutAux), AddressId)] -> a)
-                         -> [(TxIn, TxOutAux)]
-                         -> (Bool, a)
-prefilterResolvedTxPairs wKey mergeF pairs
+prefilterResolvedTxPairs
+    :: IsOurs
+    -> ([((TxIn, TxOutAux), AddressId)] -> a)
+    -> [(TxIn, TxOutAux)]
+    -> (Bool, a)
+prefilterResolvedTxPairs ours mergeF pairs
     = (onlyOurs, mergeF prefTxPairs)
     where
         selectAddr = txOutAddress . toaOut . snd
-        prefTxPairs = filterOurs__ wKey selectAddr pairs
+        prefTxPairs = filterOurs ours selectAddr pairs
         -- | if prefiltering excluded nothing, then all the pairs are "ours"
         onlyOurs = (length prefTxPairs == length pairs)
 
--- | Filter items for addresses that were derived from the given WalletKey.
---   Returns the matching HdAddressId, which embeds the parent HdAccountId
---   discovered for the matching item.
---
--- TODO(@uroboros/ryan) `selectOwnAddresses` calls `decryptAddress`, which extracts
--- the AccountId from the Tx Attributes. This is not sufficient since it
--- doesn't actually _verify_ that the Tx belongs to the AccountId.
--- We need to add verification (see `deriveLvl2KeyPair`).
-filterOurs__ :: WalletKey
-           -> (a -> Address)      -- ^ address getter
-           -> [a]                 -- ^ list to filter
-           -> [(a, AddressId)]  -- ^ matching items
-filterOurs__ (wid,wdc) selectAddr rtxs
-    = map f $ selectOwnAddresses wdc selectAddr rtxs
-    where f (addr,meta) = (addr, AddressIdHdRnd (toHdAddressId wid meta))
-
-filterOurs :: WalletKey
-           -> (a -> Address)      -- ^ address getter
-           -> [a]                 -- ^ list to filter
-           -> [(a, HdAddressId)]  -- ^ matching items
-filterOurs (wid,wdc) selectAddr rtxs
-    = map f $ selectOwnAddresses wdc selectAddr rtxs
-    where f (addr,meta) = (addr, toHdAddressId wid meta)
-
--- TODO (@mn): move this into Util or something
-toHdAddressId :: WalletId -> V1.WAddressMeta -> HdAddressId
-toHdAddressId (WalletIdEOS _) _ = error "WalletId must represent an HdRnd wallet"
-toHdAddressId (WalletIdHdRnd rootId) meta' = HdAddressId accountId addressIx
-  where
-    accountIx = HdAccountIx (V1._wamAccountIndex meta')
-    accountId = HdAccountId rootId accountIx
-    addressIx = HdAddressIx (V1._wamAddressIndex meta')
-
-extendWithSummary :: (Bool, Bool)
-                  -- ^ Bools that indicate whether the inputs and outsputs are all "ours"
-                  -> Map TxIn (TxOutAux,AddressId)
-                  -- ^ Utxo extended with HdAddressId
-                  -> Map TxIn (TxOutAux,AddressSummary)
-                  -- ^ Utxo extended with AddressSummary
+extendWithSummary
+    :: (Bool, Bool)
+    -- ^ Bools that indicate whether the inputs and outsputs are all "ours"
+    -> Map TxIn (TxOutAux,AddressId)
+    -- ^ Utxo extended with HdAddressId
+    -> Map TxIn (TxOutAux,AddressSummary)
+    -- ^ Utxo extended with AddressSummary
 extendWithSummary (onlyOurInps,onlyOurOuts) utxoWithAddrId
     = Map.fromList $ mapMaybe toAddrSummary (Map.toList utxoWithAddrId)
     where
@@ -407,42 +401,34 @@ extendWithSummary (onlyOurInps,onlyOurOuts) utxoWithAddrId
  and Transaction metadata.
 -------------------------------------------------------------------------------}
 
-prefilterBlock
-    :: NetworkMagic
-    -> Map HdAccountId Pending
+prefilterBlockWithKeys
+    :: [PrefilterKey]
+    -> Map AccountId Pending
     -> ResolvedBlock
-    -> [(WalletId, EncryptedSecretKey)]
-    -> (Map HdAccountId PrefilteredBlock, [TxMeta])
-prefilterBlock nm foreignPendingByAccount block rawKeys
-    = (prefilterBlock__ nm foreignPendingByAccount' block rawKeys)
-        & _1 %~ (Map.mapKeys forceToHdAccountId) . (map coercePrefilteredBlock)
-    where
-        foreignPendingByAccount' = Map.mapKeys AccountIdHdRnd foreignPendingByAccount
+    -> (Map AccountId PrefilteredBlock__, [TxMeta])
+prefilterBlockWithKeys prefKeys
+    = prefilterBlockWithOurs (map isOurs prefKeys)
 
 -- | Prefilter the transactions of a resolved block for the given wallets.
 --
 --   Returns prefiltered blocks indexed by HdAccountId.
-prefilterBlock__
-    :: NetworkMagic
+prefilterBlockWithOurs
+    :: [IsOurs]
     -> Map AccountId Pending
     -> ResolvedBlock
-    -> [(WalletId, EncryptedSecretKey)]
     -> (Map AccountId PrefilteredBlock__, [TxMeta])
-prefilterBlock__ nm foreignPendingByAccount block rawKeys =
+prefilterBlockWithOurs oursForWallets foreignPendingByAccount block =
       (Map.fromList
     $ map (mkPrefBlock (block ^. rbContext) inpAll outAll)
     $ Set.toList accountIds
     , metas)
   where
-    wKeys :: [WalletKey]
-    wKeys = map toWalletKey rawKeys
-
     foreignPendingByTransaction :: Map TxIn AccountId
     foreignPendingByTransaction = reindexByTransaction $ Map.map Pending.txIns foreignPendingByAccount
 
     inps :: [Map AccountId (Set (TxIn, TxId), Set (TxIn, TxId))]
     outs :: [Map AccountId UtxoSummaryRaw]
-    (ios, conMetas) = unzip $ map (prefilterTxForWallets wKeys foreignPendingByTransaction) (block ^. rbTxs)
+    (ios, conMetas) = unzip $ map (prefilterTxForWallets oursForWallets foreignPendingByTransaction) (block ^. rbTxs)
     (inps, outs) = unzip ios
     metas = concat conMetas
 
@@ -453,21 +439,18 @@ prefilterBlock__ nm foreignPendingByAccount block rawKeys =
 
     accountIds = Map.keysSet inpAll `Set.union` Map.keysSet outAll
 
-    toWalletKey :: (WalletId, EncryptedSecretKey) -> WalletKey
-    toWalletKey (wid, esk) = (wid, eskToWalletDecrCredentials nm esk)
-
     reindexByTransaction :: Map AccountId (Set TxIn) -> Map TxIn AccountId
     reindexByTransaction byAccount = Map.fromList $ Set.toList $ Set.unions $ Map.elems $ Map.mapWithKey f byAccount
         where
             f :: AccountId -> Set TxIn -> Set (TxIn, AccountId)
             f accId = Set.map (, accId)
 
-
-mkPrefBlock :: BlockContext
-            -> Map AccountId (Set (TxIn, TxId), Set (TxIn, TxId))
-            -> Map AccountId (Map TxIn (TxOutAux, AddressSummary))
-            -> AccountId
-            -> (AccountId, PrefilteredBlock__)
+mkPrefBlock
+    :: BlockContext
+    -> Map AccountId (Set (TxIn, TxId), Set (TxIn, TxId))
+    -> Map AccountId (Map TxIn (TxOutAux, AddressSummary))
+    -> AccountId
+    -> (AccountId, PrefilteredBlock__)
 mkPrefBlock context inps outs accId = (accId, PrefilteredBlock__ {
         pfbInputs__         = walletInps'
       , pfbForeignInputs__  = foreignInps'
@@ -581,24 +564,131 @@ instance Buildable PrefilteredBlock where
     pfbOutputs
 
 {-------------------------------------------------------------------------------
-  Scaffolding to limit impact of these changes
-  TODO @uroboros #34 remove scaffolding in #34
+  Helpers for Prefiltering HdRnd wallets
+  TODO move out of this module
 -------------------------------------------------------------------------------}
 
-forceToHdAccountId :: AccountId -> HdAccountId
-forceToHdAccountId (AccountIdHdRnd accountId) = accountId
-forceToHdAccountId _ = error "forceToHdAccountId"
+addressIdFromMeta :: WalletId -> V1.WAddressMeta -> HdAddressId
+addressIdFromMeta (WalletIdEOS _) _ = error "WalletId must represent an HdRnd wallet"
+addressIdFromMeta (WalletIdHdRnd rootId) meta'
+  = HdAddressId accountId addressIx
+  where
+    accountIx = HdAccountIx (V1._wamAccountIndex meta')
+    accountId = HdAccountId rootId accountIx
+    addressIx = HdAddressIx (V1._wamAddressIndex meta')
+
+toHdRndPrefKey'
+    :: NetworkMagic
+    -> (WalletId, EncryptedSecretKey)
+    -> PrefilterKey
+toHdRndPrefKey' nm (wid,esk)
+    = PrefilterKeyHdRnd wid (eskToWalletDecrCredentials nm esk)
+
+toHdRndPrefKey
+    :: NetworkMagic
+    -> HdRootId
+    -> EncryptedSecretKey
+    -> PrefilterKey
+toHdRndPrefKey nm rootId esk
+    = toHdRndPrefKey' nm (WalletIdHdRnd rootId,esk)
+
+toHdRndPrefKeys
+    :: NetworkMagic
+    -> [(WalletId, EncryptedSecretKey)]
+    -> [PrefilterKey]
+toHdRndPrefKeys nm rawKeys
+    = map (toHdRndPrefKey' nm) rawKeys
+
+{-------------------------------------------------------------------------------
+  Temporary HdRnd wrappers for Prefiltering API (to limit the impact of these
+  changes on the rest of the wallet Kernel)
+  These wrappers translate from the abstract Id types back to HdRnd id types
+  to maintain compatibility with the rest of the Kernel.
+
+  TODO deprecate these wrappers for the generic underlying functions (this will
+  require generalising the calling code to use abstract AccountId/AddressId)
+-------------------------------------------------------------------------------}
+
+filterOursHdRnd
+    :: PrefilterKey
+    -> (a -> Address)      -- ^ address getter
+    -> [a]                 -- ^ list to filter
+    -> [(a, HdAddressId)]  -- ^ matching items
+filterOursHdRnd prefKey selectAddr rtxs
+    = (filterOursWithKey prefKey selectAddr rtxs)
+        & map (over _2 coerceHdAddressId)
+
+toPrefilteredUtxoHdRnd
+    :: UtxoWithAddrId
+    -> (Utxo,[AddrWithId])
+toPrefilteredUtxoHdRnd utxoWithAddrs
+    = (toPrefilteredUtxo $ coerceUtxoWithAddrId' utxoWithAddrs)
+        & _2 %~ map coerceAddrWithId
+
+-- | Prefilter utxo using wallet key
+prefilterUtxoHdRnd
+    :: PrefilterKey
+    -> Utxo
+    -> Map HdAccountId (Utxo,[AddrWithId])
+prefilterUtxoHdRnd prefKey@(PrefilterKeyHdRnd _ _) utxo
+    = Map.mapKeys coerceHdAccountId . (map (over _2 (map coerceAddrWithId)))
+        $ prefilterUtxoWithKey prefKey utxo
+prefilterUtxoHdRnd _ _
+    = error "prefilterUtxoHdRnd - Invalid PrefilterKey"
+
+prefilterBlockHdRnd
+    :: [PrefilterKey]
+    -> Map HdAccountId Pending
+    -> ResolvedBlock
+    -> (Map HdAccountId PrefilteredBlock, [TxMeta])
+prefilterBlockHdRnd prefKeys foreignPendingByAccount block
+    = (prefilterBlockWithKeys prefKeys foreignPendingByAccount' block)
+        & _1 %~ (Map.mapKeys coerceHdAccountId) . (map coercePrefilteredBlock)
+    where
+        foreignPendingByAccount' = Map.mapKeys AccountIdHdRnd foreignPendingByAccount
+
+{-------------------------------------------------------------------------------
+ isOurs defined polymorphically for different wallet types
+
+ This function enables polymorphic prefiltering of transactions, UtXo and blocks
+ -------------------------------------------------------------------------------}
+
+-- | Check if the address was derived from the given WalletKey.
+--   Returns the matching HdAddressIx and the HdAccountId in which the
+--   address was discovered.
+--
+-- TODO(@uroboros/ryan) `decryptAddress` extracts the AccountId from
+-- the Tx Attributes. This is not sufficient since it doesn't actually
+-- _verify_ that the Tx belongs to the AccountId.
+--
+-- We need to add verification (see `deriveLvl2KeyPair`).
+isOursHdRnd
+    :: (WalletId, WalletDecrCredentials)
+    -> IsOurs
+isOursHdRnd (wid,creds) address
+    = (AddressIdHdRnd . addressIdFromMeta wid) <$> decryptAddress creds address
+
+isOurs
+    :: PrefilterKey
+    -> IsOurs
+isOurs (PrefilterKeyHdRnd wid creds)
+    = isOursHdRnd (wid,creds)
+isOurs (PrefilterKeyEOS _ _)
+    = error "TODO Implement EOS isOurs"
+
+{-------------------------------------------------------------------------------
+  Scaffolding to limit impact of these changes
+   TODO @uroboros #34 remove scaffolding
+-------------------------------------------------------------------------------}
+
+coerceHdAccountId :: AccountId -> HdAccountId
+coerceHdAccountId (AccountIdHdRnd accountId) = accountId
+coerceHdAccountId _ = error "coerceHdAccountId"
 
 -- TODO: this will be removed in #34, tmp stopgap to limit impact of PR-part1
-forceToHdAddressId :: AddressId -> HdAddressId
-forceToHdAddressId (AddressIdHdRnd addr) = addr
-forceToHdAddressId _ = error "forceToHdAddressId"
-
-coerceUtxoWithAddrId :: UtxoWithAddrId__ -> UtxoWithAddrId
-coerceUtxoWithAddrId utxo = map f utxo
-    where
-        f :: (TxOutAux,AddressId) -> (TxOutAux,HdAddressId)
-        f (out,addrId) = (out, forceToHdAddressId addrId)
+coerceHdAddressId :: AddressId -> HdAddressId
+coerceHdAddressId (AddressIdHdRnd addr) = addr
+coerceHdAddressId _ = error "coerceHdAddressId"
 
 coerceUtxoWithAddrId' :: UtxoWithAddrId -> UtxoWithAddrId__
 coerceUtxoWithAddrId' utxo = map f utxo
@@ -607,7 +697,7 @@ coerceUtxoWithAddrId' utxo = map f utxo
         f (out,addrId) = (out, AddressIdHdRnd addrId)
 
 coerceAddrWithId :: AddrWithId__ -> AddrWithId
-coerceAddrWithId addr = addr & _1 %~ forceToHdAddressId
+coerceAddrWithId addr = addr & _1 %~ coerceHdAddressId
 
 coercePrefilteredBlock :: PrefilteredBlock__ -> PrefilteredBlock
 coercePrefilteredBlock PrefilteredBlock__{..}

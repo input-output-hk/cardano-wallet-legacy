@@ -14,10 +14,8 @@ module Cardano.Wallet.Kernel.Types (
   , WalletId (..)
   , AccountId (..)
   , AddressId (..)
-  , AddressIx (..)
   , accountToWalletId
   , addrIdToAccountId
-  , mkAddressId
     -- ** From raw to derived types
   , fromRawResolvedTx
   , fromRawResolvedBlock
@@ -100,29 +98,12 @@ data AddressId =
   | AddressIdEOS PublicKey Word --
     deriving (Eq, Ord)
 
--- | Address Ix
---
--- An AddressIx can take several forms
-data AddressIx =
-    -- | Randomly generated address index
-    AddressIxHdRnd HD.HdAddressIx
-    -- | Sequentially generated address index for EOS wallets
-  | AddressIxEOS Word
-    deriving (Eq, Ord)
-
 -- | Convert a generic AddressId to a generic AccountId
 addrIdToAccountId :: AddressId -> AccountId
 addrIdToAccountId (AddressIdHdRnd addrId)
     = AccountIdHdRnd (addrId ^. HD.hdAddressIdParent)
 addrIdToAccountId (AddressIdEOS parentAccountId _)
     = AccountIdEOS parentAccountId
-
-mkAddressId :: (AccountId, AddressIx) -> AddressId
-mkAddressId (AccountIdHdRnd accountId, AddressIxHdRnd addressIx)
-    = AddressIdHdRnd (HD.HdAddressId accountId addressIx)
-mkAddressId (AccountIdEOS accountPK, AddressIxEOS addressIx)
-    = AddressIdEOS accountPK addressIx
-mkAddressId _ = error "Cannot construct AddressId"
 
 {-------------------------------------------------------------------------------
   Input resolution: raw types
