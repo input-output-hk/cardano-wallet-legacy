@@ -10,6 +10,7 @@ module Test.Integration.Framework.DSL
     , Context(..)
 
     -- * Steps
+    , Setup(..)
     , setup
     , request
     , request_
@@ -21,7 +22,6 @@ module Test.Integration.Framework.DSL
     , NewAccount (..)
     , Payment (..)
     , Redemption (..)
-    , Setup(..)
     , WalletUpdate(..)
     , ShieldedRedemptionCode (..)
     , InputSelectionPolicy(..)
@@ -158,7 +158,7 @@ data Setup = Setup
     , _assuranceLevel
         :: AssuranceLevel
     , _mnemonicWords
-        :: Maybe [Text]
+        :: [Text]
     } deriving (Show, Generic)
 
 data Fixture = Fixture
@@ -175,10 +175,9 @@ setup
     :: Setup
     -> Scenario Context IO Fixture
 setup args = withNextFaucet $ \faucet -> do
-    phrase <- maybe
-        (liftIO $ generate arbitrary)
-        mkBackupPhrase
-        (args ^. mnemonicWords)
+    phrase <- if null (args ^. mnemonicWords)
+        then liftIO $ generate arbitrary
+        else mkBackupPhrase (args ^. mnemonicWords)
     wal <- setupWallet args phrase faucet
     addrs  <- forM (RandomDestination :| []) setupDestination
     return $ Fixture wal addrs phrase
@@ -220,7 +219,7 @@ defaultSetup = Setup
     { _initialCoins   = []
     , _walletName     = defaultWalletName
     , _assuranceLevel = defaultAssuranceLevel
-    , _mnemonicWords  = Nothing
+    , _mnemonicWords  = []
     }
 
 defaultSource
@@ -278,7 +277,7 @@ initialCoins =
     _set :: HasType [Coin] s => (s, [Word64]) -> s
     _set (s, v) = set typed (map mkCoin v) s
 
-mnemonicWords :: HasType (Maybe [Text]) s => Lens' s (Maybe [Text])
+mnemonicWords :: HasType [Text] s => Lens' s [Text]
 mnemonicWords = typed
 
 wallet :: HasType Wallet s => Lens' s Wallet
@@ -393,14 +392,13 @@ expectAddressInIndexOf = \case
 -- seconds if not.
 expectTxStatusEventually
     :: (MonadIO m, MonadFail m, MonadReader ctx m, HasHttpClient ctx)
-    => Wallet
-    -> [TransactionStatus]
+    => [TransactionStatus]
     -> Either ClientError Transaction
     -> m ()
-expectTxStatusEventually w statuses = \case
+expectTxStatusEventually statuses = \case
     Left e    -> wantedSuccessButError e
     Right txn -> do
-        result <- ask >>= \ctx -> timeout (60 * second) (waitForTxStatus ctx w statuses txn)
+        result <- ask >>= \ctx -> timeout (60 * second) (waitForTxStatus ctx statuses txn)
         case result of
             Nothing -> fail "expectTxStatusEventually: waited too long for statuses."
             Just _  -> return ()
@@ -410,14 +408,13 @@ expectTxStatusEventually w statuses = \case
 -- really means 60 seconds, you know...
 expectTxStatusNever
     :: (MonadIO m, MonadFail m, MonadReader ctx m, HasHttpClient ctx)
-    => Wallet
-    -> [TransactionStatus]
+    => [TransactionStatus]
     -> Either ClientError Transaction
     -> m ()
-expectTxStatusNever w statuses = \case
+expectTxStatusNever statuses = \case
     Left e    -> wantedSuccessButError e
     Right txn -> do
-        result <- ask >>= \ctx -> timeout (60 * second) (waitForTxStatus ctx w statuses txn)
+        result <- ask >>= \ctx -> timeout (60 * second) (waitForTxStatus ctx statuses txn)
         case result of
             Nothing -> return ()
             Just _  -> fail "expectTxStatusNever: reached one of the provided statuses."
@@ -496,16 +493,15 @@ second = 1000000
 waitForTxStatus
     :: HasHttpClient ctx
     => ctx
-    -> Wallet
     -> [TransactionStatus]
     -> Transaction
     -> IO ()
-waitForTxStatus ctx w statuses txn = do
+waitForTxStatus ctx statuses txn = do
     -- NOTE
     -- A bit tricky here, we can't just fire async operation on anything else
     -- but plain `IO`. Hence the explicit context passing here.
     txns <- flip runReaderT ctx $ successfulRequest $ Client.getTransactionIndex
-        $- Just (walId w)
+        $- Nothing
         $- Nothing
         $- Nothing
 
@@ -513,7 +509,7 @@ waitForTxStatus ctx w statuses txn = do
     if ((fmap txStatus tx) `elem` (fmap Just statuses)) then
         return ()
     else
-        threadDelay (5 * second) >> waitForTxStatus ctx w statuses txn
+        threadDelay (5 * second) >> waitForTxStatus ctx statuses txn
 
 -- | Wait until the given wallet is restored.
 waitForRestored
@@ -607,7 +603,7 @@ setupWallet args phrase faucet = do
             Nothing
             Nothing
 
-        expectTxStatusEventually wal [InNewestBlocks, Persisted] txn
+        expectTxStatusEventually [InNewestBlocks, Persisted] txn
     return wal
 
 

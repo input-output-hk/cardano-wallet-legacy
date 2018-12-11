@@ -90,7 +90,7 @@ spec = do
             [ expectWalletError (WalletAlreadyExists (fixture ^. wallet . walletId))
             ]
   where
-    testBackupPhrase :: Maybe [Text]
-    testBackupPhrase = pure
+    testBackupPhrase :: [Text]
+    testBackupPhrase =
         ["clap", "panda", "slim", "laundry", "more", "vintage", "cash", "shaft"
         , "token", "history", "misery", "problem"]

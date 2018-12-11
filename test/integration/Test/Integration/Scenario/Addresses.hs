@@ -1,6 +1,6 @@
 module Test.Integration.Scenario.Addresses
-  ( spec
-  ) where
+    ( spec
+    ) where
 
 import           Universum
 

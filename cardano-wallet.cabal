@@ -599,6 +599,7 @@ test-suite integration
   main-is:
       Main.hs
   other-modules:
+      Test.Integration.Documentation
       Test.Integration.Framework.Cluster
       Test.Integration.Framework.DSL
       Test.Integration.Framework.Request

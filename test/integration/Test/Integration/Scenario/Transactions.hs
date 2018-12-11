@@ -22,7 +22,7 @@ spec = do
 
         verify response
             [ expectTxInHistoryOf (fixture ^. wallet)
-            , expectTxStatusEventually (fixture ^. wallet) [Creating, Applying, InNewestBlocks, Persisted]
+            , expectTxStatusEventually [Creating, Applying, InNewestBlocks, Persisted]
             ]
 
     scenario "estimate fees of well-formed transaction returns" $ do
@@ -93,7 +93,7 @@ spec = do
                     defaultAccountId
 
                 verify response
-                    [ expectTxStatusEventually (fixture ^. wallet) [InNewestBlocks, Persisted]
+                    [ expectTxStatusEventually [InNewestBlocks, Persisted]
                     ]
 
             , do -- // 2 Control The Balance
@@ -173,7 +173,7 @@ spec = do
             defaultGroupingPolicy
             noSpendingPassword
         verify transaction
-            [ expectTxStatusEventually (fixture ^. wallet) [InNewestBlocks, Persisted]
+            [ expectTxStatusEventually [InNewestBlocks, Persisted]
             ]
 
         -- // 2 Remove and then, restore the wallet
@@ -255,5 +255,5 @@ spec = do
                 noSpendingPassword
 
             verify response
-                [ expectTxStatusEventually (fixture ^. wallet) [InNewestBlocks, Persisted]
+                [ expectTxStatusEventually [InNewestBlocks, Persisted]
                 ]
