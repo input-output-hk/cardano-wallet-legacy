@@ -33,10 +33,11 @@ import           Cardano.Wallet.Kernel.DB.AcidState (dbHdWallets)
 import qualified Cardano.Wallet.Kernel.DB.EosHdWallet as EosHD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
+import qualified Cardano.Wallet.Kernel.DB.TxMeta.Types as Kernel
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (IxSet)
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
-import           Cardano.Wallet.Kernel.Internal (walletKeystore,
+import           Cardano.Wallet.Kernel.Internal (walletKeystore, walletMeta,
                      walletProtocolMagic, _wriProgress)
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
@@ -229,9 +230,11 @@ deleteWallet :: MonadIO m
 deleteWallet wallet wId = runExceptT $ do
     rootId <- withExceptT DeleteWalletWalletIdDecodingFailed $ fromRootId wId
     withExceptT DeleteWalletError $ ExceptT $ liftIO $ do
-      let nm = makeNetworkMagic (wallet ^. walletProtocolMagic)
-      Kernel.removeRestoration wallet (WalletIdHdRnd rootId)
-      Kernel.deleteHdWallet nm wallet rootId
+        let nm = makeNetworkMagic (wallet ^. walletProtocolMagic)
+        let walletId = HD.getHdRootId rootId ^. fromDb
+        Kernel.removeRestoration wallet (WalletIdHdRnd rootId)
+        Kernel.deleteTxMetas (wallet ^. walletMeta) walletId Nothing
+        Kernel.deleteHdWallet nm wallet rootId
 
 -- | Deletes external wallets. Please note that there's no actions in the
 -- 'Keystore', because it contains only root secret keys.

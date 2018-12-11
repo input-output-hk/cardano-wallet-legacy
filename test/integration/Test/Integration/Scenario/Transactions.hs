@@ -118,6 +118,82 @@ spec = do
                     ]
             ]
 
+    scenario "Reg#141: metadata become inconsistent after a wallet is deleted" $ do
+        _ <- setup $ defaultSetup
+            & initialCoins .~ [14]
+
+        response <- request $ Client.getTransactionIndexFilterSorts
+            $- Nothing
+            $- Nothing
+            $- Nothing
+            $- defaultPage
+            $- defaultPerPage
+            $- NoFilters
+            $- NoSorts
+
+        verify response
+            [ expectSuccess
+            ]
+
+    scenario "Reg#141: metadata become inconsistent after an account is deleted" $ do
+        fixture <- setup $ defaultSetup
+            & initialCoins .~ [14]
+
+        request_ $ Client.postAccount
+            $- fixture ^. wallet . walletId
+            $- NewAccount
+                noSpendingPassword
+                "My Second Account"
+
+        request_ $ Client.deleteAccount
+            $- fixture ^. wallet . walletId
+            $- defaultAccountId
+
+        response <- request $ Client.getTransactionIndexFilterSorts
+            $- Just (fixture ^. wallet . walletId)
+            $- Nothing
+            $- Nothing
+            $- defaultPage
+            $- defaultPerPage
+            $- NoFilters
+            $- NoSorts
+
+        verify response
+            [ expectSuccess
+            ]
+
+    scenario "Reg#141: metadata becomes inconsistent after a wallet is deleted and restored" $ do
+        fixture <- setup $ defaultSetup
+            & initialCoins .~ [500000]
+
+        -- // 1 Make sure there's a transaction in the history
+        transaction <- request $ Client.postTransaction $- Payment
+            (defaultSource fixture)
+            (defaultDistribution 42 fixture)
+            defaultGroupingPolicy
+            noSpendingPassword
+        verify transaction
+            [ expectTxStatusEventually (fixture ^. wallet) [InNewestBlocks, Persisted]
+            ]
+
+        -- // 2 Remove and then, restore the wallet
+        request_ $ Client.deleteWallet $- fixture ^. wallet . walletId
+        restoration <- request $ Client.postWallet $- NewWallet
+            (fixture ^. backupPhrase)
+            noSpendingPassword
+            defaultAssuranceLevel
+            defaultWalletName
+            RestoreWallet
+        verify restoration
+            [ expectWalletEventuallyRestored
+            ]
+
+        -- // 3 Later, check that we can recover that transaction
+        verify transaction
+            [ expectTxInHistoryOf  (fixture ^. wallet)
+            ]
+
+
     -- NOTE:
     -- Cases where we have to increase the number of change outputs are hard
     -- to test in practice. We either need:
