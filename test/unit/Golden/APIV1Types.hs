@@ -7,7 +7,7 @@ import           Universum
 import           Hedgehog (Property)
 import qualified Hedgehog as H
 
-import           Cardano.Wallet.API.V1.Types (V1 (..))
+import           Cardano.Wallet.API.V1.Types (WalletPassPhrase (..))
 import           Pos.Crypto (PassPhrase (..))
 
 import           Test.Pos.Util.Golden (discoverGolden, goldenTestJSON)
@@ -27,7 +27,7 @@ tests =
 golden_WalletPassPhrase :: Property
 golden_WalletPassPhrase =
     goldenTestJSON
-        (V1 examplePassPhrase)
+        (WalletPassPhrase examplePassPhrase)
         "test/unit/Golden/golden/apiV1Types/json/PassPhrase"
 
 -------------------------------------------------------------------------------
