@@ -7,10 +7,10 @@ import           Universum
 import           Hedgehog (Property)
 import qualified Hedgehog as H
 
-import           Cardano.Wallet.API.V1.Types (V1 (..), WalletPassPhrase (..),
-                     WalletTimestamp (..))
-import           Pos.Core (Timestamp, parseTimestamp)
+import           Cardano.Wallet.API.V1.Types (WalletInputSelectionPolicy (..),
+                     WalletPassPhrase (..), WalletTimestamp (..))
 import           Pos.Client.Txp.Util (InputSelectionPolicy (..))
+import           Pos.Core (Timestamp, parseTimestamp)
 
 import           Pos.Crypto (PassPhrase (..))
 
@@ -43,13 +43,13 @@ golden_WalletTimestamp =
 golden_WalletInputSelectionPolicy1 :: Property
 golden_WalletInputSelectionPolicy1 =
     goldenTestJSON
-        (V1 OptimizeForSecurity)
+        (WalletInputSelectionPolicy OptimizeForSecurity)
         "test/unit/Golden/golden/apiV1Types/json/InputSelectionPolicy1"
 
 golden_WalletInputSelectionPolicy2 :: Property
 golden_WalletInputSelectionPolicy2 =
     goldenTestJSON
-        (V1 OptimizeForHighThroughput)
+        (WalletInputSelectionPolicy OptimizeForHighThroughput)
         "test/unit/Golden/golden/apiV1Types/json/InputSelectionPolicy2"
 
 -------------------------------------------------------------------------------

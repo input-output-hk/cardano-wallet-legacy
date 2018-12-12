@@ -53,7 +53,7 @@ newUnsignedTransaction :: ActiveWalletLayer IO
                        -> Payment
                        -> Handler (APIResponse UnsignedTransaction)
 newUnsignedTransaction aw payment@Payment{..} = do
-    let inputGrouping = toInputGrouping $ fromMaybe (V1 defaultInputSelectionPolicy)
+    let inputGrouping = toInputGrouping $ fromMaybe (WalletInputSelectionPolicy defaultInputSelectionPolicy)
                                                     pmtGroupingPolicy
     res <- liftIO $ (WalletLayer.createUnsignedTx aw) inputGrouping
                                                       SenderPaysFee
