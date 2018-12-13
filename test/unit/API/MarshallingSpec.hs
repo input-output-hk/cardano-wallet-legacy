@@ -14,7 +14,6 @@ import           Data.Time (UTCTime (..), fromGregorian)
 import           Data.Time.Clock.POSIX (POSIXTime)
 import           Data.Typeable (typeRep)
 import           Data.Version (Version)
-import           Pos.Client.Txp.Util (InputSelectionPolicy)
 import           Pos.Core.NetworkMagic (NetworkMagic (..))
 import qualified Pos.Crypto as Crypto
 import           Servant.API (FromHttpApiData (..), ToHttpApiData (..))
@@ -63,7 +62,7 @@ spec = describe "Marshalling & Unmarshalling" $ do
         aesonRoundtripProp @NewAddress Proxy
         aesonRoundtripProp @(V1 Core.Coin) Proxy
         aesonRoundtripProp @WalletPassPhrase Proxy
-        aesonRoundtripProp @(V1 InputSelectionPolicy) Proxy
+        aesonRoundtripProp @WalletInputSelectionPolicy Proxy
         aesonRoundtripProp @TimeInfo Proxy
         aesonRoundtripProp @Transaction Proxy
         aesonRoundtripProp @WalletTimestamp Proxy

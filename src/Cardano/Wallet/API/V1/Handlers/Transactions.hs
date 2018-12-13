@@ -49,7 +49,7 @@ newTransaction aw payment@Payment{..} = liftIO $ do
 
     -- NOTE(adn) The 'SenderPaysFee' option will become configurable as part
     -- of CBR-291.
-    let inputGrouping = toInputGrouping $ fromMaybe (V1 defaultInputSelectionPolicy)
+    let inputGrouping = toInputGrouping $ fromMaybe (WalletInputSelectionPolicy defaultInputSelectionPolicy)
                                                     pmtGroupingPolicy
     res <- liftIO $ (WalletLayer.pay aw) (maybe mempty coerce pmtSpendingPassword)
                                          inputGrouping
@@ -91,7 +91,7 @@ estimateFees :: ActiveWalletLayer IO
              -> Payment
              -> Handler (APIResponse EstimatedFees)
 estimateFees aw payment@Payment{..} = do
-    let inputGrouping = toInputGrouping $ fromMaybe (V1 defaultInputSelectionPolicy)
+    let inputGrouping = toInputGrouping $ fromMaybe (WalletInputSelectionPolicy defaultInputSelectionPolicy)
                                                     pmtGroupingPolicy
     res <- liftIO $ (WalletLayer.estimateFees aw) inputGrouping
                                                   SenderPaysFee

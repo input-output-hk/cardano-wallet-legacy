@@ -42,6 +42,7 @@ module Cardano.Wallet.API.V1.Types (
   , mkSpendingPassword
   , WalletPassPhrase (..)
   , WalletTimestamp (..)
+  , WalletInputSelectionPolicy (..)
   , EosWallet (..)
   , NewEosWallet (..)
   , WalletAndTxHistory (..)
@@ -1503,27 +1504,35 @@ instance BuildableSafeGen PaymentSource where
 data Payment = Payment
   { pmtSource           :: !PaymentSource
   , pmtDestinations     :: !(NonEmpty PaymentDistribution)
-  , pmtGroupingPolicy   :: !(Maybe (V1 Core.InputSelectionPolicy))
+  , pmtGroupingPolicy   :: !(Maybe WalletInputSelectionPolicy)
   , pmtSpendingPassword :: !(Maybe SpendingPassword)
   } deriving (Show, Eq, Generic)
 
-instance ToJSON (V1 Core.InputSelectionPolicy) where
-    toJSON (V1 Core.OptimizeForSecurity)       = String "OptimizeForSecurity"
-    toJSON (V1 Core.OptimizeForHighThroughput) = String "OptimizeForHighThroughput"
+newtype WalletInputSelectionPolicy = WalletInputSelectionPolicy Core.InputSelectionPolicy
+    deriving (Eq, Generic, Show)
 
-instance FromJSON (V1 Core.InputSelectionPolicy) where
-    parseJSON (String "OptimizeForSecurity")       = pure (V1 Core.OptimizeForSecurity)
-    parseJSON (String "OptimizeForHighThroughput") = pure (V1 Core.OptimizeForHighThroughput)
+deriveSafeBuildable ''WalletInputSelectionPolicy
+instance BuildableSafeGen WalletInputSelectionPolicy where
+    buildSafeGen sl (WalletInputSelectionPolicy policy) =
+        bprint (plainOrSecureF sl build (fconst "<wallet input selection policy>")) policy
+
+instance ToJSON WalletInputSelectionPolicy where
+    toJSON (WalletInputSelectionPolicy Core.OptimizeForSecurity)       = String "OptimizeForSecurity"
+    toJSON (WalletInputSelectionPolicy Core.OptimizeForHighThroughput) = String "OptimizeForHighThroughput"
+
+instance FromJSON WalletInputSelectionPolicy where
+    parseJSON (String "OptimizeForSecurity")       = pure (WalletInputSelectionPolicy Core.OptimizeForSecurity)
+    parseJSON (String "OptimizeForHighThroughput") = pure (WalletInputSelectionPolicy Core.OptimizeForHighThroughput)
     parseJSON x = typeMismatch "Not a valid InputSelectionPolicy" x
 
-instance ToSchema (V1 Core.InputSelectionPolicy) where
+instance ToSchema WalletInputSelectionPolicy where
     declareNamedSchema _ =
-        pure $ NamedSchema (Just "V1InputSelectionPolicy") $ mempty
+        pure $ NamedSchema (Just "WalletInputSelectionPolicy") $ mempty
             & type_ .~ SwaggerString
             & enum_ ?~ ["OptimizeForSecurity", "OptimizeForHighThroughput"]
 
-instance Arbitrary (V1 Core.InputSelectionPolicy) where
-    arbitrary = fmap V1 arbitrary
+instance Arbitrary WalletInputSelectionPolicy where
+    arbitrary = fmap WalletInputSelectionPolicy arbitrary
 
 
 deriveJSON Aeson.defaultOptions ''Payment
@@ -2184,8 +2193,8 @@ instance Example BackupPhrase where
 instance Example Core.InputSelectionPolicy where
     example = pure Core.OptimizeForHighThroughput
 
-instance Example (V1 Core.InputSelectionPolicy) where
-    example = pure (V1 Core.OptimizeForHighThroughput)
+instance Example WalletInputSelectionPolicy where
+    example = pure (WalletInputSelectionPolicy Core.OptimizeForHighThroughput)
 
 instance Example Account where
     example = Account <$> example

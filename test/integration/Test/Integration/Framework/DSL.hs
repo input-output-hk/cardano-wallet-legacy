@@ -24,7 +24,6 @@ module Test.Integration.Framework.DSL
     , Redemption (..)
     , WalletUpdate(..)
     , ShieldedRedemptionCode (..)
-    , InputSelectionPolicy(..)
     , FilterOperations(..)
     , SortOperations(..)
     , WalletOperation(..)
@@ -90,7 +89,6 @@ import           Cardano.Wallet.API.V1.Types
 import           Cardano.Wallet.Client.Http (ClientError (..), WalletClient)
 import qualified Cardano.Wallet.Client.Http as Client
 import           Pos.Chain.Txp (TxIn (..), TxOut (..), TxOutAux (..))
-import           Pos.Client.Txp (InputSelectionPolicy (..))
 import           Pos.Core (Coin, IsBootstrapEraAddr (..), deriveLvl2KeyPair,
                      mkCoin, unsafeGetCoin)
 import           Pos.Core.NetworkMagic (NetworkMagic (..))
@@ -205,7 +203,7 @@ defaultDistribution
 defaultDistribution c s = pure $
     PaymentDistribution (V1 $ head $ s ^. typed) (V1 $ mkCoin c)
 
-defaultGroupingPolicy :: Maybe (V1 InputSelectionPolicy)
+defaultGroupingPolicy :: Maybe WalletInputSelectionPolicy
 defaultGroupingPolicy = Nothing
 
 defaultPage :: Maybe Page

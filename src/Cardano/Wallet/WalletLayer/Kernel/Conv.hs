@@ -267,7 +267,7 @@ toSyncState = \case
              }
 
 -- Matches the input InputGroupingPolicy with the Kernel's 'InputGrouping'
-toInputGrouping :: V1 InputSelectionPolicy -> InputGrouping
-toInputGrouping (V1 policy) = case policy of
+toInputGrouping :: V1.WalletInputSelectionPolicy -> InputGrouping
+toInputGrouping (V1.WalletInputSelectionPolicy policy) = case policy of
     OptimizeForSecurity       -> PreferGrouping
     OptimizeForHighThroughput -> IgnoreGrouping
