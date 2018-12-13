@@ -194,7 +194,7 @@ toAssuranceLevel HD.AssuranceLevelStrict = V1.StrictAssurance
 -- | Converts a Kernel 'HdAddress' into a V1 'WalletAddress'.
 toAddress :: HD.HdAccount -> HD.HdAddress -> V1.WalletAddress
 toAddress acc hdAddress =
-    V1.WalletAddress (V1 cardanoAddress)
+    V1.WalletAddress (V1.WalAddress cardanoAddress)
                      (addressMeta ^. addressMetaIsUsed)
                      (addressMeta ^. addressMetaIsChange)
                      (V1 addressOwnership)

@@ -85,7 +85,7 @@ getAccountAddresses
     -> WalletId
     -> AccountIndex
     -> RequestParams
-    -> FilterOperations '[V1 Address] WalletAddress
+    -> FilterOperations '[WalAddress] WalletAddress
     -> Handler (APIResponse AccountAddresses)
 getAccountAddresses layer wId accIdx pagination filters = do
     -- NOTE: Many of the Servant handlers have the following structure:

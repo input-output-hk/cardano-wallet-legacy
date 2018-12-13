@@ -39,7 +39,7 @@ import           Pos.Chain.Block (Blund)
 import           Pos.Chain.Txp (Tx, TxId, Utxo)
 import           Pos.Chain.Update (ConfirmedProposalState, SoftwareVersion)
 import           Pos.Core (Coin)
-import qualified Pos.Core as Core (Address)
+import qualified Pos.Core as Core
 import           Pos.Core.Chrono (NE, NewestFirst (..), OldestFirst (..))
 import           Pos.Core.NetworkMagic (NetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, PassPhrase)
@@ -49,12 +49,12 @@ import           Cardano.Wallet.API.Request.Filter (FilterOperations (..))
 import           Cardano.Wallet.API.Request.Sort (SortOperations (..))
 import           Cardano.Wallet.API.Response (APIResponse, SliceOf (..))
 import           Cardano.Wallet.API.V1.Types (Account, AccountBalance,
-                     AccountIndex, AccountUpdate, Address, EosWallet,
-                     EosWalletId, ForceNtpCheck, NewAccount, NewAddress,
-                     NewEosWallet, NewWallet, NodeInfo, NodeSettings,
-                     PasswordUpdate, Payment, Redemption, SignedTransaction,
-                     SpendingPassword, Transaction, UnsignedTransaction,
-                     V1 (..), Wallet, WalletAddress, WalletId, WalletImport,
+                     AccountIndex, AccountUpdate, EosWallet, EosWalletId,
+                     ForceNtpCheck, NewAccount, NewAddress, NewEosWallet,
+                     NewWallet, NodeInfo, NodeSettings, PasswordUpdate,
+                     Payment, Redemption, SignedTransaction, SpendingPassword,
+                     Transaction, UnsignedTransaction, V1 (..), WalAddress,
+                     Wallet, WalletAddress, WalletId, WalletImport,
                      WalletTimestamp, WalletUpdate)
 import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import qualified Cardano.Wallet.Kernel.Addresses as Kernel
@@ -451,7 +451,7 @@ data PassiveWalletLayer m = PassiveWalletLayer
     , getAccountAddresses  :: WalletId
                            -> AccountIndex
                            -> RequestParams
-                           -> FilterOperations '[V1 Address] WalletAddress
+                           -> FilterOperations '[WalAddress] WalletAddress
                            -> m (Either GetAccountError (APIResponse [WalletAddress]))
     , updateAccount        :: WalletId
                            -> AccountIndex
@@ -470,7 +470,7 @@ data PassiveWalletLayer m = PassiveWalletLayer
     -- transactions
     , getTransactions      :: Maybe WalletId
                            -> Maybe AccountIndex
-                           -> Maybe (V1 Address)
+                           -> Maybe (WalAddress)
                            -> RequestParams
                            -> FilterOperations '[V1 TxId, WalletTimestamp] Transaction
                            -> SortOperations Transaction

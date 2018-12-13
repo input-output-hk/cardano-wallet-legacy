@@ -420,7 +420,7 @@ spec = describe "Addresses" $ do
                         pure (toBeCheckedAddresses === correctAddresses)
 
         describe "Address listing with multiple Accounts (Servant)" $ do
-            let rootId = addrRoot . V1.unV1 . V1.addrId
+            let rootId = addrRoot . V1.unWalAddress . V1.addrId
             prop "page 0, per page 0" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     pm <- pick arbitrary
@@ -543,7 +543,7 @@ spec = describe "Addresses" $ do
                     pm <- pick arbitrary
                     withAddressFixtures pm 1 $ \_ layer _ [af] -> do
                         res <- WalletLayer.validateAddress layer
-                            (sformat build (V1.unV1 $ V1.addrId $ addressFixtureAddress af))
+                            (sformat build (V1.unWalAddress $ V1.addrId $ addressFixtureAddress af))
                         bimap STB STB res `shouldSatisfy` isRight
 
             prop "rejects a malformed address" $ withMaxSuccess 5 $
@@ -562,7 +562,7 @@ spec = describe "Addresses" $ do
                     pm                      <- pick arbitrary
                     let expected :: V1.WalletAddress
                         expected = V1.WalletAddress {
-                            addrId            = V1.V1 randomAddr
+                            addrId            = V1.WalAddress randomAddr
                           , addrUsed          = False
                           , addrChangeAddress = False
                           , addrOwnership     = V1.V1 V1.AddressAmbiguousOwnership
