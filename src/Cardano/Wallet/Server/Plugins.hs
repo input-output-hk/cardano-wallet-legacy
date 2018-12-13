@@ -25,14 +25,14 @@ import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Text as T
 import           Data.Typeable (typeOf)
 import           Formatting.Buildable (build)
-import qualified Servant
-
 import           Network.HTTP.Types.Status (badRequest400)
 import           Network.Wai (Application, Middleware, Response, responseLBS)
 import           Network.Wai.Handler.Warp (setOnException,
                      setOnExceptionResponse)
 import qualified Network.Wai.Handler.Warp as Warp
+import qualified Servant
 
+import qualified Cardano.Node.Client as NodeClient
 import           Cardano.NodeIPC (startNodeJsIPC)
 import           Cardano.Wallet.API as API
 import           Cardano.Wallet.API.V1.Headers (applicationJson)
@@ -79,12 +79,17 @@ apiServer
     -> (PassiveWalletLayer IO, PassiveWallet)
     -> [Middleware]
     -> Plugin Kernel.WalletMode
-apiServer (NewWalletBackendParams WalletBackendParams{..}) (passiveLayer, passiveWallet) middlewares diffusion = do
-        env <- ask
-        let diffusion' = Kernel.fromDiffusion (lower env) diffusion
-        WalletLayer.Kernel.bracketActiveWallet passiveLayer passiveWallet diffusion' $ \active _ -> do
-          ctx <- view shutdownContext
-          serveImpl
+apiServer
+    (NewWalletBackendParams WalletBackendParams{..})
+    (passiveLayer, passiveWallet)
+    middlewares
+    diffusion
+  = do
+    env <- ask
+    let diffusion' = Kernel.fromDiffusion (lower env) diffusion
+    WalletLayer.Kernel.bracketActiveWallet passiveLayer passiveWallet diffusion' $ \active _ -> do
+        ctx <- view shutdownContext
+        serveImpl
             (getApplication active)
             (BS8.unpack ip)
             port
@@ -93,6 +98,10 @@ apiServer (NewWalletBackendParams WalletBackendParams{..}) (passiveLayer, passiv
             (Just $ portCallback ctx)
   where
     (ip, port) = walletAddress
+    nodeClient = NodeClient.mkHttpClient nodeBaseUrl manager
+
+    nodeBaseUrl = error "TODO: get this from config"
+    manager = error "TODO: get this from config"
 
     exceptionHandler :: SomeException -> Response
     exceptionHandler se = case translateWalletLayerErrors se of
@@ -119,7 +128,7 @@ apiServer (NewWalletBackendParams WalletBackendParams{..}) (passiveLayer, passiv
         return
             $ withMiddlewares middlewares
             $ Servant.serve API.walletAPI
-            $ Server.walletServer active walletRunMode
+            $ Server.walletServer nodeClient active walletRunMode
 
     lower :: env -> ReaderT env IO a -> IO a
     lower env m = runReaderT m env

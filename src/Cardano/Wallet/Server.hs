@@ -7,6 +7,7 @@ import           Universum
 
 import           Servant
 
+import           Cardano.Node.Client (NodeHttpClient)
 import           Pos.Chain.Update (HasUpdateConfiguration, curSoftwareVersion,
                      updateConfiguration)
 import           Pos.Util.CompileInfo (HasCompileInfo, compileInfo)
@@ -24,16 +25,18 @@ import           Cardano.Wallet.WalletLayer (ActiveWalletLayer (..))
 --
 -- NOTE: Unlike the legacy server, the handlers will not run in a special
 -- Cardano monad because they just interfact with the Wallet object.
-walletServer :: ActiveWalletLayer IO
-             -> RunMode
-             -> Server WalletAPI
-walletServer w _ =
+walletServer
+    :: NodeHttpClient
+    -> ActiveWalletLayer IO
+    -> RunMode
+    -> Server WalletAPI
+walletServer nc w _ =
     v1Handler
     :<|> internalHandler
     :<|> wipHandler
   where
     v1Handler       = V1.handlers w
-    internalHandler = Internal.handlers (walletPassiveLayer w)
+    internalHandler = Internal.handlers nc (walletPassiveLayer w)
     wipHandler      = WIP.handlers w
 
 walletDocServer :: (HasCompileInfo, HasUpdateConfiguration) => Server WalletDoc
