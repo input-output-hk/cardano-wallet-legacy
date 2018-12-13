@@ -7,10 +7,12 @@ import           Universum
 import           Hedgehog (Property)
 import qualified Hedgehog as H
 
-import           Cardano.Wallet.API.V1.Types (WalletInputSelectionPolicy (..),
-                     WalletPassPhrase (..), WalletTimestamp (..))
+import           Cardano.Wallet.API.V1.Types (V1 (..),
+                     WalletInputSelectionPolicy (..), WalletPassPhrase (..),
+                     WalletTimestamp (..))
 import           Pos.Client.Txp.Util (InputSelectionPolicy (..))
-import           Pos.Core (Timestamp, parseTimestamp)
+import           Pos.Core (Address, Timestamp, decodeTextAddress,
+                     parseTimestamp)
 
 import           Pos.Crypto (PassPhrase (..))
 
@@ -52,6 +54,18 @@ golden_WalletInputSelectionPolicy2 =
         (WalletInputSelectionPolicy OptimizeForHighThroughput)
         "test/unit/Golden/golden/apiV1Types/json/InputSelectionPolicy2"
 
+golden_WalletAddress1 :: Property
+golden_WalletAddress1 =
+    goldenTestJSON
+        (V1 exampleAddress1)
+        "test/unit/Golden/golden/apiV1Types/json/Address1"
+
+golden_WalletAddress2 :: Property
+golden_WalletAddress2 =
+    goldenTestJSON
+        (V1 exampleAddress2)
+        "test/unit/Golden/golden/apiV1Types/json/Address2"
+
 -------------------------------------------------------------------------------
 -- Examples
 -------------------------------------------------------------------------------
@@ -64,3 +78,13 @@ exampleTimestamp :: Timestamp
 exampleTimestamp = timestamp
   where
     Just timestamp = parseTimestamp "2018-12-11T08:09:10"
+
+exampleAddress1 :: Address
+exampleAddress1 = address
+  where
+    Right address = decodeTextAddress "Ae2tdPwUPEZD3PkAcijLa9MP5Juyq6if6k2Xo1dqyvGm4cs6PkZiKrTrSZE"
+
+exampleAddress2 :: Address
+exampleAddress2 = address
+  where
+    Right address = decodeTextAddress "DdzFFzCqrhshvqztiAaVUuKkZWMepHt2oG1YoTxTt2cgyfaTFSnniFe55u5enazUEf77WDA5EC1gNErvtH7egHL8YZFqj2y4x3dm4hFa"
