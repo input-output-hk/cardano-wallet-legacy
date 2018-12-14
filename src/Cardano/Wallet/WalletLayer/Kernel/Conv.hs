@@ -197,7 +197,7 @@ toAddress acc hdAddress =
     V1.WalletAddress (V1.WalAddress cardanoAddress)
                      (addressMeta ^. addressMetaIsUsed)
                      (addressMeta ^. addressMetaIsChange)
-                     (V1 addressOwnership)
+                     addressOwnership
   where
     cardanoAddress   = hdAddress ^. HD.hdAddressAddress . fromDb
     addressMeta      = acc ^. HD.hdAccountState . HD.hdAccountStateCurrentCombined (<>) (cpAddressMeta cardanoAddress)
