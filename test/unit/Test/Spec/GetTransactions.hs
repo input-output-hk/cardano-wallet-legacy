@@ -230,7 +230,7 @@ getFixedAddress layer Fix{..} = do
             filters
     -- the defaut account of the wallet should have a unique address.
     let [address] = wrData wr
-    return $ V1.unV1 . V1.addrId $ address
+    return $ V1.unWalAddress . V1.addrId $ address
 
 -- | Returns an address from the account we explicitely create.
 getNonFixedAddress :: WalletLayer.ActiveWalletLayer IO -> Fix -> IO Core.Address
@@ -246,7 +246,7 @@ getNonFixedAddress layer Fix{..} = do
             filters
     -- the account we create in the fixture should also have an address
     let (address : _) = wrData wr
-    return $ V1.unV1 . V1.addrId $ address
+    return $ V1.unWalAddress . V1.addrId $ address
 
 getAccountBalanceNow :: Kernel.PassiveWallet -> Fix -> IO Word64
 getAccountBalanceNow pw Fix{..} = do
@@ -298,7 +298,7 @@ spec = do
             monadicIO $ do
                 pm <- pick arbitrary
                 let nm = makeNetworkMagic pm
-                distr <- fmap (\(TxOut addr coin) -> V1.PaymentDistribution (V1.V1 addr) (V1.V1 coin))
+                distr <- fmap (\(TxOut addr coin) -> V1.PaymentDistribution (V1.WalAddress addr) (V1.V1 coin))
                                 <$> pick (genPayeeWithNM nm mempty (PayLovelace 100))
                 withUtxosFixture @IO pm [300, 400, 500, 600, 5000000] $ \_keystore _activeLayer aw f@Fix{..} -> do
                     let pw = Kernel.walletPassive aw
@@ -322,7 +322,7 @@ spec = do
             monadicIO $ do
                 pm <- pick arbitrary
                 let nm = makeNetworkMagic pm
-                distr <- fmap (\(TxOut addr coin) -> V1.PaymentDistribution (V1.V1 addr) (V1.V1 coin))
+                distr <- fmap (\(TxOut addr coin) -> V1.PaymentDistribution (V1.WalAddress addr) (V1.V1 coin))
                                 <$> pick (genPayeeWithNM nm mempty (PayLovelace 100))
                 withUtxosFixture @IO pm [300, 400, 500, 600, 5000000] $ \_keystore _activeLayer aw Fix{..} -> do
                     let pw = Kernel.walletPassive aw
@@ -398,7 +398,7 @@ spec = do
                     let sourceWallet = V1.WalletId (sformat build rootAddress)
                     let accountIndex = Kernel.Conv.toAccountId hdAccountId
                     let destinations =
-                            fmap (\(addr, coin) -> V1.PaymentDistribution (V1.V1 addr) (V1.V1 coin)
+                            fmap (\(addr, coin) -> V1.PaymentDistribution (V1.WalAddress addr) (V1.V1 coin)
                                 ) fixturePayees
                     let newPayment = V1.Payment {
                                     pmtSource          = V1.PaymentSource sourceWallet accountIndex

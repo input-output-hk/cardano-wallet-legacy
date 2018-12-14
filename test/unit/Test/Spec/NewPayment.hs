@@ -170,7 +170,7 @@ withPayment pm initialBalance toPay action = do
         let sourceWallet = V1.WalletId (sformat build rootAddress)
         let accountIndex = Kernel.Conv.toAccountId hdAccountId
         let destinations =
-                fmap (\(addr, coin) -> V1.PaymentDistribution (V1.V1 addr) (V1.V1 coin)
+                fmap (\(addr, coin) -> V1.PaymentDistribution (V1.WalAddress addr) (V1.V1 coin)
                      ) fixturePayees
         let newPayment = V1.Payment {
                          pmtSource           = V1.PaymentSource sourceWallet accountIndex

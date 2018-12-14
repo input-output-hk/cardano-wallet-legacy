@@ -201,7 +201,7 @@ defaultDistribution
     -> s
     -> NonEmpty PaymentDistribution
 defaultDistribution c s = pure $
-    PaymentDistribution (V1 $ head $ s ^. typed) (V1 $ mkCoin c)
+    PaymentDistribution (WalAddress $ head $ s ^. typed) (V1 $ mkCoin c)
 
 defaultGroupingPolicy :: Maybe WalletInputSelectionPolicy
 defaultGroupingPolicy = Nothing

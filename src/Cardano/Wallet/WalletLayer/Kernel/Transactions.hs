@@ -38,7 +38,7 @@ getTransactions :: MonadIO m
                 => Kernel.PassiveWallet
                 -> Maybe V1.WalletId
                 -> Maybe V1.AccountIndex
-                -> Maybe (V1 Address)
+                -> Maybe V1.WalAddress
                 -> RequestParams
                 -> FilterOperations '[V1 TxId, V1.WalletTimestamp] V1.Transaction
                 -> SortOperations V1.Transaction
@@ -68,7 +68,7 @@ getTransactions wallet mbWalletId mbAccountIndex mbAddress params fop sop = lift
                 (TxMeta.Offset . fromIntegral $ (cp - 1) * pp)
                 (TxMeta.Limit . fromIntegral $ pp)
                 accountFops
-                (unV1 <$> mbAddress)
+                (V1.unWalAddress <$> mbAddress)
                 (castFiltering $ mapIx unV1 <$> F.findMatchingFilterOp fop)
                 (castFiltering $ mapIx unV1 <$> F.findMatchingFilterOp fop)
                 mbSorting
@@ -171,10 +171,10 @@ metaToTx db slotCount current TxMeta{..} = do
             hdAccountId = HD.HdAccountId hdRootId (HD.HdAccountIx _txMetaAccountIx)
 
             inputsToPayDistr :: (a , b, Address, Coin) -> V1.PaymentDistribution
-            inputsToPayDistr (_, _, addr, c) = V1.PaymentDistribution (V1 addr) (V1 c)
+            inputsToPayDistr (_, _, addr, c) = V1.PaymentDistribution (V1.WalAddress addr) (V1 c)
 
             outputsToPayDistr :: (Address, Coin) -> V1.PaymentDistribution
-            outputsToPayDistr (addr, c) = V1.PaymentDistribution (V1 addr) (V1 c)
+            outputsToPayDistr (addr, c) = V1.PaymentDistribution (V1.WalAddress addr) (V1 c)
 
 buildDynamicTxMeta :: HD.AssuranceLevel -> SlotCount -> HD.CombinedWithAccountState (Maybe SlotId) -> SlotId -> Bool -> (V1.TransactionStatus, Word64)
 buildDynamicTxMeta assuranceLevel slotCount mSlotwithState currentSlot isPending =

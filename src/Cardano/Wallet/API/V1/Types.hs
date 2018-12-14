@@ -43,6 +43,7 @@ module Cardano.Wallet.API.V1.Types (
   , WalletPassPhrase (..)
   , WalletTimestamp (..)
   , WalletInputSelectionPolicy (..)
+  , WalAddress (..)
   , EosWallet (..)
   , NewEosWallet (..)
   , WalletAndTxHistory (..)
@@ -291,32 +292,40 @@ instance ToSchema (V1 Core.Coin) where
             & type_ .~ SwaggerNumber
             & maximum_ .~ Just (fromIntegral Core.maxCoinVal)
 
-instance ToJSON (V1 Core.Address) where
-    toJSON (V1 c) = String $ sformat Core.addressF c
+newtype WalAddress = WalAddress { unWalAddress :: Core.Address }
+    deriving (Eq, Generic, Ord, Show)
 
-instance FromJSON (V1 Core.Address) where
+deriveSafeBuildable ''WalAddress
+instance BuildableSafeGen WalAddress where
+    buildSafeGen sl (WalAddress addr) =
+        bprint (plainOrSecureF sl build (fconst "<wallet address>")) addr
+
+instance ToJSON WalAddress where
+    toJSON (WalAddress c) = String $ sformat Core.addressF c
+
+instance FromJSON WalAddress where
     parseJSON (String a) = case Core.decodeTextAddress a of
         Left e     -> fail $ "Not a valid Cardano Address: " <> toString e
-        Right addr -> pure (V1 addr)
+        Right addr -> pure (WalAddress addr)
     parseJSON x = typeMismatch "parseJSON failed for Address" x
 
-instance Arbitrary (V1 Core.Address) where
-    arbitrary = fmap V1 arbitrary
+instance Arbitrary WalAddress where
+    arbitrary = fmap WalAddress arbitrary
 
-instance ToSchema (V1 Core.Address) where
+instance ToSchema WalAddress where
     declareNamedSchema _ =
-        pure $ NamedSchema (Just "V1Address") $ mempty
+        pure $ NamedSchema (Just "Wallet Address") $ mempty
             & type_ .~ SwaggerString
             -- TODO: any other constraints we can have here?
 
-instance FromHttpApiData (V1 Core.Address) where
-    parseQueryParam = fmap (fmap V1) Core.decodeTextAddress
+instance FromHttpApiData WalAddress where
+    parseQueryParam = fmap (fmap WalAddress) Core.decodeTextAddress
 
-instance ToHttpApiData (V1 Core.Address) where
-    toQueryParam (V1 a) = sformat build a
+instance ToHttpApiData WalAddress where
+    toQueryParam (WalAddress a) = sformat build a
 
-deriving instance Hashable (V1 Core.Address)
-deriving instance NFData (V1 Core.Address)
+deriving instance Hashable WalAddress
+deriving instance NFData WalAddress
 
 newtype WalletTimestamp = WalletTimestamp Core.Timestamp
     deriving (Eq, Generic, Ord, Show)
@@ -1025,7 +1034,7 @@ data WAddressMeta = WAddressMeta
     { _wamWalletId     :: !WalletId
     , _wamAccountIndex :: !Word32
     , _wamAddressIndex :: !Word32
-    , _wamAddress      :: !(V1 Core.Address)
+    , _wamAddress      :: !WalAddress
     } deriving (Eq, Ord, Show, Generic, Typeable)
 
 instance Hashable WAddressMeta
@@ -1041,7 +1050,7 @@ instance Buildable WAddressMeta where
 
 -- | Summary about single address.
 data WalletAddress = WalletAddress
-    { addrId            :: !(V1 Core.Address)
+    { addrId            :: !WalAddress
     , addrUsed          :: !Bool
     , addrChangeAddress :: !Bool
     , addrOwnership     :: !(V1 AddressOwnership)
@@ -1443,7 +1452,7 @@ instance BuildableSafeGen EstimatedFees where
 -- | Maps an 'Address' to some 'Coin's, and it's
 -- typically used to specify where to send money during a 'Payment'.
 data PaymentDistribution = PaymentDistribution {
-      pdAddress :: !(V1 Core.Address)
+      pdAddress :: !WalAddress
     , pdAmount  :: !(V1 Core.Coin)
     } deriving (Show, Ord, Eq, Generic)
 
@@ -1801,7 +1810,7 @@ instance Buildable [AddressLevel] where
 
 -- | Source address and corresponding derivation path, for external wallet.
 data AddressAndPath = AddressAndPath
-    { aapSrcAddress     :: !(V1 Core.Address) -- AsBase58
+    { aapSrcAddress     :: !WalAddress -- AsBase58
     -- ^ Source address in Base58-format.
     , aapDerivationPath :: ![AddressLevel]
     -- ^ Derivation path used during generation of this address.
@@ -1866,7 +1875,7 @@ instance BuildableSafeGen UnsignedTransaction where
 -- it returns the source address, the signature and the derived PK of
 -- the transaction input.
 data AddressWithProof = AddressWithProof
-    { awpSrcAddress  :: !(V1 Core.Address)
+    { awpSrcAddress  :: !WalAddress
     -- ^ Source address.
     , awpTxSignature :: !TransactionSignatureAsBase16
     -- ^ Base16-encoded signature of transaction (made by derived SK).
@@ -2173,8 +2182,8 @@ instance Example (V1 Core.Coin)
 -- to become huge, up to 1000+ bytes, if the 'UnsafeMultiKeyDistr' constructor
 -- is used. We do not use this constructor, which keeps the address between
 -- ~80-150 bytes long.
-instance Example (V1 Core.Address) where
-    example = fmap V1 . Core.makeAddress
+instance Example WalAddress where
+    example = fmap WalAddress . Core.makeAddress
         <$> arbitrary
         <*> arbitraryAttributes
       where
@@ -2362,7 +2371,7 @@ data WalletError =
     -- | NotEnoughMoney weNeedMore
       NotEnoughMoney !ErrNotEnoughMoney
     -- | OutputIsRedeem weAddress
-    | OutputIsRedeem !(V1 Core.Address)
+    | OutputIsRedeem !WalAddress
     -- | UnknownError weMsg
     | UnknownError !Text
     -- | InvalidAddressFormat weMsg
@@ -2378,7 +2387,7 @@ data WalletError =
     | SignedTxSubmitError !Text
     | TxRedemptionDepleted
     -- | TxSafeSignerNotFound weAddress
-    | TxSafeSignerNotFound !(V1 Core.Address)
+    | TxSafeSignerNotFound !WalAddress
     -- | MissingRequiredParams requiredParams
     | MissingRequiredParams !(NonEmpty (Text, Text))
     -- | WalletIsNotReadyToProcessPayments weStillRestoring
@@ -2415,7 +2424,7 @@ instance Arbitrary WalletError where
             [ pure ErrCannotCoverFee
             , ErrAvailableBalanceIsInsufficient <$> Gen.choose (1, 1000)
             ]
-        , OutputIsRedeem . V1 <$> arbitrary
+        , OutputIsRedeem . WalAddress <$> arbitrary
         , UnknownError <$> arbitraryText
         , InvalidAddressFormat <$> arbitraryText
         , pure WalletNotFound
@@ -2427,7 +2436,7 @@ instance Arbitrary WalletError where
         , pure TooBigTransaction
         , pure TxFailedToStabilize
         , pure TxRedemptionDepleted
-        , TxSafeSignerNotFound . V1 <$> arbitrary
+        , TxSafeSignerNotFound . WalAddress <$> arbitrary
         , MissingRequiredParams <$> Gen.oneof
             [ unsafeMkNonEmpty <$> Gen.vectorOf 1 arbitraryParam
             , unsafeMkNonEmpty <$> Gen.vectorOf 2 arbitraryParam

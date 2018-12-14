@@ -62,8 +62,8 @@ instance ToIndex Transaction WalletTimestamp where
     toIndex _ = fmap WalletTimestamp . Core.parseTimestamp
     accessIx Transaction{..} = txCreationTime
 
-instance ToIndex WalletAddress (V1 Core.Address) where
-    toIndex _ = fmap V1 . either (const Nothing) Just . Core.decodeTextAddress
+instance ToIndex WalletAddress WalAddress where
+    toIndex _ = fmap WalAddress . either (const Nothing) Just . Core.decodeTextAddress
     accessIx WalletAddress{..} = addrId
 
 --
@@ -83,7 +83,7 @@ instance HasPrimKey Transaction where
     primKey = txId
 
 instance HasPrimKey WalletAddress where
-    type PrimKey WalletAddress = V1 Core.Address
+    type PrimKey WalletAddress = WalAddress
     primKey = addrId
 
 -- | The secondary indices for each major resource.
@@ -139,7 +139,7 @@ type family IndexToQueryParam resource ix where
     IndexToQueryParam Wallet  WalletId                = "id"
     IndexToQueryParam Wallet  WalletTimestamp         = "created_at"
 
-    IndexToQueryParam WalletAddress (V1 Core.Address) = "address"
+    IndexToQueryParam WalletAddress (WalAddress)      = "address"
 
     IndexToQueryParam Transaction (V1 Txp.TxId)      = "id"
     IndexToQueryParam Transaction WalletTimestamp    = "created_at"
@@ -168,6 +168,6 @@ instance KnownQueryParam Account AccountIndex
 instance KnownQueryParam Wallet Core.Coin
 instance KnownQueryParam Wallet WalletId
 instance KnownQueryParam Wallet WalletTimestamp
-instance KnownQueryParam WalletAddress (V1 Core.Address)
+instance KnownQueryParam WalletAddress WalAddress
 instance KnownQueryParam Transaction (V1 Txp.TxId)
 instance KnownQueryParam Transaction WalletTimestamp

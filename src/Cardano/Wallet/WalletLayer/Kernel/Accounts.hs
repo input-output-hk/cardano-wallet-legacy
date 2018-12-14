@@ -150,7 +150,7 @@ updateAccount wallet wId accIx (V1.AccountUpdate newName) = runExceptT $ do
 getAccountAddresses :: V1.WalletId
                     -> V1.AccountIndex
                     -> RequestParams
-                    -> FilterOperations '[V1 Core.Address] WalletAddress
+                    -> FilterOperations '[V1.WalAddress] WalletAddress
                     -> Kernel.DB
                     -> Either GetAccountError (APIResponse [V1.WalletAddress])
 getAccountAddresses wId accIx rp fo snapshot = runExcept $ do
@@ -166,8 +166,8 @@ getAccountAddresses wId accIx rp fo snapshot = runExcept $ do
   Auxiliary
 -------------------------------------------------------------------------------}
 
-filterHdAddress :: FilterOperations '[V1 Core.Address] WalletAddress
-                -> FilterOperations '[V1 Core.Address] (Indexed HD.HdAddress)
+filterHdAddress :: FilterOperations '[V1.WalAddress] WalletAddress
+                -> FilterOperations '[V1.WalAddress] (Indexed HD.HdAddress)
 filterHdAddress NoFilters               = NoFilters
 filterHdAddress (FilterNop NoFilters)   = FilterNop NoFilters
 filterHdAddress (FilterOp op NoFilters) = FilterOp (coerce op) NoFilters

@@ -18,7 +18,6 @@ import           Data.Coerce (coerce)
 
 import           Pos.Chain.Txp (TxId)
 import           Pos.Client.Txp.Util (defaultInputSelectionPolicy)
-import           Pos.Core (Address)
 
 import           Cardano.Wallet.API.Request
 import           Cardano.Wallet.API.Response
@@ -73,7 +72,7 @@ txFromMeta aw embedErr meta = do
 getTransactionsHistory :: PassiveWalletLayer IO
                        -> Maybe WalletId
                        -> Maybe AccountIndex
-                       -> Maybe (V1 Address)
+                       -> Maybe WalAddress
                        -> RequestParams
                        -> FilterOperations '[V1 TxId, WalletTimestamp] Transaction
                        -> SortOperations Transaction

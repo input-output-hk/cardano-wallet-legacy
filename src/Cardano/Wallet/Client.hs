@@ -121,7 +121,7 @@ data WalletClient m
          -> AccountIndex
          -> Maybe Page
          -> Maybe PerPage
-         -> FilterOperations '[V1 Address] WalletAddress
+         -> FilterOperations '[WalAddress] WalletAddress
          -> Resp m AccountAddresses
     , getAccountBalance
          :: WalletId -> AccountIndex -> Resp m AccountBalance
@@ -131,7 +131,7 @@ data WalletClient m
     , getTransactionIndexFilterSorts
          :: Maybe WalletId
          -> Maybe AccountIndex
-         -> Maybe (V1 Core.Address)
+         -> Maybe WalAddress
          -> Maybe Page
          -> Maybe PerPage
          -> FilterOperations '[V1 Core.TxId, WalletTimestamp] Transaction
@@ -212,7 +212,7 @@ getTransactionIndex
     => WalletClient m
     -> Maybe WalletId
     -> Maybe AccountIndex
-    -> Maybe (V1 Core.Address)
+    -> Maybe WalAddress
     -> Resp m [Transaction]
 getTransactionIndex wc wid maid maddr =
     paginateAll $ \mp mpp -> getTransactionIndexFilterSorts wc wid maid maddr mp mpp NoFilters NoSorts
