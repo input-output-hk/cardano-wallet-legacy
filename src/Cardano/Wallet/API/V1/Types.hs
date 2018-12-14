@@ -43,6 +43,7 @@ module Cardano.Wallet.API.V1.Types (
   , WalletPassPhrase (..)
   , WalletTimestamp (..)
   , WalletInputSelectionPolicy (..)
+  , WalletTxId (..)
   , WalAddress (..)
   , EosWallet (..)
   , NewEosWallet (..)
@@ -1577,25 +1578,34 @@ instance BuildableSafeGen Payment where
 ----------------------------------------------------------------------------
 -- TxId
 ----------------------------------------------------------------------------
-instance Arbitrary (V1 Txp.TxId) where
-  arbitrary = V1 <$> arbitrary
 
-instance ToJSON (V1 Txp.TxId) where
-  toJSON (V1 t) = String (sformat hashHexF t)
+newtype WalletTxId = WalletTxId Txp.TxId
+    deriving (Eq, Generic, Ord, Show)
 
-instance FromJSON (V1 Txp.TxId) where
+deriveSafeBuildable ''WalletTxId
+instance BuildableSafeGen WalletTxId where
+    buildSafeGen sl (WalletTxId txId) =
+        bprint (plainOrSecureF sl build (fconst "<wallet tx id>")) txId
+
+instance Arbitrary WalletTxId where
+  arbitrary = WalletTxId <$> arbitrary
+
+instance ToJSON WalletTxId where
+  toJSON (WalletTxId t) = String (sformat hashHexF t)
+
+instance FromJSON WalletTxId where
     parseJSON = withText "TxId" $ \t -> do
        case decodeHash t of
            Left err -> fail $ "Failed to parse transaction ID: " <> toString err
-           Right a  -> pure (V1 a)
+           Right a  -> pure (WalletTxId a)
 
-instance FromHttpApiData (V1 Txp.TxId) where
-    parseQueryParam = fmap (fmap V1) decodeHash
+instance FromHttpApiData WalletTxId where
+    parseQueryParam = fmap (fmap WalletTxId) decodeHash
 
-instance ToHttpApiData (V1 Txp.TxId) where
-    toQueryParam (V1 txId) = sformat hashHexF txId
+instance ToHttpApiData WalletTxId where
+    toQueryParam (WalletTxId txId) = sformat hashHexF txId
 
-instance ToSchema (V1 Txp.TxId) where
+instance ToSchema WalletTxId where
     declareNamedSchema _ = declareNamedSchema (Proxy @Text)
 
 ----------------------------------------------------------------------------
@@ -1733,7 +1743,7 @@ instance BuildableSafeGen TransactionDirection where
 
 -- | A 'Wallet''s 'Transaction'.
 data Transaction = Transaction
-  { txId            :: !(V1 Txp.TxId)
+  { txId            :: !WalletTxId
   , txConfirmations :: !Word
   , txAmount        :: !(V1 Core.Coin)
   , txInputs        :: !(NonEmpty PaymentDistribution)

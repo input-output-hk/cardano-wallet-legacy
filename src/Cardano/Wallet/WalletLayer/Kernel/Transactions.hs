@@ -11,7 +11,6 @@ import           Control.Monad.Except
 import           Formatting (build, sformat)
 import           GHC.TypeLits (symbolVal)
 
-import           Pos.Chain.Txp (TxId)
 import           Pos.Core (Address, Coin, SlotCount, SlotId, decodeTextAddress,
                      flattenSlotId, getBlockCount)
 import           Pos.Util.Wlog (Severity (..))
@@ -40,7 +39,7 @@ getTransactions :: MonadIO m
                 -> Maybe V1.AccountIndex
                 -> Maybe V1.WalAddress
                 -> RequestParams
-                -> FilterOperations '[V1 TxId, V1.WalletTimestamp] V1.Transaction
+                -> FilterOperations '[V1.WalletTxId, V1.WalletTimestamp] V1.Transaction
                 -> SortOperations V1.Transaction
                 -> m (Either GetTxError (APIResponse [V1.Transaction]))
 getTransactions wallet mbWalletId mbAccountIndex mbAddress params fop sop = liftIO $ runExceptT $ do
@@ -156,7 +155,7 @@ metaToTx db slotCount current TxMeta{..} = do
                         Kernel.rootAssuranceLevel db hdRootId
     let (status, confirmations) = buildDynamicTxMeta assuranceLevel slotCount mSlotwithState current isPending
     return V1.Transaction {
-        txId = V1 _txMetaId,
+        txId = V1.WalletTxId _txMetaId,
         txConfirmations = fromIntegral confirmations,
         txAmount = V1 _txMetaAmount,
         txInputs = inputsToPayDistr <$> _txMetaInputs,

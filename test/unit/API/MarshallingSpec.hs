@@ -89,7 +89,7 @@ spec = describe "Marshalling & Unmarshalling" $ do
 
         -- HttpApiData roundtrips
         httpApiDataRoundtripProp @AccountIndex Proxy
-        httpApiDataRoundtripProp @(V1 Txp.TxId) Proxy
+        httpApiDataRoundtripProp @WalletTxId Proxy
         httpApiDataRoundtripProp @WalletId Proxy
         httpApiDataRoundtripProp @WalletTimestamp Proxy
         httpApiDataRoundtripProp @WalAddress Proxy
