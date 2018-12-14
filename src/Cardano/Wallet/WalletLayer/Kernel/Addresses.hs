@@ -16,7 +16,7 @@ import           Cardano.Wallet.API.Request (RequestParams (..))
 import           Cardano.Wallet.API.Request.Pagination (Page (..),
                      PaginationParams (..), PerPage (..))
 import           Cardano.Wallet.API.Response (SliceOf (..))
-import           Cardano.Wallet.API.V1.Types (V1 (..), WalletAddress (..))
+import           Cardano.Wallet.API.V1.Types (WalletAddress (..))
 import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel.Addresses as Kernel
 import           Cardano.Wallet.Kernel.DB.AcidState (dbHdWallets)
@@ -51,7 +51,7 @@ createAddress wallet
     -- | Creates a new 'WalletAddress'. As this is a brand new, fresh Address,
     -- it's fine to have 'False' for both 'isUsed' and 'isChange'.
     mkAddress :: Address -> WalletAddress
-    mkAddress addr = WalletAddress (V1.WalAddress addr) False False (V1 V1.AddressIsOurs)
+    mkAddress addr = WalletAddress (V1.WalAddress addr) False False V1.AddressIsOurs
 
 
 
@@ -184,5 +184,5 @@ validateAddress rawText db = runExcept $ do
             addrId            = V1.WalAddress cardanoAddress
           , addrUsed          = False
           , addrChangeAddress = False
-          , addrOwnership     = (V1 V1.AddressAmbiguousOwnership)
+          , addrOwnership     = V1.AddressAmbiguousOwnership
           }

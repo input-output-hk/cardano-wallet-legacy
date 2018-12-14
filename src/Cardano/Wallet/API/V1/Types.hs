@@ -1011,20 +1011,20 @@ data AddressOwnership
     | AddressAmbiguousOwnership
     deriving (Show, Eq, Generic, Ord)
 
-instance ToJSON (V1 AddressOwnership) where
-    toJSON = genericToJSON optsADTCamelCase . unV1
+instance ToJSON AddressOwnership where
+    toJSON = genericToJSON optsADTCamelCase
 
-instance FromJSON (V1 AddressOwnership) where
-    parseJSON = fmap V1 . genericParseJSON optsADTCamelCase
+instance FromJSON AddressOwnership where
+    parseJSON = genericParseJSON optsADTCamelCase
 
-instance ToSchema (V1 AddressOwnership) where
+instance ToSchema AddressOwnership where
     declareNamedSchema _ =
-        pure $ NamedSchema (Just "V1AddressOwnership") $ mempty
+        pure $ NamedSchema (Just "AddressOwnership") $ mempty
             & type_ .~ SwaggerString
             & enum_ ?~ ["isOurs", "ambiguousOwnership"]
 
-instance Arbitrary (V1 AddressOwnership) where
-    arbitrary = fmap V1 $ oneof
+instance Arbitrary AddressOwnership where
+    arbitrary = oneof
         [ pure AddressIsOurs
         , pure AddressAmbiguousOwnership
         ]
@@ -1053,7 +1053,7 @@ data WalletAddress = WalletAddress
     { addrId            :: !WalAddress
     , addrUsed          :: !Bool
     , addrChangeAddress :: !Bool
-    , addrOwnership     :: !(V1 AddressOwnership)
+    , addrOwnership     :: !AddressOwnership
     } deriving (Show, Eq, Generic, Ord)
 
 deriveJSON Aeson.defaultOptions ''WalletAddress
