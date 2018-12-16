@@ -16,8 +16,8 @@ let
   hackage = import (overrideWith "hackage"
                     (pkgs.fetchFromGitHub { owner  = "angerman";
                                                 repo   = "hackage.nix";
-                                                rev    = "d8e03ec0e3c99903d970406ae5bceac7d993035d";
-                                                sha256 = "0c7camspw7v5bg23hcas0r10c40fnwwwmz0adsjpsxgdjxayws3v";
+                                                rev    = "72e5c66b9db4fdf49621c0bf6e2fce0781e98787";
+                                                sha256 = "1wbml33yimdjx7ig8abqwgvzbyksvvb233p8z2q1dzja7xbgz033";
                                                 name   = "hackage-exprs-source"; }))
                    ;
   # a different haskell infrastructure
