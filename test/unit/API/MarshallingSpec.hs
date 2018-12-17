@@ -54,7 +54,7 @@ spec = describe "Marshalling & Unmarshalling" $ do
         aesonRoundtripProp @AssuranceLevel Proxy
         aesonRoundtripProp @BackupPhrase Proxy
         aesonRoundtripProp @Redemption Proxy
-        aesonRoundtripProp @(V1 Core.SoftwareVersion) Proxy
+        aesonRoundtripProp @WalletSoftwareVersion Proxy
         aesonRoundtripProp @NodeSettings Proxy
         aesonRoundtripProp @Payment Proxy
         aesonRoundtripProp @PaymentDistribution Proxy

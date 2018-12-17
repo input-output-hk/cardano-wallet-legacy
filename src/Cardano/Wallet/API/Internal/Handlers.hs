@@ -4,11 +4,10 @@ import           Universum
 
 import           Servant
 
-import           Pos.Chain.Update (SoftwareVersion)
-
 import qualified Cardano.Wallet.API.Internal as Internal
 import           Cardano.Wallet.API.Response (APIResponse, single)
-import           Cardano.Wallet.API.V1.Types (V1, Wallet, WalletImport)
+import           Cardano.Wallet.API.V1.Types (Wallet, WalletImport,
+                     WalletSoftwareVersion)
 import           Cardano.Wallet.WalletLayer (PassiveWalletLayer)
 import qualified Cardano.Wallet.WalletLayer as WalletLayer
 
@@ -19,7 +18,7 @@ handlers w = nextUpdate       w
         :<|> resetWalletState w
         :<|> importWallet     w
 
-nextUpdate :: PassiveWalletLayer IO -> Handler (APIResponse (V1 SoftwareVersion))
+nextUpdate :: PassiveWalletLayer IO -> Handler (APIResponse WalletSoftwareVersion)
 nextUpdate w = do
     mUpd <- liftIO $ WalletLayer.nextUpdate w
     case mUpd of
