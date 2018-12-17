@@ -9,12 +9,13 @@ import qualified Hedgehog as H
 
 import           Cardano.Wallet.API.V1.Types (AddressOwnership (..),
                      WalAddress (..), WalletInputSelectionPolicy (..),
-                     WalletPassPhrase (..), WalletTimestamp (..))
+                     WalletPassPhrase (..), WalletTimestamp (..),
+                     WalletTxId (..))
+import           Pos.Chain.Txp (Tx, TxId)
 import           Pos.Client.Txp.Util (InputSelectionPolicy (..))
 import           Pos.Core (Address, Timestamp, decodeTextAddress,
                      parseTimestamp)
-
-import           Pos.Crypto (PassPhrase (..))
+import           Pos.Crypto (Hash, PassPhrase (..), decodeHash)
 
 import           Test.Pos.Util.Golden (discoverGolden, goldenTestJSON)
 
@@ -78,6 +79,12 @@ golden_AddressOwnership2 =
         AddressAmbiguousOwnership
         "test/unit/Golden/golden/apiV1Types/json/AddressOwnership2"
 
+golden_WalletTxId :: Property
+golden_WalletTxId =
+    goldenTestJSON
+        (WalletTxId exampleTxId)
+        "test/unit/Golden/golden/apiV1Types/json/TxId"
+
 -------------------------------------------------------------------------------
 -- Examples
 -------------------------------------------------------------------------------
@@ -100,3 +107,8 @@ exampleAddress2 :: Address
 exampleAddress2 = address
   where
     Right address = decodeTextAddress "DdzFFzCqrhshvqztiAaVUuKkZWMepHt2oG1YoTxTt2cgyfaTFSnniFe55u5enazUEf77WDA5EC1gNErvtH7egHL8YZFqj2y4x3dm4hFa"
+
+exampleTxId :: TxId
+exampleTxId = txId
+  where
+    Right (txId :: Hash Tx) = decodeHash "186cbd5e4e4078f80c400c93a7ecfcaa7e5ebbb80b07324cec905f7243b9c3f3"

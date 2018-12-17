@@ -5,7 +5,6 @@ import           Cardano.Wallet.API.Response
 import           Cardano.Wallet.API.Types
 import           Cardano.Wallet.API.V1.Parameters
 import           Cardano.Wallet.API.V1.Types
-import qualified Pos.Chain.Txp as Txp
 
 import           Servant
 
@@ -18,7 +17,7 @@ type API = Tags '["Transactions"] :>
                         :> QueryParam "account_index" AccountIndex
                         :> QueryParam "address" (WalAddress)
                         :> WalletRequestParams
-                        :> FilterBy '[ V1 Txp.TxId
+                        :> FilterBy '[ WalletTxId
                                      , WalletTimestamp
                                      ] Transaction
                         :> SortBy   '[ WalletTimestamp

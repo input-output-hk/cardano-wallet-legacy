@@ -16,7 +16,6 @@ import           Servant
 
 import           Data.Coerce (coerce)
 
-import           Pos.Chain.Txp (TxId)
 import           Pos.Client.Txp.Util (defaultInputSelectionPolicy)
 
 import           Cardano.Wallet.API.Request
@@ -74,7 +73,7 @@ getTransactionsHistory :: PassiveWalletLayer IO
                        -> Maybe AccountIndex
                        -> Maybe WalAddress
                        -> RequestParams
-                       -> FilterOperations '[V1 TxId, WalletTimestamp] Transaction
+                       -> FilterOperations '[WalletTxId, WalletTimestamp] Transaction
                        -> SortOperations Transaction
                        -> Handler (APIResponse [Transaction])
 getTransactionsHistory pw mwalletId mAccIdx mAddr requestParams fops sops =

@@ -41,7 +41,6 @@ import           Control.Exception (Exception (..))
 import           Data.Swagger (Swagger)
 import           Servant.Client (GenResponse (..), Response, ServantError (..))
 
-import qualified Pos.Chain.Txp as Core
 import           Pos.Chain.Update (SoftwareVersion)
 import qualified Pos.Core as Core
 
@@ -134,7 +133,7 @@ data WalletClient m
          -> Maybe WalAddress
          -> Maybe Page
          -> Maybe PerPage
-         -> FilterOperations '[V1 Core.TxId, WalletTimestamp] Transaction
+         -> FilterOperations '[WalletTxId, WalletTimestamp] Transaction
          -> SortOperations Transaction
          -> Resp m [Transaction]
     , getTransactionFee
