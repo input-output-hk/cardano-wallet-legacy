@@ -7,11 +7,12 @@ import           Universum
 import           Hedgehog (Property)
 import qualified Hedgehog as H
 
-import           Cardano.Wallet.API.V1.Types (AddressOwnership (..),
-                     WalAddress (..), WalletCoin (..),
-                     WalletInputSelectionPolicy (..), WalletPassPhrase (..),
-                     WalletTimestamp (..), WalletTxId (..))
+import           Cardano.Wallet.API.V1.Types (V1 (..), AddressOwnership (..),
+                     WalAddress (..), WalletCoin (..), WalletInputSelectionPolicy (..),
+                     WalletPassPhrase (..), WalletTimestamp (..),
+                     WalletTxId (..))
 import           Pos.Chain.Txp (Tx, TxId)
+import           Pos.Chain.Update (ApplicationName (..), SoftwareVersion (..))
 import           Pos.Client.Txp.Util (InputSelectionPolicy (..))
 import           Pos.Core (Address, Coin (..), Timestamp, decodeTextAddress,
                      parseTimestamp)
@@ -91,6 +92,12 @@ golden_WalletCoin =
         (WalletCoin exampleCoin)
         "test/unit/Golden/golden/apiV1Types/json/Coin"
 
+golden_SoftwareVersion :: Property
+golden_SoftwareVersion =
+    goldenTestJSON
+        (V1 exampleSoftwareVersion)
+        "test/unit/Golden/golden/apiV1Types/json/SoftwareVersion"
+
 -------------------------------------------------------------------------------
 -- Examples
 -------------------------------------------------------------------------------
@@ -121,3 +128,9 @@ exampleTxId = txId
 
 exampleCoin :: Coin
 exampleCoin = Coin 123899000
+
+exampleSoftwareVersion :: SoftwareVersion
+exampleSoftwareVersion = SoftwareVersion appName numVersion
+  where
+    appName = ApplicationName "cardano-wallet"
+    numVersion = 2
