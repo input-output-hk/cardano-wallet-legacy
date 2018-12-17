@@ -1,6 +1,7 @@
-{ config ? {}
-, system ? builtins.currentSystem
-, iohkLib ? import ./nix/iohk-common.nix { inherit config system; application = "cardano-sl"; }
+{ system ? builtins.currentSystem
+, crossSystem ? null
+, config ? {}
+, iohkLib ? import ./nix/iohk-common.nix { inherit system crossSystem config; application = "cardano-sl"; }
 , pkgs ? iohkLib.pkgs
 , gitrev ? iohkLib.commitIdFromGitRepo ./.
 }:
