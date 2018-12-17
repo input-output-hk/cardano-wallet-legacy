@@ -6,4 +6,7 @@
 , gitrev ? iohkLib.commitIdFromGitRepo ./.
 }:
 
-import ./nix/pkgs.nix { inherit pkgs; }
+import ./nix/pkgs.nix {
+  inherit pkgs;
+  src = iohkLib.cleanSourceHaskell ./.;
+}

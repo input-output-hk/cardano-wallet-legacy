@@ -1,5 +1,6 @@
 { args ? { config = import ./config.nix; }
 , pkgs ? import <nixpkgs> { inherit args; }
+, src ? ../.
 }:
 let
   overrideWith = override: default:
@@ -177,6 +178,10 @@ let
       ({ pkgs, ... }: {
          packages.hfsevents.components.library.frameworks  = [ pkgs.CoreServices ];
       })
+
+      {
+        packages.cardano-wallet.src = pkgs.lib.mkForce src;
+      }
     ];
   };
 
