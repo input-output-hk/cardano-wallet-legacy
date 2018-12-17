@@ -29,11 +29,12 @@ handlers nc w =
 
 nextUpdate :: NodeHttpClient -> Handler (APIResponse (V1 SoftwareVersion))
 nextUpdate nc = do
-    emUpd <- liftIO . runExceptT $ error "NodeClient.getNextUpdate nc" nc
-    -- TODO: Add getNextUpdate to `NodeClient`. How did it slip by???
+    emUpd <- liftIO . runExceptT $ NodeClient.getNextUpdate nc
     case emUpd of
-      Left err  -> handleNodeError err
-      Right upd -> pure upd
+        Left err  ->
+            handleNodeError err
+        Right upd ->
+            single <$> pure upd
 
 applyUpdate :: NodeHttpClient -> Handler NoContent
 applyUpdate nc = do

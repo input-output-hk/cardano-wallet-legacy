@@ -64,6 +64,8 @@ data WalletBackendParams = WalletBackendParams
     , walletDbOptions     :: !WalletDBOptions
     -- ^ DB-specific options.
     , forceFullMigration  :: !Bool
+    , walletNodeAddress   :: !NetworkAddress
+    -- ^ The IP address and port for the node backend.
     } deriving Show
 
 -- | Start up parameters for the new wallet backend
@@ -145,6 +147,7 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
                                                 <*> runModeParser
                                                 <*> dbOptionsParser
                                                 <*> forceFullMigrationParser
+                                                <*> nodeAddressParser
   where
     enableMonitoringApiParser :: Parser Bool
     enableMonitoringApiParser = switch (long "monitoring-api" <>
@@ -156,6 +159,12 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
 
     addressParser :: Parser NetworkAddress
     addressParser = CLI.walletAddressOption $ Just (localhost, 8090)
+
+    -- this comes from the default for the node, defined in
+    -- cardano-sl:Pos.Client.CLI.NodeOptions
+    -- TODO: factor the default address out into a term that can be shared
+    nodeAddressParser :: Parser NetworkAddress
+    nodeAddressParser = CLI.walletAddressOption $ Just (localhost, 8080)
 
     docAddressParser :: Parser (Maybe NetworkAddress)
     docAddressParser = CLI.docAddressOption Nothing

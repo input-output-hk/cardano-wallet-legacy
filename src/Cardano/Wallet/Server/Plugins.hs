@@ -31,8 +31,11 @@ import           Network.Wai.Handler.Warp (setOnException,
                      setOnExceptionResponse)
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Servant
+import qualified Servant.Client as Servant
+import Servant.Client (Scheme(..))
 
 import qualified Cardano.Node.Client as NodeClient
+import qualified Cardano.Node.Manager as NodeManager
 import           Cardano.NodeIPC (startNodeJsIPC)
 import           Cardano.Wallet.API as API
 import           Cardano.Wallet.API.V1.Headers (applicationJson)
@@ -98,9 +101,22 @@ apiServer
             (Just $ portCallback ctx)
   where
     (ip, port) = walletAddress
-    nodeClient = NodeClient.mkHttpClient nodeBaseUrl manager
 
-    nodeBaseUrl = error "TODO: get this from config"
+    nodeClient = NodeClient.mkHttpClient nodeBaseUrl manager
+    (nodeIp, nodePort) = walletNodeAddress
+    nodeBaseUrl = Servant.BaseUrl
+        { baseUrlScheme = Https
+        , baseUrlHost = BS8.unpack nodeIp
+        , baseUrlPort = fromIntegral nodePort
+        , baseUrlPath = ""
+        }
+    managerSettings =
+        NodeManager.mkHttpsManagerSettings
+            (nodeIp, nodePort)
+            signedCertificate
+            (certChain, privKey)
+    signedCertificate = error "TODO: get this???"
+    (certChain, privKey) = error "TODO: get this"
     manager = error "TODO: get this from config"
 
     exceptionHandler :: SomeException -> Response
