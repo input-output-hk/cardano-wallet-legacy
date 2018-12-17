@@ -85,7 +85,7 @@ spec = describe "Marshalling & Unmarshalling" $ do
         aesonRoundtripProp @SyncThroughput Proxy
         aesonRoundtripProp @AccountIndex Proxy
         aesonRoundtripProp @AddressOwnership Proxy
-        aesonRoundtripProp @(V1 Version) Proxy
+        aesonRoundtripProp @Version Proxy
 
         -- HttpApiData roundtrips
         httpApiDataRoundtripProp @AccountIndex Proxy
