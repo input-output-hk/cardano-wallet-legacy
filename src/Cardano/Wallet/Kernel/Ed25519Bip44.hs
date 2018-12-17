@@ -1,9 +1,9 @@
 {-------------------------------------------------------------------------------
 
-  This module provides utils to perform derivation of address public key from
-  account public key:
+  This module provides utils to perform child key derivation for bip44:
 
     account (parent) extended public key -> address (child) extended public key
+    extended private key -> extended private key
 
 -------------------------------------------------------------------------------}
 
@@ -12,6 +12,7 @@ module Cardano.Wallet.Kernel.Ed25519Bip44
 
     -- key derivation functions
     , deriveAddressPublicKey
+    , derivePublicKey
 
     -- helpers
     , isInternalChange
@@ -19,7 +20,7 @@ module Cardano.Wallet.Kernel.Ed25519Bip44
 
 import           Universum
 
-import           Pos.Crypto (PublicKey (..))
+import           Pos.Crypto (EncryptedSecretKey, PublicKey (..), encToPublic)
 
 import           Cardano.Crypto.Wallet (DerivationScheme (DerivationScheme2),
                      deriveXPub)
@@ -59,3 +60,8 @@ deriveAddressPublicKey (PublicKey accXPub) changeChain addressIx = do
     changeXPub <- deriveXPub DerivationScheme2 accXPub (changeToIndex changeChain)
     -- lvl5 derivation in bip44 is derivation of change address chain
     PublicKey <$> deriveXPub DerivationScheme2 changeXPub addressIx
+
+-- | Generate extend private key from extended private key
+-- (EncryptedSecretKey is a wrapper around private key)
+derivePublicKey :: EncryptedSecretKey -> PublicKey
+derivePublicKey = encToPublic
