@@ -13,6 +13,7 @@ import           GHC.TypeLits (symbolVal)
 
 import           Pos.Core (Address, Coin, SlotCount, SlotId, decodeTextAddress,
                      flattenSlotId, getBlockCount)
+import           Pos.Node.API (unV1)
 import           Pos.Util.Wlog (Severity (..))
 
 import           Cardano.Wallet.API.Indices
@@ -21,7 +22,6 @@ import qualified Cardano.Wallet.API.Request.Filter as F
 import           Cardano.Wallet.API.Request.Pagination
 import qualified Cardano.Wallet.API.Request.Sort as S
 import           Cardano.Wallet.API.Response
-import           Cardano.Wallet.API.V1.Types (unV1)
 import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..))

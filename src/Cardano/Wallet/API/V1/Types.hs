@@ -19,10 +19,8 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Cardano.Wallet.API.V1.Types (
-    V1 (..)
-  , unV1
   -- * Swagger & REST-related types
-  , PasswordUpdate (..)
+    PasswordUpdate (..)
   , AccountUpdate (..)
   , NewAccount (..)
   , Update
@@ -391,8 +389,6 @@ instance Semigroup WalletPassPhrase where
 instance Monoid WalletPassPhrase where
     mempty = WalletPassPhrase mempty
     mappend = (<>)
-
-deriving newtype instance Num a => Num (V1 a)
 
 type WalletName = Text
 
