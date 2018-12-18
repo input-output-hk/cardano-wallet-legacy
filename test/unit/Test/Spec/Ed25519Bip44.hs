@@ -6,17 +6,20 @@ module Test.Spec.Ed25519Bip44 (spec) where
 
 import           Universum
 
-import           Pos.Crypto (EncryptedSecretKey, PassPhrase, PublicKey,
-                     ShouldCheckPassphrase (..), checkPassMatches)
+import           Cardano.Crypto.Wallet (generate)
+import           Pos.Crypto (EncryptedSecretKey, PassPhrase (..), PublicKey,
+                     ShouldCheckPassphrase (..), checkPassMatches, emptySalt,
+                     mkEncSecretWithSaltUnsafe)
 
 import           Cardano.Wallet.Kernel.Ed25519Bip44 (ChangeChain,
                      deriveAddressPrivateKey, deriveAddressPublicKey,
                      derivePublicKey)
 
+import qualified Data.ByteString as BS
 import           Test.Hspec (Spec, describe, it)
 import           Test.Pos.Core.Arbitrary ()
-import           Test.QuickCheck (Property, expectFailure, property, (===),
-                     (==>))
+import           Test.QuickCheck (InfiniteList (..), Property, expectFailure,
+                     property, (===), (==>))
 
 -- | It proves that we cannot derive address public key
 -- if address index is too big. We should be able to derive
@@ -51,18 +54,19 @@ prop_cannotDeriveAddressPublicKeyForBigIx accountPublicKey change addressIx = pr
 --
 -- For details see https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#private-parent-key--public-child-key
 prop_deriveAddressPublicFromAccountPrivateKey
-    :: PassPhrase
-    -> EncryptedSecretKey
+    :: InfiniteList Word8
+    -> PassPhrase
     -> ChangeChain
     -> Word32
     -> Property
-prop_deriveAddressPublicFromAccountPrivateKey passPhrase accEncPrvKey changeChain addressIx =
+prop_deriveAddressPublicFromAccountPrivateKey (InfiniteList seed _) passPhrase@(PassPhrase passBytes) changeChain addressIx =
     -- TODO (akegalj): check coverage with quickcheck @cover@
     -- FIXME (akegalj): instead of doing this create generator for non-hardened keys.
     -- This should in average discard 50% of examples and will thus be
     -- 50% slower.
     isNonHardened addressIx ==> (addrPubKey1 === addrPubKey2)
   where
+    accEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
     isNonHardened = (< 0x80000000)
     -- N(CKDpriv((kpar, cpar), i))
     addrPubKey1 =
