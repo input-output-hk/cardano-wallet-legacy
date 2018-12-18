@@ -7,9 +7,9 @@ import           Universum
 import qualified Data.Text as T
 import           Data.Time.Units (Millisecond)
 
+import           Pos.Node.API (V1 (..))
 import           Pos.Util.CompileInfo (CompileTimeInfo, ctiGitRevision)
 
-import           Cardano.Wallet.API.V1.Types (V1 (..))
 import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
 import           Cardano.Wallet.Kernel.NodeStateAdaptor (NodeStateAdaptor)
