@@ -43,6 +43,7 @@ module Cardano.Wallet.API.V1.Types (
   , WalletPassPhrase (..)
   , WalletTimestamp (..)
   , WalletInputSelectionPolicy (..)
+  , WalletSoftwareVersion (..)
   , WalletTxId (..)
   , WalAddress (..)
   , WalletCoin (..)
@@ -183,6 +184,7 @@ import           Cardano.Wallet.Util (mkJsonKey, showApiUtcTime)
 import           Cardano.Mnemonic (Mnemonic)
 import qualified Pos.Binary.Class as Bi
 import qualified Pos.Chain.Txp as Txp
+import           Pos.Chain.Update (ApplicationName (..), SoftwareVersion (..))
 import qualified Pos.Client.Txp.Util as Core
 import qualified Pos.Core as Core
 import           Pos.Crypto (PublicKey (..), decodeHash, hashHexF)
@@ -1991,6 +1993,41 @@ instance BuildableSafeGen WalletAndTxHistory where
         waltxsWallet
         waltxsTransactions
 
+newtype WalletSoftwareVersion = WalletSoftwareVersion SoftwareVersion
+    deriving (Eq, Generic, Show)
+
+deriveSafeBuildable ''WalletSoftwareVersion
+instance BuildableSafeGen WalletSoftwareVersion where
+    buildSafeGen sl (WalletSoftwareVersion v) =
+        bprint (plainOrSecureF sl build (fconst "<wallet software version>")) v
+
+-- | NOTE: There are 'ToJSON' and 'FromJSON' instances for 'V1 SoftwareVersion' type,
+-- because we had it in internal API. Unfortunately, these instances are defined in
+-- 'cardano-sl-chain' package and we cannot touch it for now.
+-- So we have to define here the same instances for 'WalletSoftwareVersion' type,
+-- it is required for golden JSON-test "V1 SoftwareVersion <-> WalletSoftwareVersion".
+instance ToJSON WalletSoftwareVersion where
+    toJSON (WalletSoftwareVersion (SoftwareVersion (ApplicationName appName) appVerNumber)) =
+        object [ "applicationName" .= toJSON appName
+               , "version" .= toJSON appVerNumber
+               ]
+
+instance FromJSON WalletSoftwareVersion where
+    parseJSON = withObject "WalletSoftwareVersion" $ \o -> do
+        appName <- o .: "applicationName"
+        appVerNumber <- o .: "version"
+        pure $ WalletSoftwareVersion $ SoftwareVersion (ApplicationName appName) appVerNumber
+
+instance Arbitrary WalletSoftwareVersion where
+    arbitrary = WalletSoftwareVersion <$> arbitrary
+
+-- | NOTE: There is 'ToSchema' instance for 'V1 SoftwareVersion' type, but it's defined
+-- in 'cardano-sl-chain' package and we cannot touch it for now. So we have to define
+-- here some 'ToSchema'-instance for 'WalletSoftwareVersion'.
+instance ToSchema WalletSoftwareVersion where
+    declareNamedSchema _ =
+        pure $ NamedSchema (Just "WalletSoftwareVersion") $ mempty
+            & type_ .~ SwaggerObject
 
 -- | A type representing an upcoming wallet update.
 data WalletSoftwareUpdate = WalletSoftwareUpdate

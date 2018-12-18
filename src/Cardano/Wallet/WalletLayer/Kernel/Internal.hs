@@ -18,8 +18,8 @@ import           System.IO.Error (isDoesNotExistError)
 import           Pos.Chain.Update (ConfirmedProposalState, SoftwareVersion)
 import           Pos.Infra.InjectFail (FInject (..), testLogFInject)
 
-import           Cardano.Wallet.API.V1.Types (V1 (..), Wallet,
-                     WalletImport (..))
+import           Cardano.Wallet.API.V1.Types (Wallet, WalletImport (..),
+                     WalletSoftwareVersion (..))
 import           Cardano.Wallet.Kernel.DB.AcidState (AddUpdate (..),
                      ClearDB (..), GetNextUpdate (..), RemoveNextUpdate (..))
 import           Cardano.Wallet.Kernel.DB.InDb
@@ -38,10 +38,10 @@ import           Cardano.Wallet.WalletLayer.Kernel.Wallets (createWallet)
 -- Most of the behaviour of the legacy 'nextUpdate' is now actually implemented
 -- directly in the AcidState 'getNextUpdate' update.
 nextUpdate :: MonadIO m
-           => Kernel.PassiveWallet -> m (Maybe (V1 SoftwareVersion))
+           => Kernel.PassiveWallet -> m (Maybe WalletSoftwareVersion)
 nextUpdate w = liftIO $ do
     current <- Node.curSoftwareVersion (w ^. Kernel.walletNode)
-    fmap (fmap (V1 . _fromDb)) $
+    fmap (fmap (WalletSoftwareVersion . _fromDb)) $
       update' (w ^. Kernel.wallets) $ GetNextUpdate (InDb current)
 
 -- | Apply an update

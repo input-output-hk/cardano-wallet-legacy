@@ -41,7 +41,6 @@ import           Control.Exception (Exception (..))
 import           Data.Swagger (Swagger)
 import           Servant.Client (GenResponse (..), Response, ServantError (..))
 
-import           Pos.Chain.Update (SoftwareVersion)
 import qualified Pos.Core as Core
 
 import           Cardano.Wallet.API.Request.Filter
@@ -149,7 +148,7 @@ data WalletClient m
 
     -- Internal API
     , nextUpdate
-        :: Resp m (V1 SoftwareVersion)
+        :: Resp m WalletSoftwareVersion
     , applyUpdate
         :: m (Either ClientError ())
     , postponeUpdate

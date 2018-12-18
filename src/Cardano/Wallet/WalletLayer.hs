@@ -53,9 +53,10 @@ import           Cardano.Wallet.API.V1.Types (Account, AccountBalance,
                      ForceNtpCheck, NewAccount, NewAddress, NewEosWallet,
                      NewWallet, NodeInfo, NodeSettings, PasswordUpdate,
                      Payment, Redemption, SignedTransaction, SpendingPassword,
-                     Transaction, UnsignedTransaction, V1 (..), WalAddress,
-                     Wallet, WalletAddress, WalletId, WalletImport,
-                     WalletTimestamp, WalletTxId, WalletUpdate)
+                     Transaction, UnsignedTransaction, WalAddress, Wallet,
+                     WalletAddress, WalletId, WalletImport,
+                     WalletSoftwareVersion, WalletTimestamp, WalletTxId,
+                     WalletUpdate)
 import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import qualified Cardano.Wallet.Kernel.Addresses as Kernel
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
@@ -485,7 +486,7 @@ data PassiveWalletLayer m = PassiveWalletLayer
     , getNodeSettings      :: m NodeSettings
 
     -- internal
-    , nextUpdate           :: m (Maybe (V1 SoftwareVersion))
+    , nextUpdate           :: m (Maybe WalletSoftwareVersion)
     , applyUpdate          :: m ()
     , postponeUpdate       :: m ()
     , resetWalletState     :: m ()
