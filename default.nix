@@ -6,7 +6,15 @@
 , gitrev ? iohkLib.commitIdFromGitRepo ./.
 }:
 
-import ./nix/pkgs.nix {
-  inherit pkgs;
-  src = iohkLib.cleanSourceHaskell ./.;
+let
+  haskellPackages = import ./nix/pkgs.nix {
+    inherit pkgs;
+    src = iohkLib.cleanSourceHaskell ./.;
+  };
+
+in {
+  inherit haskellPackages;
+
+  inherit (haskellPackages.cardano-wallet.components)
+    benchmarks exes library tests;
 }
