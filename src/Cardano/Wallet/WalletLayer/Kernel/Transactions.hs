@@ -21,7 +21,7 @@ import qualified Cardano.Wallet.API.Request.Filter as F
 import           Cardano.Wallet.API.Request.Pagination
 import qualified Cardano.Wallet.API.Request.Sort as S
 import           Cardano.Wallet.API.Response
-import           Cardano.Wallet.API.V1.Types (V1 (..), unV1)
+import           Cardano.Wallet.API.V1.Types (unV1)
 import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..))
@@ -157,7 +157,7 @@ metaToTx db slotCount current TxMeta{..} = do
     return V1.Transaction {
         txId = V1.WalletTxId _txMetaId,
         txConfirmations = fromIntegral confirmations,
-        txAmount = V1 _txMetaAmount,
+        txAmount = V1.WalletCoin _txMetaAmount,
         txInputs = inputsToPayDistr <$> _txMetaInputs,
         txOutputs = outputsToPayDistr <$> _txMetaOutputs,
         txType = if _txMetaIsLocal then V1.LocalTransaction else V1.ForeignTransaction,
@@ -170,10 +170,10 @@ metaToTx db slotCount current TxMeta{..} = do
             hdAccountId = HD.HdAccountId hdRootId (HD.HdAccountIx _txMetaAccountIx)
 
             inputsToPayDistr :: (a , b, Address, Coin) -> V1.PaymentDistribution
-            inputsToPayDistr (_, _, addr, c) = V1.PaymentDistribution (V1.WalAddress addr) (V1 c)
+            inputsToPayDistr (_, _, addr, c) = V1.PaymentDistribution (V1.WalAddress addr) (V1.WalletCoin c)
 
             outputsToPayDistr :: (Address, Coin) -> V1.PaymentDistribution
-            outputsToPayDistr (addr, c) = V1.PaymentDistribution (V1.WalAddress addr) (V1 c)
+            outputsToPayDistr (addr, c) = V1.PaymentDistribution (V1.WalAddress addr) (V1.WalletCoin c)
 
 buildDynamicTxMeta :: HD.AssuranceLevel -> SlotCount -> HD.CombinedWithAccountState (Maybe SlotId) -> SlotId -> Bool -> (V1.TransactionStatus, Word64)
 buildDynamicTxMeta assuranceLevel slotCount mSlotwithState currentSlot isPending =

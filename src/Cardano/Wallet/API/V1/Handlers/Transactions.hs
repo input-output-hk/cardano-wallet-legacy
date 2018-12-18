@@ -96,7 +96,7 @@ estimateFees aw payment@Payment{..} = do
                                                   payment
     case res of
          Left err  -> throwM err
-         Right fee -> return $ single (EstimatedFees (V1 fee))
+         Right fee -> return $ single (EstimatedFees (WalletCoin fee))
 
 redeemAda :: ActiveWalletLayer IO
           -> Redemption

@@ -201,7 +201,7 @@ defaultDistribution
     -> s
     -> NonEmpty PaymentDistribution
 defaultDistribution c s = pure $
-    PaymentDistribution (WalAddress $ head $ s ^. typed) (V1 $ mkCoin c)
+    PaymentDistribution (WalAddress $ head $ s ^. typed) (WalletCoin $ mkCoin c)
 
 defaultGroupingPolicy :: Maybe WalletInputSelectionPolicy
 defaultGroupingPolicy = Nothing
@@ -245,15 +245,15 @@ noSpendingPassword = Nothing
 --
 
 amount
-    :: HasType (V1 Coin) s
+    :: HasType WalletCoin s
     => Lens' s Word64
 amount =
     lens _get _set
   where
-    _get :: HasType (V1 Coin) s => s -> Word64
-    _get = unsafeGetCoin . unV1 . view typed
-    _set :: HasType (V1 Coin) s => (s, Word64) -> s
-    _set (s, v) = set typed (V1 $ mkCoin v) s
+    _get :: HasType WalletCoin s => s -> Word64
+    _get = unsafeGetCoin . unWalletCoin . view typed
+    _set :: HasType WalletCoin s => (s, Word64) -> s
+    _set (s, v) = set typed (WalletCoin $ mkCoin v) s
 
 assuranceLevel :: HasType AssuranceLevel s => Lens' s AssuranceLevel
 assuranceLevel = typed
@@ -583,7 +583,7 @@ setupWallet args phrase faucet = do
         CreateWallet
 
     let paymentSource = PaymentSource (walId faucet) minBound
-    let paymentDist (addr, coin) = pure $ PaymentDistribution (addrId addr) (V1 coin)
+    let paymentDist (addr, coin) = pure $ PaymentDistribution (addrId addr) (WalletCoin coin)
 
     forM_ (args ^. initialCoins) $ \coin -> do
         -- NOTE

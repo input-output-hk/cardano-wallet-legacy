@@ -23,7 +23,6 @@ import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
 import           Pos.Crypto (PassPhrase, PublicKey, Signature (..))
 
 import           Cardano.Crypto.Wallet (xsignature)
-import           Cardano.Wallet.API.V1.Types (unV1)
 import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel as Kernel
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
@@ -232,7 +231,7 @@ setupPayment policy grouping regulation payment = do
                      _hdAccountIdParent = rootId
                    , _hdAccountIdIx     = accIx
                    }
-        payees = (\(V1.PaymentDistribution a c) -> (V1.unWalAddress a, unV1 c)) <$>
+        payees = (\(V1.PaymentDistribution a c) -> (V1.unWalAddress a, V1.unWalletCoin c)) <$>
                    V1.pmtDestinations payment
     return (opts, accId, payees)
   where

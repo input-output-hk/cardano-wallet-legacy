@@ -16,7 +16,6 @@ import qualified Cardano.Wallet.API.Request as API
 import qualified Cardano.Wallet.API.Request.Pagination as API
 import qualified Cardano.Wallet.API.Response as API
 import           Cardano.Wallet.API.V1.Handlers.Accounts as Handlers
-import           Cardano.Wallet.API.V1.Types (V1 (..))
 import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel.Accounts (CreateAccountError (..))
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as Kernel
@@ -535,7 +534,7 @@ spec = describe "Accounts" $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture pm $ \_ layer _ Fixture{..} -> do
-                    let zero = V1 (mkCoin 0)
+                    let zero = V1.WalletCoin (mkCoin 0)
                     (Right V1.Account{..}) <-
                         WalletLayer.createAccount layer (V1.walId fixtureV1Wallet)
                                                         fixtureNewAccountRq
