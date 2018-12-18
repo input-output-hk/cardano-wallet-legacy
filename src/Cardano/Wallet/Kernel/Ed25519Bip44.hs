@@ -79,9 +79,9 @@ deriveAddressPrivateKey
     -> ChangeChain              -- Change chain
     -> Word32                   -- Address Key Index
     -> Maybe EncryptedSecretKey -- Address Private Key
-deriveAddressPrivateKey (ShouldCheckPassphrase checkPass) passPhrase accEncSK@(EncryptedSecretKey accXPrv passHash) changeChain addressIx = do
+deriveAddressPrivateKey (ShouldCheckPassphrase checkPass) passPhrase accEncPrvKey@(EncryptedSecretKey accXPrv passHash) changeChain addressIx = do
     -- enforce valid PassPhrase check
-    when checkPass $ checkPassMatches passPhrase accEncSK
+    when checkPass $ checkPassMatches passPhrase accEncPrvKey
         -- lvl4 derivation in bip44 is derivation of change chain
     let changeXPrv = deriveXPrv DerivationScheme2 passPhrase accXPrv (changeToIndex changeChain)
         -- lvl5 derivation in bip44 is derivation of address chain

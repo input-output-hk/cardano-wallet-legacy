@@ -56,26 +56,26 @@ prop_deriveAddressPublicFromAccountPrivateKey
     -> ChangeChain
     -> Word32
     -> Property
-prop_deriveAddressPublicFromAccountPrivateKey passPhrase accEncSK changeChain addressIx =
+prop_deriveAddressPublicFromAccountPrivateKey passPhrase accEncPrvKey changeChain addressIx =
     -- TODO (akegalj): check coverage with quickcheck @cover@
     -- FIXME (akegalj): instead of doing this create generator for non-hardened keys.
     -- This should in average discard 50% of examples and will thus be
     -- 50% slower.
-    isNonHardened addressIx ==> (addrPrvKey1 === addrPrvKey2)
+    isNonHardened addressIx ==> (addrPubKey1 === addrPubKey2)
   where
     isNonHardened = (< 0x80000000)
     -- N(CKDpriv((kpar, cpar), i))
-    addrPrvKey1 =
+    addrPubKey1 =
         derivePublicKey <$> deriveAddressPrivateKey
             (ShouldCheckPassphrase False)
             passPhrase
-            accEncSK
+            accEncPrvKey
             changeChain
             addressIx
     -- CKDpub(N(kpar, cpar), i)
-    addrPrvKey2 =
+    addrPubKey2 =
         deriveAddressPublicKey
-            (derivePublicKey accEncSK)
+            (derivePublicKey accEncPrvKey)
             changeChain
             addressIx
 
@@ -87,12 +87,12 @@ prop_deriveAddressPrivateKeyNoPassword
     -> ChangeChain
     -> Word32
     -> Property
-prop_deriveAddressPrivateKeyNoPassword passphrase encSecKey changeChain =
+prop_deriveAddressPrivateKeyNoPassword passphrase accEncPrvKey changeChain =
     property . isJust .
         deriveAddressPrivateKey
             (ShouldCheckPassphrase False)
             passphrase
-            encSecKey
+            accEncPrvKey
             changeChain
 
 -- | Deriving address private key should always fail
@@ -103,17 +103,17 @@ prop_deriveAddressPrivateKeyWrongPassword
     -> ChangeChain
     -> Word32
     -> Property
-prop_deriveAddressPrivateKeyWrongPassword passPhrase accEncSK changeChain addressIx =
+prop_deriveAddressPrivateKeyWrongPassword passPhrase accEncPrvKey changeChain addressIx =
     -- There is a really small possibility we will generate
     -- two equal passwords - so this precondition will rarely fail
     -- TODO (akegalj): check coverage with quickcheck @cover@
-    (isNothing $ checkPassMatches passPhrase accEncSK) ==> property (isJust addrPrvKey)
+    (isNothing $ checkPassMatches passPhrase accEncPrvKey) ==> property (isJust addrPrvKey)
   where
     addrPrvKey =
         deriveAddressPrivateKey
             (ShouldCheckPassphrase True)
             passPhrase
-            accEncSK
+            accEncPrvKey
             changeChain
             addressIx
 
@@ -122,10 +122,10 @@ spec = describe "Ed25519Bip44" $ do
     describe "Deriving address public key" $ do
         it "fails if address index is too big" $
             property prop_cannotDeriveAddressPublicKeyForBigIx
-        it "should be equal to deriving address private key and extracting public part from it: N(CKDpriv((kpar, cpar), i)) === CKDpub(N(kpar, cpar), i)" $
+        it "equals to deriving address private key and extracting public part from it: N(CKDpriv((kpar, cpar), i)) === CKDpub(N(kpar, cpar), i)" $
             property prop_deriveAddressPublicFromAccountPrivateKey
     describe "Deriving address private key" $ do
-        it "should always succeed if password is not checked" $
+        it "succeeds if password is not checked" $
             property prop_deriveAddressPrivateKeyNoPassword
-        it "should always fail if password is checked and differs" $
+        it "fails if password is checked and differs" $
             expectFailure prop_deriveAddressPrivateKeyWrongPassword
