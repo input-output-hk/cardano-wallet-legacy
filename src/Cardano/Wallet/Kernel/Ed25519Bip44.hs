@@ -12,6 +12,8 @@ module Cardano.Wallet.Kernel.Ed25519Bip44
 
     -- key derivation functions
     , deriveAddressPublicKey
+    , deriveAddressPrivateKey
+    , derivePublicKey
 
     -- helpers
     , isInternalChange
@@ -19,10 +21,12 @@ module Cardano.Wallet.Kernel.Ed25519Bip44
 
 import           Universum
 
-import           Pos.Crypto (PublicKey (..))
+import           Pos.Crypto (EncryptedSecretKey (..), PassPhrase,
+                     PublicKey (..), SecretKey, ShouldCheckPassphrase (..),
+                     checkPassMatches, toPublic)
 
 import           Cardano.Crypto.Wallet (DerivationScheme (DerivationScheme2),
-                     deriveXPub)
+                     deriveXPrv, deriveXPub)
 import           Test.QuickCheck (Arbitrary (..), elements)
 
 -- | Change chain. External chain is used for addresses that are meant to be visible
@@ -57,5 +61,28 @@ deriveAddressPublicKey
 deriveAddressPublicKey (PublicKey accXPub) changeChain addressIx = do
     -- lvl4 derivation in bip44 is derivation of change chain
     changeXPub <- deriveXPub DerivationScheme2 accXPub (changeToIndex changeChain)
-    -- lvl5 derivation in bip44 is derivation of change address chain
+    -- lvl5 derivation in bip44 is derivation of address chain
     PublicKey <$> deriveXPub DerivationScheme2 changeXPub addressIx
+
+-- | Derives address private key from the given account private key,
+-- using derivation scheme 2 (please see 'cardano-crypto' package).
+-- TODO: EncryptedSecretKey will be renamed to EncryptedPrivateKey in #164
+deriveAddressPrivateKey
+    :: ShouldCheckPassphrase    -- Weather to call @checkPassMatches@
+    -> PassPhrase               -- Passphrase used to encrypt Account Private Key
+    -> EncryptedSecretKey       -- Account Private Key
+    -> ChangeChain              -- Change chain
+    -> Word32                   -- Address Key Index
+    -> Maybe EncryptedSecretKey -- Address Private Key
+deriveAddressPrivateKey (ShouldCheckPassphrase checkPass) passPhrase accEncSK@(EncryptedSecretKey accXPrv passHash) changeChain addressIx = do
+    -- enforce valid PassPhrase check
+    when checkPass $ checkPassMatches passPhrase accEncSK
+        -- lvl4 derivation in bip44 is derivation of change chain
+    let changeXPrv = deriveXPrv DerivationScheme2 passPhrase accXPrv (changeToIndex changeChain)
+        -- lvl5 derivation in bip44 is derivation of address chain
+        addressXPrv = deriveXPrv DerivationScheme2 passPhrase changeXPrv addressIx
+    pure $ EncryptedSecretKey addressXPrv passHash
+
+-- | Generate extend private key from extended private key
+derivePublicKey :: SecretKey -> PublicKey
+derivePublicKey = toPublic
