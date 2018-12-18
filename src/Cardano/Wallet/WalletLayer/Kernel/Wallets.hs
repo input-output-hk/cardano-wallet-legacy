@@ -25,7 +25,6 @@ import           Pos.Core.Slotting (Timestamp)
 import           Pos.Crypto.Signing
 
 import qualified Cardano.Mnemonic as Mnemonic
-import           Cardano.Wallet.API.V1.Types (V1 (..))
 import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
@@ -134,13 +133,13 @@ createWallet wallet newWalletRequest = liftIO $ do
 
                 -- Return the wallet information, with an updated balance.
                 let root' = mkRoot walletName (toAssuranceLevel hdAssuranceLevel) now root
-                updateSyncState wallet wId (root' { V1.walBalance = V1 coins })
+                updateSyncState wallet wId (root' { V1.walBalance = V1.WalletCoin coins })
 
     mkRoot :: Text -> V1.AssuranceLevel -> Timestamp -> HD.HdRoot -> V1.Wallet
     mkRoot v1WalletName v1AssuranceLevel now hdRoot = V1.Wallet {
           walId                         = walletId
         , walName                       = v1WalletName
-        , walBalance                    = V1 (mkCoin 0)
+        , walBalance                    = V1.WalletCoin (mkCoin 0)
         , walHasSpendingPassword        = hasSpendingPassword
         , walSpendingPasswordLastUpdate = V1.WalletTimestamp lastUpdate
         , walCreatedAt                  = V1.WalletTimestamp createdAt
@@ -182,7 +181,7 @@ createEosWallet wallet newEosWalletRequest = runExceptT $ do
           eoswalId             = EosHD._eosHdRootId root
         , eoswalName           = name
         , eoswalAddressPoolGap = addressPoolGap
-        , eoswalBalance        = V1 (mkCoin 0)
+        , eoswalBalance        = V1.WalletCoin (mkCoin 0)
         , eoswalAssuranceLevel = assuranceLevel
         }
 

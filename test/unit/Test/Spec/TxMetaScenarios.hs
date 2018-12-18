@@ -175,7 +175,7 @@ txMetaScenarioB genVals@GenesisValues{..} = (nodeStParams1, ind, check)
     check = checkWithTxs $ \ txs -> do
       let fees = overestimate txFee 1 2
       let props = map (\t -> (V1.txConfirmations t, V1.txAmount t, V1.txType t,V1.txDirection t, V1.txStatus t)) txs
-      props `shouldMatchList` [(0,V1.V1 . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.Applying)]
+      props `shouldMatchList` [(0,V1.WalletCoin . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.Applying)]
 
 -- | Scenario C
 -- A single pending payment and then confirmation.
@@ -197,7 +197,7 @@ txMetaScenarioC genVals@GenesisValues{..} = (nodeStParams1, ind, check)
     check = checkWithTxs $ \ txs -> do
       let fees = overestimate txFee 1 2
       let props = map (\t -> (V1.txConfirmations t, V1.txAmount t, V1.txType t,V1.txDirection t, V1.txStatus t)) txs
-      props `shouldMatchList` [(3,V1.V1 . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.InNewestBlocks)]
+      props `shouldMatchList` [(3,V1.WalletCoin . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.InNewestBlocks)]
 
 -- | Scenario D
 -- Two confirmed payments from P0 to P1, using `change` addresses P0 and P0b respectively
@@ -221,8 +221,8 @@ txMetaScenarioD genVals@GenesisValues{..} = (nodeStParams1, ind, check)
 --      txs `shouldBe` []
       let fees = overestimate txFee 1 2
       let props = map (\t -> (V1.txConfirmations t, V1.txAmount t, V1.txType t,V1.txDirection t, V1.txStatus t)) txs
-      props `shouldMatchList` [(3,V1.V1 . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.InNewestBlocks)
-                              ,(2,V1.V1 . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.InNewestBlocks)
+      props `shouldMatchList` [(3,V1.WalletCoin . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.InNewestBlocks)
+                              ,(2,V1.WalletCoin . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.InNewestBlocks)
                               ]
 
 -- | Scenario E
@@ -251,8 +251,8 @@ txMetaScenarioE genVals@GenesisValues{..} = (nodeStParams1, ind, check)
     check = checkWithTxs $ \ txs -> do
             let fees = overestimate txFee 1 2
             let props = map (\t -> (V1.txConfirmations t, V1.txAmount t, V1.txType t,V1.txDirection t, V1.txStatus t)) txs
-            props `shouldMatchList` [(3,V1.V1 . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.InNewestBlocks)
-                                    ,(0,V1.V1 . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.WontApply)
+            props `shouldMatchList` [(3,V1.WalletCoin . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.InNewestBlocks)
+                                    ,(0,V1.WalletCoin . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.WontApply)
                                     ]
 
 -- | Scenario F
@@ -274,7 +274,7 @@ txMetaScenarioF genVals@GenesisValues{..} = (nodeStParams1, ind, check)
 
     check = checkWithTxs $ \ txs -> do
       let props = map (\t -> (V1.txConfirmations t, V1.txAmount t, V1.txType t,V1.txDirection t, V1.txStatus t)) txs
-      props `shouldMatchList` [(3,V1.V1 . Coin $ 1000,V1.ForeignTransaction,V1.IncomingTransaction,V1.InNewestBlocks)]
+      props `shouldMatchList` [(3,V1.WalletCoin . Coin $ 1000,V1.ForeignTransaction,V1.IncomingTransaction,V1.InNewestBlocks)]
 
 -- | Scenario G
 -- A single pending payment and then confirmation.
@@ -297,7 +297,7 @@ txMetaScenarioG genVals@GenesisValues{..} = (nodeStParams2, ind, check)
     check = checkWithTxs $ \ txs -> do
       let fees = overestimate txFee 1 2
       let props = map (\t -> (V1.txAmount t, V1.txType t,V1.txDirection t, V1.txStatus t)) txs
-      props `shouldMatchList` [(V1.V1 . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.Persisted)]
+      props `shouldMatchList` [(V1.WalletCoin . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.Persisted)]
 
 -- | Scenario H
 -- A single pending payment to itself and then confirmation.
@@ -320,7 +320,7 @@ txMetaScenarioH genVals@GenesisValues{..} = (nodeStParams1, ind, check)
     check = checkWithTxs $ \ txs -> do
       let fees = overestimate txFee 1 2
       let props = map (\t -> (V1.txAmount t, V1.txType t,V1.txDirection t, V1.txStatus t)) txs
-      props `shouldMatchList` [(V1.V1 . Coin $ fees,V1.LocalTransaction,V1.OutgoingTransaction,V1.InNewestBlocks)]
+      props `shouldMatchList` [(V1.WalletCoin . Coin $ fees,V1.LocalTransaction,V1.OutgoingTransaction,V1.InNewestBlocks)]
 
 -- | Scenario I. This is like Scenario C with rollbacks.
 -- results should not change.
@@ -346,7 +346,7 @@ txMetaScenarioI genVals@GenesisValues{..} = (nodeStParams1, ind, check)
     check = checkWithTxs $ \ txs -> do
       let fees = overestimate txFee 1 2
       let props = map (\t -> (V1.txConfirmations t, V1.txAmount t, V1.txType t,V1.txDirection t, V1.txStatus t)) txs
-      props `shouldMatchList` [(3,V1.V1 . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.InNewestBlocks)]
+      props `shouldMatchList` [(3,V1.WalletCoin . Coin $ fees + 1000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.InNewestBlocks)]
 
 -- | Scenario J
 -- A single payment with 4 outputs.
@@ -367,7 +367,7 @@ txMetaScenarioJ genVals@GenesisValues{..} = (nodeStParams1, ind, check)
     check = checkWithTxs $ \ txs -> do
       let fees = overestimate txFee 1 4
       let props = map (\t -> (V1.txConfirmations t, V1.txAmount t, V1.txType t,V1.txDirection t, V1.txStatus t)) txs
-      props `shouldMatchList` [(0,V1.V1 . Coin $ fees + 6000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.Applying)]
+      props `shouldMatchList` [(0,V1.WalletCoin . Coin $ fees + 6000,V1.ForeignTransaction,V1.OutgoingTransaction,V1.Applying)]
 
 lengthCheck :: Int -> PassiveWallet -> IO ()
 lengthCheck n pw = do

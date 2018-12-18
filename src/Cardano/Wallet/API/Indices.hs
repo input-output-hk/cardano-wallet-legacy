@@ -47,7 +47,7 @@ instance ToIndex Wallet Core.Coin where
         Nothing                       -> Nothing
         Just c  | c > Core.maxCoinVal -> Nothing
         Just c                        -> Just (Core.mkCoin c)
-    accessIx Wallet{..} = let (V1 balance) = walBalance in balance
+    accessIx Wallet{..} = let (WalletCoin balance) = walBalance in balance
 
 instance ToIndex Wallet WalletTimestamp where
     toIndex _ = fmap WalletTimestamp . Core.parseTimestamp
@@ -111,7 +111,7 @@ type instance IndicesOf WalletAddress = SecondaryWalletAddressIxs
 
 instance IxSet.Indexable (WalletId ': SecondaryWalletIxs)
                          (OrdByPrimKey Wallet) where
-    indices = ixList (ixFun ((:[]) . unV1 . walBalance))
+    indices = ixList (ixFun ((:[]) . unWalletCoin . walBalance))
                      (ixFun ((:[]) . walCreatedAt))
 
 instance IxSet.Indexable (WalletTxId ': SecondaryTransactionIxs)

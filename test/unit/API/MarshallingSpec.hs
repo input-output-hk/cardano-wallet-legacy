@@ -60,7 +60,7 @@ spec = describe "Marshalling & Unmarshalling" $ do
         aesonRoundtripProp @PaymentDistribution Proxy
         aesonRoundtripProp @NewWallet Proxy
         aesonRoundtripProp @NewAddress Proxy
-        aesonRoundtripProp @(V1 Core.Coin) Proxy
+        aesonRoundtripProp @WalletCoin Proxy
         aesonRoundtripProp @WalletPassPhrase Proxy
         aesonRoundtripProp @WalletInputSelectionPolicy Proxy
         aesonRoundtripProp @TimeInfo Proxy

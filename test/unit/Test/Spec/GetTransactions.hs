@@ -259,7 +259,7 @@ getAccountBalanceNow pw Fix{..} = do
             (V1.unsafeMkAccountIndex index)
             db
     bimap STB STB res `shouldSatisfy` isRight
-    let Right (V1.AccountBalance (V1.V1 (Coin coins))) = res
+    let Right (V1.AccountBalance (V1.WalletCoin (Coin coins))) = res
     return coins
 
 -- | A constant fee calculation.
@@ -298,7 +298,7 @@ spec = do
             monadicIO $ do
                 pm <- pick arbitrary
                 let nm = makeNetworkMagic pm
-                distr <- fmap (\(TxOut addr coin) -> V1.PaymentDistribution (V1.WalAddress addr) (V1.V1 coin))
+                distr <- fmap (\(TxOut addr coin) -> V1.PaymentDistribution (V1.WalAddress addr) (V1.WalletCoin coin))
                                 <$> pick (genPayeeWithNM nm mempty (PayLovelace 100))
                 withUtxosFixture @IO pm [300, 400, 500, 600, 5000000] $ \_keystore _activeLayer aw f@Fix{..} -> do
                     let pw = Kernel.walletPassive aw
@@ -322,7 +322,7 @@ spec = do
             monadicIO $ do
                 pm <- pick arbitrary
                 let nm = makeNetworkMagic pm
-                distr <- fmap (\(TxOut addr coin) -> V1.PaymentDistribution (V1.WalAddress addr) (V1.V1 coin))
+                distr <- fmap (\(TxOut addr coin) -> V1.PaymentDistribution (V1.WalAddress addr) (V1.WalletCoin coin))
                                 <$> pick (genPayeeWithNM nm mempty (PayLovelace 100))
                 withUtxosFixture @IO pm [300, 400, 500, 600, 5000000] $ \_keystore _activeLayer aw Fix{..} -> do
                     let pw = Kernel.walletPassive aw
@@ -398,7 +398,7 @@ spec = do
                     let sourceWallet = V1.WalletId (sformat build rootAddress)
                     let accountIndex = Kernel.Conv.toAccountId hdAccountId
                     let destinations =
-                            fmap (\(addr, coin) -> V1.PaymentDistribution (V1.WalAddress addr) (V1.V1 coin)
+                            fmap (\(addr, coin) -> V1.PaymentDistribution (V1.WalAddress addr) (V1.WalletCoin coin)
                                 ) fixturePayees
                     let newPayment = V1.Payment {
                                     pmtSource          = V1.PaymentSource sourceWallet accountIndex

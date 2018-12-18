@@ -45,6 +45,7 @@ module Cardano.Wallet.API.V1.Types (
   , WalletInputSelectionPolicy (..)
   , WalletTxId (..)
   , WalAddress (..)
+  , WalletCoin (..)
   , EosWallet (..)
   , NewEosWallet (..)
   , WalletAndTxHistory (..)
@@ -275,21 +276,29 @@ instance ToSchema WalletPassPhrase where
             & type_ .~ SwaggerString
             & format ?~ "hex|base16"
 
-instance ToJSON (V1 Core.Coin) where
-    toJSON (V1 c) = toJSON . Core.unsafeGetCoin $ c
+newtype WalletCoin = WalletCoin { unWalletCoin :: Core.Coin }
+    deriving (Eq, Generic, Ord, Show)
 
-instance FromJSON (V1 Core.Coin) where
+deriveSafeBuildable ''WalletCoin
+instance BuildableSafeGen WalletCoin where
+    buildSafeGen sl (WalletCoin c) =
+        bprint (plainOrSecureF sl build (fconst "<wallet coin>")) c
+
+instance ToJSON WalletCoin where
+    toJSON (WalletCoin c) = toJSON . Core.unsafeGetCoin $ c
+
+instance FromJSON WalletCoin where
     parseJSON v = do
         i <- Core.Coin <$> parseJSON v
-        either (fail . toString) (const (pure (V1 i)))
+        either (fail . toString) (const (pure (WalletCoin i)))
             $ Core.checkCoin i
 
-instance Arbitrary (V1 Core.Coin) where
-    arbitrary = fmap V1 arbitrary
+instance Arbitrary WalletCoin where
+    arbitrary = fmap WalletCoin arbitrary
 
-instance ToSchema (V1 Core.Coin) where
+instance ToSchema WalletCoin where
     declareNamedSchema _ =
-        pure $ NamedSchema (Just "V1Coin") $ mempty
+        pure $ NamedSchema (Just "WalletCoin") $ mempty
             & type_ .~ SwaggerNumber
             & maximum_ .~ Just (fromIntegral Core.maxCoinVal)
 
@@ -865,7 +874,7 @@ instance BuildableSafeGen WalletType where
 data Wallet = Wallet {
       walId                         :: !WalletId
     , walName                       :: !WalletName
-    , walBalance                    :: !(V1 Core.Coin)
+    , walBalance                    :: !WalletCoin
     , walHasSpendingPassword        :: !Bool
     , walSpendingPasswordLastUpdate :: !WalletTimestamp
     , walCreatedAt                  :: !WalletTimestamp
@@ -945,7 +954,7 @@ data EosWallet = EosWallet
     { eoswalId             :: !EosWalletId
     , eoswalName           :: !WalletName
     , eoswalAddressPoolGap :: !AddressPoolGap
-    , eoswalBalance        :: !(V1 Core.Coin)
+    , eoswalBalance        :: !WalletCoin
     , eoswalAssuranceLevel :: !AssuranceLevel
     } deriving (Eq, Ord, Show, Generic)
 
@@ -1146,7 +1155,7 @@ instance ToHttpApiData AccountIndex where
 data Account = Account
     { accIndex     :: !AccountIndex
     , accAddresses :: ![WalletAddress]
-    , accAmount    :: !(V1 Core.Coin)
+    , accAmount    :: !WalletCoin
     , accName      :: !Text
     , accWalletId  :: !WalletId
     } deriving (Show, Ord, Eq, Generic)
@@ -1167,7 +1176,7 @@ newtype AccountAddresses = AccountAddresses
 
 -- | Datatype wrapping balance for per-field endpoint
 newtype AccountBalance = AccountBalance
-    { acbAmount    :: V1 Core.Coin
+    { acbAmount    :: WalletCoin
     } deriving (Show, Ord, Eq, Generic)
 
 accountsHaveSameId :: Account -> Account -> Bool
@@ -1428,7 +1437,7 @@ instance BuildableSafeGen PasswordUpdate where
 -- | 'EstimatedFees' represents the fees which would be generated
 -- for a 'Payment' in case the latter would actually be performed.
 data EstimatedFees = EstimatedFees {
-    feeEstimatedAmount :: !(V1 Core.Coin)
+    feeEstimatedAmount :: !WalletCoin
   } deriving (Show, Eq, Generic)
 
 deriveJSON Aeson.defaultOptions ''EstimatedFees
@@ -1454,7 +1463,7 @@ instance BuildableSafeGen EstimatedFees where
 -- typically used to specify where to send money during a 'Payment'.
 data PaymentDistribution = PaymentDistribution {
       pdAddress :: !WalAddress
-    , pdAmount  :: !(V1 Core.Coin)
+    , pdAmount  :: !WalletCoin
     } deriving (Show, Ord, Eq, Generic)
 
 deriveJSON Aeson.defaultOptions ''PaymentDistribution
@@ -1745,7 +1754,7 @@ instance BuildableSafeGen TransactionDirection where
 data Transaction = Transaction
   { txId            :: !WalletTxId
   , txConfirmations :: !Word
-  , txAmount        :: !(V1 Core.Coin)
+  , txAmount        :: !WalletCoin
   , txInputs        :: !(NonEmpty PaymentDistribution)
   , txOutputs       :: !(NonEmpty PaymentDistribution)
     -- ^ The output money distribution.
@@ -2185,7 +2194,7 @@ instance Example AddressValidity
 instance Example NewAddress
 instance Example ShieldedRedemptionCode
 instance Example WalletPassPhrase
-instance Example (V1 Core.Coin)
+instance Example WalletCoin
 
 -- | We have a specific 'Example' instance for @'V1' 'Address'@ because we want
 -- to control the length of the examples. It is possible for the encoded length
