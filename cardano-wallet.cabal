@@ -130,7 +130,6 @@ library
     , wai
     , wai-middleware-throttle
     , warp
-    , x509-validation
     , zlib
 
   hs-source-dirs:

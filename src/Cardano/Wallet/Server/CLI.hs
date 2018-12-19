@@ -51,8 +51,14 @@ data WalletDBOptions = WalletDBOptions {
 data WalletBackendParams = WalletBackendParams
     { enableMonitoringApi     :: !Bool
     -- ^ Whether or not to run the monitoring API.
+    --
+    -- Note that this parameter is redundant, as we currently delegate to the
+    -- Node API and do not run a monitoring server anymore.
     , monitoringApiPort       :: !Word16
     -- ^ The port the monitoring API should listen to.
+    --
+    -- Note that this parameter is redundant, as we currently delegate to the
+    -- Node API and do not run a monitoring server anymore.
     , walletTLSParams         :: !(Maybe TlsParams)
     -- ^ The TLS parameters.
     , walletAddress           :: !NetworkAddress
@@ -160,12 +166,21 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
                                                 <*> tlsCaCertPathParser
   where
     enableMonitoringApiParser :: Parser Bool
-    enableMonitoringApiParser = switch (long "monitoring-api" <>
-                                        help "Activate the node monitoring API."
-                                       )
+    enableMonitoringApiParser =
+        switch
+        ( long "monitoring-api"
+        <> help
+            ( "Activate the node monitoring API. This option doesn't do "
+            <> "anything anymore, as the monitoring API has been folded into "
+            <> "the API exposed by the node process."
+            )
+        )
 
     monitoringApiPortParser :: Parser Word16
-    monitoringApiPortParser = CLI.webPortOption 8080 "Port for the monitoring API."
+    monitoringApiPortParser = CLI.webPortOption 8080
+        $ "Port for the monitoring API. This option doesn't do anything "
+        <> "anymore, as the monitoring API has been folded into the API exposed"
+        <> "by the node process."
 
     addressParser :: Parser NetworkAddress
     addressParser = CLI.walletAddressOption $ Just (localhost, 8090)
@@ -178,21 +193,32 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
 
     tlsClientCertPathParser :: Parser FilePath
     tlsClientCertPathParser = strOption
-        $ long "tls-client-cert"
+        $ long "node-tls-client-cert"
         <> metavar "FILEPATH"
-        <> help "Path to TLS client public certificate"
+        <> help
+            ( "Path to TLS client public certificate used to authenticate to "
+            <> "the Node API."
+            )
+
 
     tlsPrivKeyParser :: Parser FilePath
     tlsPrivKeyParser = strOption
-        $ long "tls-key"
+        $ long "node-tls-key"
         <> metavar "FILEPATH"
-        <> help "Path to TLS client private key"
+        <> help
+            ( "Path to TLS client private key used to authenticate to the "
+            <> "Node API."
+            )
 
     tlsCaCertPathParser :: Parser FilePath
     tlsCaCertPathParser = strOption
-        $ long "tls-ca-cert"
+        $ long "node-tls-ca-cert"
         <> metavar  "FILEPATH"
-        <> help "Path to TLS CA public certificate"
+        <> help
+            ( "Path to TLS CA public certificate used to authenticate to the "
+            <> "Node API."
+            )
+
 
     docAddressParser :: Parser (Maybe NetworkAddress)
     docAddressParser = CLI.docAddressOption Nothing

@@ -25,7 +25,6 @@ import           Data.Aeson (encode)
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Text as T
 import           Data.Typeable (typeOf)
-import           Data.X509.Validation (HostName)
 import           Formatting.Buildable (build)
 import           Network.HTTP.Types.Status (badRequest400)
 import           Network.Wai (Application, Middleware, Response, responseLBS)
@@ -106,7 +105,7 @@ apiServer
             $ "There was an error connecting to the node: "
             <> show err
         Right _ -> do
-            logInfo "The nod responded successfully."
+            logInfo "The node responded successfully."
     WalletLayer.Kernel.bracketActiveWallet passiveLayer passiveWallet diffusion' $ \active _ -> do
         ctx <- view shutdownContext
         serveImpl
@@ -226,7 +225,7 @@ instance Buildable Servant.NoContent where
 -- Copied from the old wallet/integration/SEtupTestEnv.hs
 setupNodeClient
     :: MonadIO m
-    => (HostName, Int)
+    => (String, Int)
     -> FilePath
     -> FilePath
     -> FilePath
