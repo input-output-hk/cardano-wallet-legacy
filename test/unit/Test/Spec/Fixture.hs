@@ -16,6 +16,7 @@ import           Universum
 
 import           Pos.Util.Wlog (Severity)
 
+import           Pos.Core.Chrono (OldestFirst (..))
 import           Pos.Crypto (ProtocolMagic)
 import           Pos.Infra.InjectFail (mkFInjects)
 
@@ -36,6 +37,10 @@ import qualified Cardano.Wallet.WalletLayer.Kernel as WalletLayer.Kernel
 devNull :: Severity -> Text -> IO ()
 devNull _ _ = return ()
 
+-- | Use pull mechanism for block syncing. Otherwise, use push mechanism (readerT based) - at this moment this is default solution
+usePullMechanism :: Bool
+usePullMechanism = False
+
 genSpendingPassword :: PropertyM IO (Maybe V1.SpendingPassword)
 genSpendingPassword =
     pick (frequency [(20, pure Nothing), (80, Just <$> arbitrary)])
@@ -50,6 +55,7 @@ withLayer pm cc = do
         WalletLayer.Kernel.bracketPassiveWallet
             pm
             Kernel.UseInMemory
+            usePullMechanism
             devNull
             keystore
             mockNodeStateDef
@@ -71,6 +77,7 @@ withPassiveWalletFixture pm prepareFixtures cc = do
         WalletLayer.Kernel.bracketPassiveWallet
             pm
             Kernel.UseInMemory
+            usePullMechanism
             devNull
             keystore
             mockNodeStateDef
@@ -88,11 +95,12 @@ withActiveWalletFixture pm prepareFixtures cc = do
     generateFixtures <- prepareFixtures
     liftIO $ Keystore.bracketTestKeystore $ \keystore -> do
         mockFInjects <- mkFInjects mempty
-        WalletLayer.Kernel.bracketPassiveWallet pm Kernel.UseInMemory devNull keystore mockNodeStateDef mockFInjects $ \passiveLayer passiveWallet -> do
+        WalletLayer.Kernel.bracketPassiveWallet pm Kernel.UseInMemory usePullMechanism devNull keystore mockNodeStateDef mockFInjects $ \passiveLayer passiveWallet -> do
             WalletLayer.Kernel.bracketActiveWallet
                     passiveLayer
                     passiveWallet
                     diffusion
+                    usePullMechanism
                 $ \activeLayer activeWallet -> do
                     fixtures <- generateFixtures keystore activeWallet
                     cc keystore activeLayer activeWallet fixtures
@@ -101,4 +109,6 @@ withActiveWalletFixture pm prepareFixtures cc = do
         diffusion = Kernel.WalletDiffusion {
             walletSendTx                = \_tx -> return False
           , walletGetSubscriptionStatus = return mempty
+          , walletRequestTip            = return mempty
+          , walletGetBlocks             = \_nodeId _hashId _checkpointHashIds -> return $ OldestFirst []
           }

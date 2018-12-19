@@ -51,36 +51,39 @@ data WalletDBOptions = WalletDBOptions {
 -- Named with the suffix `Params` to honour other types of
 -- parameters like `NodeParams` or `SscParams`.
 data WalletBackendParams = WalletBackendParams
-    { enableMonitoringApi     :: !Bool
+    { enableMonitoringApi           :: !Bool
     -- ^ Whether or not to run the monitoring API.
     --
     -- Note that this parameter is redundant, as we currently delegate to the
     -- Node API and do not run a monitoring server anymore.
-    , monitoringApiPort       :: !Word16
+    , monitoringApiPort             :: !Word16
     -- ^ The port the monitoring API should listen to.
     --
     -- Note that this parameter is redundant, as we currently delegate to the
     -- Node API and do not run a monitoring server anymore.
-    , walletTLSParams         :: !(Maybe TlsParams)
+    , walletTLSParams               :: !(Maybe TlsParams)
     -- ^ The TLS parameters.
-    , walletAddress           :: !NetworkAddress
+    , walletAddress                 :: !NetworkAddress
     -- ^ The wallet address.
-    , walletDocAddress        :: !(Maybe NetworkAddress)
+    , walletDocAddress              :: !(Maybe NetworkAddress)
     -- ^ The wallet documentation address.
-    , walletRunMode           :: !RunMode
+    , walletRunMode                 :: !RunMode
     -- ^ The mode this node is running in.
-    , walletDbOptions         :: !WalletDBOptions
+    , walletDbOptions               :: !WalletDBOptions
     -- ^ DB-specific options.
-    , forceFullMigration      :: !Bool
-    , walletNodeAddress       :: !NetworkAddress
+    , forceFullMigration            :: !Bool
+    , walletNodeAddress             :: !NetworkAddress
     -- ^ The IP address and port for the node backend.
-    , walletNodeTlsClientCert :: FilePath
+    , walletNodeTlsClientCert       :: FilePath
     -- ^ A filepath to the Node's public certficate
-    , walletNodeTlsPrivKey    :: FilePath
+    , walletNodeTlsPrivKey          :: FilePath
     -- ^ A filepath to the TLS private key for the Node API.
-    , walletNodeTlsCaCertPath :: FilePath
+    , walletNodeTlsCaCertPath       :: FilePath
     -- ^ A filepath to the TLS CA Certificate for communicating with the Node
     -- API.
+    , walletApplyBlockPullMechanism :: !Bool
+    -- ^ Using push (readerT based, strong coupling to the node) mechanism - False,
+    -- Or pull mechanism (introducing decoupling from the node) - True
     } deriving Show
 
 getWalletDbOptions :: WalletBackendParams -> WalletDBOptions
@@ -90,6 +93,11 @@ getWalletDbOptions WalletBackendParams{..} =
 getFullMigrationFlag :: WalletBackendParams -> Bool
 getFullMigrationFlag WalletBackendParams{..} =
     forceFullMigration
+
+getApplyBlockPullMechanismFlag :: WalletBackendParams -> Bool
+getApplyBlockPullMechanismFlag WalletBackendParams{..} =
+    walletApplyBlockPullMechanism
+
 
 -- | A richer type to specify in which mode we are running this node.
 data RunMode = ProductionMode
@@ -160,6 +168,7 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
                                                 <*> tlsClientCertPathParser
                                                 <*> tlsPrivKeyParser
                                                 <*> tlsCaCertPathParser
+                                                <*> applyBlockPullMechanismParser
   where
     enableMonitoringApiParser :: Parser Bool
     enableMonitoringApiParser =
@@ -236,6 +245,12 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
                                \If something fails (for example a wallet fails to decode from the old format) \
                                \migration will stop and the node will crash, \
                                \instead of just logging the error."
+
+    applyBlockPullMechanismParser :: Parser Bool
+    applyBlockPullMechanismParser = switch $
+                          long "pull-mechanism" <>
+                          help "Enforces pull mechanism for block syncing. \
+                               \Otherwise push mechanism is adopted."
 
 tlsParamsParser :: Parser (Maybe TlsParams)
 tlsParamsParser = constructTlsParams <$> certPathParser

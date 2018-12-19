@@ -10,6 +10,7 @@ import           Test.Integration.Framework.DSL
 spec :: Scenarios Context
 spec = do
 
+
     scenario "proper fragmentation of utxo allows for multi-output transaction" $ do
         fixtureSource <- setup $ defaultSetup
             & initialCoins .~ [500000, 500000]

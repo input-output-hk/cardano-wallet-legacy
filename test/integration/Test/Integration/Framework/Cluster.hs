@@ -69,6 +69,7 @@ defaultIntegrationEnv = Map.fromList
     , ("NODE_TLS_CLIENT_CERT", "./state-integration/tls/relay/client.crt")
     , ("NODE_TLS_KEY", "./state-integration/tls/relay/client.key")
     , ("NODE_TLS_CA_CERT", "./state-integration/tls/relay/ca.crt")
+    , ("PULL_MECHANISM", "False")
     ]
 
 -- | Start an integration cluster. Quite identical to the original "start cluster".
