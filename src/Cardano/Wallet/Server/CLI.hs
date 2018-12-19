@@ -49,23 +49,30 @@ data WalletDBOptions = WalletDBOptions {
 -- Named with the suffix `Params` to honour other types of
 -- parameters like `NodeParams` or `SscParams`.
 data WalletBackendParams = WalletBackendParams
-    { enableMonitoringApi :: !Bool
+    { enableMonitoringApi     :: !Bool
     -- ^ Whether or not to run the monitoring API.
-    , monitoringApiPort   :: !Word16
+    , monitoringApiPort       :: !Word16
     -- ^ The port the monitoring API should listen to.
-    , walletTLSParams     :: !(Maybe TlsParams)
+    , walletTLSParams         :: !(Maybe TlsParams)
     -- ^ The TLS parameters.
-    , walletAddress       :: !NetworkAddress
+    , walletAddress           :: !NetworkAddress
     -- ^ The wallet address.
-    , walletDocAddress    :: !(Maybe NetworkAddress)
+    , walletDocAddress        :: !(Maybe NetworkAddress)
     -- ^ The wallet documentation address.
-    , walletRunMode       :: !RunMode
+    , walletRunMode           :: !RunMode
     -- ^ The mode this node is running in.
-    , walletDbOptions     :: !WalletDBOptions
+    , walletDbOptions         :: !WalletDBOptions
     -- ^ DB-specific options.
-    , forceFullMigration  :: !Bool
-    , walletNodeAddress   :: !NetworkAddress
+    , forceFullMigration      :: !Bool
+    , walletNodeAddress       :: !NetworkAddress
     -- ^ The IP address and port for the node backend.
+    , walletNodeTlsClientCert :: FilePath
+    -- ^ A filepath to the Node's public certficate
+    , walletNodeTlsPrivKey    :: FilePath
+    -- ^ A filepath to the TLS private key for the Node API.
+    , walletNodeTlsCaCertPath :: FilePath
+    -- ^ A filepath to the TLS CA Certificate for communicating with the Node
+    -- API.
     } deriving Show
 
 -- | Start up parameters for the new wallet backend
@@ -148,6 +155,9 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
                                                 <*> dbOptionsParser
                                                 <*> forceFullMigrationParser
                                                 <*> nodeAddressParser
+                                                <*> tlsClientCertPathParser
+                                                <*> tlsPrivKeyParser
+                                                <*> tlsCaCertPathParser
   where
     enableMonitoringApiParser :: Parser Bool
     enableMonitoringApiParser = switch (long "monitoring-api" <>
@@ -165,6 +175,24 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
     -- TODO: factor the default address out into a term that can be shared
     nodeAddressParser :: Parser NetworkAddress
     nodeAddressParser = CLI.walletAddressOption $ Just (localhost, 8080)
+
+    tlsClientCertPathParser :: Parser FilePath
+    tlsClientCertPathParser = strOption
+        $ long "tls-client-cert"
+        <> metavar "FILEPATH"
+        <> help "Path to TLS client public certificate"
+
+    tlsPrivKeyParser :: Parser FilePath
+    tlsPrivKeyParser = strOption
+        $ long "tls-key"
+        <> metavar "FILEPATH"
+        <> help "Path to TLS client private key"
+
+    tlsCaCertPathParser :: Parser FilePath
+    tlsCaCertPathParser = strOption
+        $ long "tls-ca-cert"
+        <> metavar  "FILEPATH"
+        <> help "Path to TLS CA public certificate"
 
     docAddressParser :: Parser (Maybe NetworkAddress)
     docAddressParser = CLI.docAddressOption Nothing

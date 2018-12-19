@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase     #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
 {- | A collection of plugins used by this edge node.
@@ -24,6 +25,7 @@ import           Data.Aeson (encode)
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Text as T
 import           Data.Typeable (typeOf)
+import           Data.X509.Validation (HostName)
 import           Formatting.Buildable (build)
 import           Network.HTTP.Types.Status (badRequest400)
 import           Network.Wai (Application, Middleware, Response, responseLBS)
@@ -31,9 +33,10 @@ import           Network.Wai.Handler.Warp (setOnException,
                      setOnExceptionResponse)
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Servant
+import           Servant.Client (Scheme (..))
 import qualified Servant.Client as Servant
-import Servant.Client (Scheme(..))
 
+import           Cardano.Node.Client (NodeHttpClient)
 import qualified Cardano.Node.Client as NodeClient
 import qualified Cardano.Node.Manager as NodeManager
 import           Cardano.NodeIPC (startNodeJsIPC)
@@ -63,7 +66,7 @@ import           Pos.Infra.Shutdown (HasShutdownContext (shutdownContext),
                      ShutdownContext)
 import           Pos.Launcher.Configuration (HasConfigurations)
 import           Pos.Util.CompileInfo (HasCompileInfo)
-import           Pos.Util.Wlog (logInfo, modifyLoggerName, usingLoggerName)
+import           Pos.Util.Wlog (logInfo, logError, modifyLoggerName, usingLoggerName)
 import           Pos.Web (serveDocImpl, serveImpl)
 import qualified Pos.Web.Server
 
@@ -90,10 +93,24 @@ apiServer
   = do
     env <- ask
     let diffusion' = Kernel.fromDiffusion (lower env) diffusion
+    nodeClient <- setupNodeClient
+        (BS8.unpack nodeIp, fromIntegral nodePort)
+        walletNodeTlsClientCert
+        walletNodeTlsCaCertPath
+        walletNodeTlsPrivKey
+    logInfo "Testing node client connection"
+    eresp <- liftIO . runExceptT $ NodeClient.getNodeSettings nodeClient
+    case eresp of
+        Left err -> do
+            logError
+            $ "There was an error connecting to the node: "
+            <> show err
+        Right _ -> do
+            logInfo "The nod responded successfully."
     WalletLayer.Kernel.bracketActiveWallet passiveLayer passiveWallet diffusion' $ \active _ -> do
         ctx <- view shutdownContext
         serveImpl
-            (getApplication active)
+            (getApplication nodeClient active)
             (BS8.unpack ip)
             port
             (if isDebugMode walletRunMode then Nothing else walletTLSParams)
@@ -102,22 +119,7 @@ apiServer
   where
     (ip, port) = walletAddress
 
-    nodeClient = NodeClient.mkHttpClient nodeBaseUrl manager
     (nodeIp, nodePort) = walletNodeAddress
-    nodeBaseUrl = Servant.BaseUrl
-        { baseUrlScheme = Https
-        , baseUrlHost = BS8.unpack nodeIp
-        , baseUrlPort = fromIntegral nodePort
-        , baseUrlPath = ""
-        }
-    managerSettings =
-        NodeManager.mkHttpsManagerSettings
-            (nodeIp, nodePort)
-            signedCertificate
-            (certChain, privKey)
-    signedCertificate = error "TODO: get this???"
-    (certChain, privKey) = error "TODO: get this"
-    manager = error "TODO: get this from config"
 
     exceptionHandler :: SomeException -> Response
     exceptionHandler se = case translateWalletLayerErrors se of
@@ -138,8 +140,11 @@ apiServer
             --       we only reveal the exception type here.
             defWalletError = V1.UnknownError $ T.pack . show $ typeOf se
 
-    getApplication :: ActiveWalletLayer IO -> Kernel.WalletMode Application
-    getApplication active = do
+    getApplication
+        :: NodeHttpClient
+        -> ActiveWalletLayer IO
+        -> Kernel.WalletMode Application
+    getApplication nodeClient active = do
         logInfo "New wallet API has STARTED!"
         return
             $ withMiddlewares middlewares
@@ -216,3 +221,32 @@ updateWatcher = const $ do
 
 instance Buildable Servant.NoContent where
     build Servant.NoContent = build ()
+
+
+-- Copied from the old wallet/integration/SEtupTestEnv.hs
+setupNodeClient
+    :: MonadIO m
+    => (HostName, Int)
+    -> FilePath
+    -> FilePath
+    -> FilePath
+    -> m NodeHttpClient
+setupNodeClient
+    (serverHost, serverPort)
+    tlsClientCertPath
+    tlsCACertPath
+    tlsPrivKeyPath
+  = liftIO $ do
+    let serverId = (serverHost, BS8.pack $ show serverPort)
+    caChain <- NodeManager.readSignedObject tlsCACertPath
+    clientCredentials <- NodeManager.credentialLoadX509 tlsClientCertPath tlsPrivKeyPath >>= \case
+        Right   a -> return a
+        Left  err -> fail $ "Error decoding X509 certificates: " <> err
+    manager <- NodeManager.newManager $ NodeManager.mkHttpsManagerSettings serverId caChain clientCredentials
+
+    let
+        baseUrl = Servant.BaseUrl Https serverHost serverPort mempty
+        walletClient :: NodeHttpClient
+        walletClient = NodeClient.mkHttpClient baseUrl manager
+
+    return walletClient
