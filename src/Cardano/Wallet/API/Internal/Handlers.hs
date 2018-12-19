@@ -2,9 +2,10 @@ module Cardano.Wallet.API.Internal.Handlers (handlers) where
 
 import           Universum
 
-import           Network.HTTP.Types
-import           Servant
-import           Servant.Client
+import           Network.HTTP.Types (Status (..))
+import           Servant ((:<|>) (..), Handler, NoContent (..), ServerT, err404,
+                     err500, throwError)
+import           Servant.Client (GenResponse (..), ServantError (..))
 
 import           Cardano.Node.Client (ClientError (..), NodeHttpClient)
 import qualified Cardano.Node.Client as NodeClient
