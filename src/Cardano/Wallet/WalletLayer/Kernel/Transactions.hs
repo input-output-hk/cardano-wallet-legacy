@@ -11,9 +11,9 @@ import           Control.Monad.Except
 import           Formatting (build, sformat)
 import           GHC.TypeLits (symbolVal)
 
-import           Pos.Chain.Txp (TxId)
 import           Pos.Core (Address, Coin, SlotCount, SlotId, decodeTextAddress,
                      flattenSlotId, getBlockCount)
+import           Pos.Node.API (unV1)
 import           Pos.Util.Wlog (Severity (..))
 
 import           Cardano.Wallet.API.Indices
@@ -22,7 +22,6 @@ import qualified Cardano.Wallet.API.Request.Filter as F
 import           Cardano.Wallet.API.Request.Pagination
 import qualified Cardano.Wallet.API.Request.Sort as S
 import           Cardano.Wallet.API.Response
-import           Cardano.Wallet.API.V1.Types (V1 (..), unV1)
 import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..))
@@ -38,9 +37,9 @@ getTransactions :: MonadIO m
                 => Kernel.PassiveWallet
                 -> Maybe V1.WalletId
                 -> Maybe V1.AccountIndex
-                -> Maybe (V1 Address)
+                -> Maybe V1.WalAddress
                 -> RequestParams
-                -> FilterOperations '[V1 TxId, V1.WalletTimestamp] V1.Transaction
+                -> FilterOperations '[V1.WalletTxId, V1.WalletTimestamp] V1.Transaction
                 -> SortOperations V1.Transaction
                 -> m (Either GetTxError (APIResponse [V1.Transaction]))
 getTransactions wallet mbWalletId mbAccountIndex mbAddress params fop sop = liftIO $ runExceptT $ do
@@ -68,7 +67,7 @@ getTransactions wallet mbWalletId mbAccountIndex mbAddress params fop sop = lift
                 (TxMeta.Offset . fromIntegral $ (cp - 1) * pp)
                 (TxMeta.Limit . fromIntegral $ pp)
                 accountFops
-                (unV1 <$> mbAddress)
+                (V1.unWalAddress <$> mbAddress)
                 (castFiltering $ mapIx unV1 <$> F.findMatchingFilterOp fop)
                 (castFiltering $ mapIx unV1 <$> F.findMatchingFilterOp fop)
                 mbSorting
@@ -156,9 +155,9 @@ metaToTx db slotCount current TxMeta{..} = do
                         Kernel.rootAssuranceLevel db hdRootId
     let (status, confirmations) = buildDynamicTxMeta assuranceLevel slotCount mSlotwithState current isPending
     return V1.Transaction {
-        txId = V1 _txMetaId,
+        txId = V1.WalletTxId _txMetaId,
         txConfirmations = fromIntegral confirmations,
-        txAmount = V1 _txMetaAmount,
+        txAmount = V1.WalletCoin _txMetaAmount,
         txInputs = inputsToPayDistr <$> _txMetaInputs,
         txOutputs = outputsToPayDistr <$> _txMetaOutputs,
         txType = if _txMetaIsLocal then V1.LocalTransaction else V1.ForeignTransaction,
@@ -171,10 +170,10 @@ metaToTx db slotCount current TxMeta{..} = do
             hdAccountId = HD.HdAccountId hdRootId (HD.HdAccountIx _txMetaAccountIx)
 
             inputsToPayDistr :: (a , b, Address, Coin) -> V1.PaymentDistribution
-            inputsToPayDistr (_, _, addr, c) = V1.PaymentDistribution (V1 addr) (V1 c)
+            inputsToPayDistr (_, _, addr, c) = V1.PaymentDistribution (V1.WalAddress addr) (V1.WalletCoin c)
 
             outputsToPayDistr :: (Address, Coin) -> V1.PaymentDistribution
-            outputsToPayDistr (addr, c) = V1.PaymentDistribution (V1 addr) (V1 c)
+            outputsToPayDistr (addr, c) = V1.PaymentDistribution (V1.WalAddress addr) (V1.WalletCoin c)
 
 buildDynamicTxMeta :: HD.AssuranceLevel -> SlotCount -> HD.CombinedWithAccountState (Maybe SlotId) -> SlotId -> Bool -> (V1.TransactionStatus, Word64)
 buildDynamicTxMeta assuranceLevel slotCount mSlotwithState currentSlot isPending =

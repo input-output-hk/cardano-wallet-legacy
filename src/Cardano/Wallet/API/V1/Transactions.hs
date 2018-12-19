@@ -5,8 +5,6 @@ import           Cardano.Wallet.API.Response
 import           Cardano.Wallet.API.Types
 import           Cardano.Wallet.API.V1.Parameters
 import           Cardano.Wallet.API.V1.Types
-import qualified Pos.Chain.Txp as Txp
-import qualified Pos.Core as Core
 
 import           Servant
 
@@ -17,9 +15,9 @@ type API = Tags '["Transactions"] :>
     :<|> "transactions" :> Summary "Returns the transaction history, i.e the list of all the past transactions."
                         :> QueryParam "wallet_id" WalletId
                         :> QueryParam "account_index" AccountIndex
-                        :> QueryParam "address" (V1 Core.Address)
+                        :> QueryParam "address" (WalAddress)
                         :> WalletRequestParams
-                        :> FilterBy '[ V1 Txp.TxId
+                        :> FilterBy '[ WalletTxId
                                      , WalletTimestamp
                                      ] Transaction
                         :> SortBy   '[ WalletTimestamp

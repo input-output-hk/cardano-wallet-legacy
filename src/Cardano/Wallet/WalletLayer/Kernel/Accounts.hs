@@ -18,7 +18,7 @@ import           Pos.Crypto.Signing
 import           Cardano.Wallet.API.Request (RequestParams, SortOperations (..))
 import           Cardano.Wallet.API.Request.Filter (FilterOperations (..))
 import           Cardano.Wallet.API.Response (APIResponse, respondWith)
-import           Cardano.Wallet.API.V1.Types (V1 (..), WalletAddress)
+import           Cardano.Wallet.API.V1.Types (WalletAddress)
 import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
@@ -60,7 +60,7 @@ createAccount wallet wId (V1.NewAccount mbSpendingPassword accountName) = liftIO
     mkAccount :: HD.HdAccount -> [Indexed HD.HdAddress] -> V1.Account
     mkAccount account addresses = V1.Account {
         accIndex     = toAccountId (account ^. HD.hdAccountId)
-      , accAmount    = V1.V1 (Core.mkCoin 0)
+      , accAmount    = V1.WalletCoin (Core.mkCoin 0)
       , accName      = accountName
       , accWalletId  = wId
       , accAddresses = map (toAddress account . view IxSet.ixedIndexed) addresses
@@ -114,7 +114,7 @@ getAccountBalance :: V1.WalletId
 getAccountBalance wId accIx snapshot = runExcept $ do
     accId <- withExceptT GetAccountWalletIdDecodingFailed $
                fromAccountId wId accIx
-    fmap (V1.AccountBalance . V1) $
+    fmap (V1.AccountBalance . V1.WalletCoin) $
       withExceptT GetAccountError $ exceptT $
         Kernel.currentTotalBalance snapshot accId
 
@@ -150,7 +150,7 @@ updateAccount wallet wId accIx (V1.AccountUpdate newName) = runExceptT $ do
 getAccountAddresses :: V1.WalletId
                     -> V1.AccountIndex
                     -> RequestParams
-                    -> FilterOperations '[V1 Core.Address] WalletAddress
+                    -> FilterOperations '[V1.WalAddress] WalletAddress
                     -> Kernel.DB
                     -> Either GetAccountError (APIResponse [V1.WalletAddress])
 getAccountAddresses wId accIx rp fo snapshot = runExcept $ do
@@ -166,8 +166,8 @@ getAccountAddresses wId accIx rp fo snapshot = runExcept $ do
   Auxiliary
 -------------------------------------------------------------------------------}
 
-filterHdAddress :: FilterOperations '[V1 Core.Address] WalletAddress
-                -> FilterOperations '[V1 Core.Address] (Indexed HD.HdAddress)
+filterHdAddress :: FilterOperations '[V1.WalAddress] WalletAddress
+                -> FilterOperations '[V1.WalAddress] (Indexed HD.HdAddress)
 filterHdAddress NoFilters               = NoFilters
 filterHdAddress (FilterNop NoFilters)   = FilterNop NoFilters
 filterHdAddress (FilterOp op NoFilters) = FilterOp (coerce op) NoFilters

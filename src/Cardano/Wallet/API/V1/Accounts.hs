@@ -8,8 +8,6 @@ import           Cardano.Wallet.API.Types
 import           Cardano.Wallet.API.V1.Parameters
 import           Cardano.Wallet.API.V1.Types
 
-import qualified Pos.Core as Core
-
 
 type API
     = Tags '["Accounts"] :>
@@ -38,7 +36,7 @@ type API
           :> CaptureAccountId :> "addresses"
           :> Summary "Retrieve only account's addresses."
           :> WalletRequestParams
-          :> FilterBy '[V1 Core.Address] WalletAddress
+          :> FilterBy '[WalAddress] WalletAddress
           :> Get '[ValidJSON] (APIResponse AccountAddresses)
     :<|> "wallets" :> CaptureWalletId :> "accounts"
           :> CaptureAccountId :> "amount"

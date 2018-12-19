@@ -9,11 +9,13 @@ import           Servant.Client (GenResponse (..), ServantError (..))
 
 import           Cardano.Node.Client (ClientError (..), NodeHttpClient)
 import qualified Cardano.Node.Client as NodeClient
-import           Pos.Chain.Update (SoftwareVersion)
+import qualified Pos.Node.API as NodeClient
+
 
 import qualified Cardano.Wallet.API.Internal as Internal
 import           Cardano.Wallet.API.Response (APIResponse, single)
-import           Cardano.Wallet.API.V1.Types (V1, Wallet, WalletImport)
+import           Cardano.Wallet.API.V1.Types (Wallet, WalletImport,
+                     WalletSoftwareVersion(..))
 import           Cardano.Wallet.WalletLayer (PassiveWalletLayer)
 import qualified Cardano.Wallet.WalletLayer as WalletLayer
 
@@ -28,14 +30,14 @@ handlers nc w =
     :<|> resetWalletState w
     :<|> importWallet w
 
-nextUpdate :: NodeHttpClient -> Handler (APIResponse (V1 SoftwareVersion))
+nextUpdate :: NodeHttpClient -> Handler (APIResponse WalletSoftwareVersion)
 nextUpdate nc = do
     emUpd <- liftIO . runExceptT $ NodeClient.getNextUpdate nc
     case emUpd of
         Left err  ->
             handleNodeError err
-        Right upd ->
-            single <$> pure upd
+        Right (NodeClient.V1 upd) ->
+            single <$> pure (WalletSoftwareVersion upd)
 
 applyUpdate :: NodeHttpClient -> Handler NoContent
 applyUpdate nc = do

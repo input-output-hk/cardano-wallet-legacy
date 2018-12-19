@@ -19,10 +19,8 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Cardano.Wallet.API.V1.Types (
-    V1 (..)
-  , unV1
   -- * Swagger & REST-related types
-  , PasswordUpdate (..)
+    PasswordUpdate (..)
   , AccountUpdate (..)
   , NewAccount (..)
   , Update
@@ -43,6 +41,10 @@ module Cardano.Wallet.API.V1.Types (
   , WalletPassPhrase (..)
   , WalletTimestamp (..)
   , WalletInputSelectionPolicy (..)
+  , WalletSoftwareVersion (..)
+  , WalletTxId (..)
+  , WalAddress (..)
+  , WalletCoin (..)
   , EosWallet (..)
   , NewEosWallet (..)
   , WalletAndTxHistory (..)
@@ -180,6 +182,7 @@ import           Cardano.Wallet.Util (mkJsonKey, showApiUtcTime)
 import           Cardano.Mnemonic (Mnemonic)
 import qualified Pos.Binary.Class as Bi
 import qualified Pos.Chain.Txp as Txp
+import           Pos.Chain.Update (ApplicationName (..), SoftwareVersion (..))
 import qualified Pos.Client.Txp.Util as Core
 import qualified Pos.Core as Core
 import           Pos.Crypto (PublicKey (..), decodeHash, hashHexF)
@@ -273,50 +276,66 @@ instance ToSchema WalletPassPhrase where
             & type_ .~ SwaggerString
             & format ?~ "hex|base16"
 
-instance ToJSON (V1 Core.Coin) where
-    toJSON (V1 c) = toJSON . Core.unsafeGetCoin $ c
+newtype WalletCoin = WalletCoin { unWalletCoin :: Core.Coin }
+    deriving (Eq, Generic, Ord, Show)
 
-instance FromJSON (V1 Core.Coin) where
+deriveSafeBuildable ''WalletCoin
+instance BuildableSafeGen WalletCoin where
+    buildSafeGen sl (WalletCoin c) =
+        bprint (plainOrSecureF sl build (fconst "<wallet coin>")) c
+
+instance ToJSON WalletCoin where
+    toJSON (WalletCoin c) = toJSON . Core.unsafeGetCoin $ c
+
+instance FromJSON WalletCoin where
     parseJSON v = do
         i <- Core.Coin <$> parseJSON v
-        either (fail . toString) (const (pure (V1 i)))
+        either (fail . toString) (const (pure (WalletCoin i)))
             $ Core.checkCoin i
 
-instance Arbitrary (V1 Core.Coin) where
-    arbitrary = fmap V1 arbitrary
+instance Arbitrary WalletCoin where
+    arbitrary = fmap WalletCoin arbitrary
 
-instance ToSchema (V1 Core.Coin) where
+instance ToSchema WalletCoin where
     declareNamedSchema _ =
-        pure $ NamedSchema (Just "V1Coin") $ mempty
+        pure $ NamedSchema (Just "WalletCoin") $ mempty
             & type_ .~ SwaggerNumber
             & maximum_ .~ Just (fromIntegral Core.maxCoinVal)
 
-instance ToJSON (V1 Core.Address) where
-    toJSON (V1 c) = String $ sformat Core.addressF c
+newtype WalAddress = WalAddress { unWalAddress :: Core.Address }
+    deriving (Eq, Generic, Ord, Show)
 
-instance FromJSON (V1 Core.Address) where
+deriveSafeBuildable ''WalAddress
+instance BuildableSafeGen WalAddress where
+    buildSafeGen sl (WalAddress addr) =
+        bprint (plainOrSecureF sl build (fconst "<wallet address>")) addr
+
+instance ToJSON WalAddress where
+    toJSON (WalAddress c) = String $ sformat Core.addressF c
+
+instance FromJSON WalAddress where
     parseJSON (String a) = case Core.decodeTextAddress a of
         Left e     -> fail $ "Not a valid Cardano Address: " <> toString e
-        Right addr -> pure (V1 addr)
+        Right addr -> pure (WalAddress addr)
     parseJSON x = typeMismatch "parseJSON failed for Address" x
 
-instance Arbitrary (V1 Core.Address) where
-    arbitrary = fmap V1 arbitrary
+instance Arbitrary WalAddress where
+    arbitrary = fmap WalAddress arbitrary
 
-instance ToSchema (V1 Core.Address) where
+instance ToSchema WalAddress where
     declareNamedSchema _ =
-        pure $ NamedSchema (Just "V1Address") $ mempty
+        pure $ NamedSchema (Just "Wallet Address") $ mempty
             & type_ .~ SwaggerString
             -- TODO: any other constraints we can have here?
 
-instance FromHttpApiData (V1 Core.Address) where
-    parseQueryParam = fmap (fmap V1) Core.decodeTextAddress
+instance FromHttpApiData WalAddress where
+    parseQueryParam = fmap (fmap WalAddress) Core.decodeTextAddress
 
-instance ToHttpApiData (V1 Core.Address) where
-    toQueryParam (V1 a) = sformat build a
+instance ToHttpApiData WalAddress where
+    toQueryParam (WalAddress a) = sformat build a
 
-deriving instance Hashable (V1 Core.Address)
-deriving instance NFData (V1 Core.Address)
+deriving instance Hashable WalAddress
+deriving instance NFData WalAddress
 
 newtype WalletTimestamp = WalletTimestamp Core.Timestamp
     deriving (Eq, Generic, Ord, Show)
@@ -370,8 +389,6 @@ instance Semigroup WalletPassPhrase where
 instance Monoid WalletPassPhrase where
     mempty = WalletPassPhrase mempty
     mappend = (<>)
-
-deriving newtype instance Num a => Num (V1 a)
 
 type WalletName = Text
 
@@ -855,7 +872,7 @@ instance BuildableSafeGen WalletType where
 data Wallet = Wallet {
       walId                         :: !WalletId
     , walName                       :: !WalletName
-    , walBalance                    :: !(V1 Core.Coin)
+    , walBalance                    :: !WalletCoin
     , walHasSpendingPassword        :: !Bool
     , walSpendingPasswordLastUpdate :: !WalletTimestamp
     , walCreatedAt                  :: !WalletTimestamp
@@ -935,7 +952,7 @@ data EosWallet = EosWallet
     { eoswalId             :: !EosWalletId
     , eoswalName           :: !WalletName
     , eoswalAddressPoolGap :: !AddressPoolGap
-    , eoswalBalance        :: !(V1 Core.Coin)
+    , eoswalBalance        :: !WalletCoin
     , eoswalAssuranceLevel :: !AssuranceLevel
     } deriving (Eq, Ord, Show, Generic)
 
@@ -1002,20 +1019,20 @@ data AddressOwnership
     | AddressAmbiguousOwnership
     deriving (Show, Eq, Generic, Ord)
 
-instance ToJSON (V1 AddressOwnership) where
-    toJSON = genericToJSON optsADTCamelCase . unV1
+instance ToJSON AddressOwnership where
+    toJSON = genericToJSON optsADTCamelCase
 
-instance FromJSON (V1 AddressOwnership) where
-    parseJSON = fmap V1 . genericParseJSON optsADTCamelCase
+instance FromJSON AddressOwnership where
+    parseJSON = genericParseJSON optsADTCamelCase
 
-instance ToSchema (V1 AddressOwnership) where
+instance ToSchema AddressOwnership where
     declareNamedSchema _ =
-        pure $ NamedSchema (Just "V1AddressOwnership") $ mempty
+        pure $ NamedSchema (Just "AddressOwnership") $ mempty
             & type_ .~ SwaggerString
             & enum_ ?~ ["isOurs", "ambiguousOwnership"]
 
-instance Arbitrary (V1 AddressOwnership) where
-    arbitrary = fmap V1 $ oneof
+instance Arbitrary AddressOwnership where
+    arbitrary = oneof
         [ pure AddressIsOurs
         , pure AddressAmbiguousOwnership
         ]
@@ -1025,7 +1042,7 @@ data WAddressMeta = WAddressMeta
     { _wamWalletId     :: !WalletId
     , _wamAccountIndex :: !Word32
     , _wamAddressIndex :: !Word32
-    , _wamAddress      :: !(V1 Core.Address)
+    , _wamAddress      :: !WalAddress
     } deriving (Eq, Ord, Show, Generic, Typeable)
 
 instance Hashable WAddressMeta
@@ -1041,10 +1058,10 @@ instance Buildable WAddressMeta where
 
 -- | Summary about single address.
 data WalletAddress = WalletAddress
-    { addrId            :: !(V1 Core.Address)
+    { addrId            :: !WalAddress
     , addrUsed          :: !Bool
     , addrChangeAddress :: !Bool
-    , addrOwnership     :: !(V1 AddressOwnership)
+    , addrOwnership     :: !AddressOwnership
     } deriving (Show, Eq, Generic, Ord)
 
 deriveJSON Aeson.defaultOptions ''WalletAddress
@@ -1136,7 +1153,7 @@ instance ToHttpApiData AccountIndex where
 data Account = Account
     { accIndex     :: !AccountIndex
     , accAddresses :: ![WalletAddress]
-    , accAmount    :: !(V1 Core.Coin)
+    , accAmount    :: !WalletCoin
     , accName      :: !Text
     , accWalletId  :: !WalletId
     } deriving (Show, Ord, Eq, Generic)
@@ -1157,7 +1174,7 @@ newtype AccountAddresses = AccountAddresses
 
 -- | Datatype wrapping balance for per-field endpoint
 newtype AccountBalance = AccountBalance
-    { acbAmount    :: V1 Core.Coin
+    { acbAmount    :: WalletCoin
     } deriving (Show, Ord, Eq, Generic)
 
 accountsHaveSameId :: Account -> Account -> Bool
@@ -1418,7 +1435,7 @@ instance BuildableSafeGen PasswordUpdate where
 -- | 'EstimatedFees' represents the fees which would be generated
 -- for a 'Payment' in case the latter would actually be performed.
 data EstimatedFees = EstimatedFees {
-    feeEstimatedAmount :: !(V1 Core.Coin)
+    feeEstimatedAmount :: !WalletCoin
   } deriving (Show, Eq, Generic)
 
 deriveJSON Aeson.defaultOptions ''EstimatedFees
@@ -1443,8 +1460,8 @@ instance BuildableSafeGen EstimatedFees where
 -- | Maps an 'Address' to some 'Coin's, and it's
 -- typically used to specify where to send money during a 'Payment'.
 data PaymentDistribution = PaymentDistribution {
-      pdAddress :: !(V1 Core.Address)
-    , pdAmount  :: !(V1 Core.Coin)
+      pdAddress :: !WalAddress
+    , pdAmount  :: !WalletCoin
     } deriving (Show, Ord, Eq, Generic)
 
 deriveJSON Aeson.defaultOptions ''PaymentDistribution
@@ -1568,25 +1585,34 @@ instance BuildableSafeGen Payment where
 ----------------------------------------------------------------------------
 -- TxId
 ----------------------------------------------------------------------------
-instance Arbitrary (V1 Txp.TxId) where
-  arbitrary = V1 <$> arbitrary
 
-instance ToJSON (V1 Txp.TxId) where
-  toJSON (V1 t) = String (sformat hashHexF t)
+newtype WalletTxId = WalletTxId Txp.TxId
+    deriving (Eq, Generic, Ord, Show)
 
-instance FromJSON (V1 Txp.TxId) where
+deriveSafeBuildable ''WalletTxId
+instance BuildableSafeGen WalletTxId where
+    buildSafeGen sl (WalletTxId txId) =
+        bprint (plainOrSecureF sl build (fconst "<wallet tx id>")) txId
+
+instance Arbitrary WalletTxId where
+  arbitrary = WalletTxId <$> arbitrary
+
+instance ToJSON WalletTxId where
+  toJSON (WalletTxId t) = String (sformat hashHexF t)
+
+instance FromJSON WalletTxId where
     parseJSON = withText "TxId" $ \t -> do
        case decodeHash t of
            Left err -> fail $ "Failed to parse transaction ID: " <> toString err
-           Right a  -> pure (V1 a)
+           Right a  -> pure (WalletTxId a)
 
-instance FromHttpApiData (V1 Txp.TxId) where
-    parseQueryParam = fmap (fmap V1) decodeHash
+instance FromHttpApiData WalletTxId where
+    parseQueryParam = fmap (fmap WalletTxId) decodeHash
 
-instance ToHttpApiData (V1 Txp.TxId) where
-    toQueryParam (V1 txId) = sformat hashHexF txId
+instance ToHttpApiData WalletTxId where
+    toQueryParam (WalletTxId txId) = sformat hashHexF txId
 
-instance ToSchema (V1 Txp.TxId) where
+instance ToSchema WalletTxId where
     declareNamedSchema _ = declareNamedSchema (Proxy @Text)
 
 ----------------------------------------------------------------------------
@@ -1724,9 +1750,9 @@ instance BuildableSafeGen TransactionDirection where
 
 -- | A 'Wallet''s 'Transaction'.
 data Transaction = Transaction
-  { txId            :: !(V1 Txp.TxId)
+  { txId            :: !WalletTxId
   , txConfirmations :: !Word
-  , txAmount        :: !(V1 Core.Coin)
+  , txAmount        :: !WalletCoin
   , txInputs        :: !(NonEmpty PaymentDistribution)
   , txOutputs       :: !(NonEmpty PaymentDistribution)
     -- ^ The output money distribution.
@@ -1801,7 +1827,7 @@ instance Buildable [AddressLevel] where
 
 -- | Source address and corresponding derivation path, for external wallet.
 data AddressAndPath = AddressAndPath
-    { aapSrcAddress     :: !(V1 Core.Address) -- AsBase58
+    { aapSrcAddress     :: !WalAddress -- AsBase58
     -- ^ Source address in Base58-format.
     , aapDerivationPath :: ![AddressLevel]
     -- ^ Derivation path used during generation of this address.
@@ -1866,7 +1892,7 @@ instance BuildableSafeGen UnsignedTransaction where
 -- it returns the source address, the signature and the derived PK of
 -- the transaction input.
 data AddressWithProof = AddressWithProof
-    { awpSrcAddress  :: !(V1 Core.Address)
+    { awpSrcAddress  :: !WalAddress
     -- ^ Source address.
     , awpTxSignature :: !TransactionSignatureAsBase16
     -- ^ Base16-encoded signature of transaction (made by derived SK).
@@ -1963,6 +1989,41 @@ instance BuildableSafeGen WalletAndTxHistory where
         waltxsWallet
         waltxsTransactions
 
+newtype WalletSoftwareVersion = WalletSoftwareVersion SoftwareVersion
+    deriving (Eq, Generic, Show)
+
+deriveSafeBuildable ''WalletSoftwareVersion
+instance BuildableSafeGen WalletSoftwareVersion where
+    buildSafeGen sl (WalletSoftwareVersion v) =
+        bprint (plainOrSecureF sl build (fconst "<wallet software version>")) v
+
+-- | NOTE: There are 'ToJSON' and 'FromJSON' instances for 'V1 SoftwareVersion' type,
+-- because we had it in internal API. Unfortunately, these instances are defined in
+-- 'cardano-sl-chain' package and we cannot touch it for now.
+-- So we have to define here the same instances for 'WalletSoftwareVersion' type,
+-- it is required for golden JSON-test "V1 SoftwareVersion <-> WalletSoftwareVersion".
+instance ToJSON WalletSoftwareVersion where
+    toJSON (WalletSoftwareVersion (SoftwareVersion (ApplicationName appName) appVerNumber)) =
+        object [ "applicationName" .= toJSON appName
+               , "version" .= toJSON appVerNumber
+               ]
+
+instance FromJSON WalletSoftwareVersion where
+    parseJSON = withObject "WalletSoftwareVersion" $ \o -> do
+        appName <- o .: "applicationName"
+        appVerNumber <- o .: "version"
+        pure $ WalletSoftwareVersion $ SoftwareVersion (ApplicationName appName) appVerNumber
+
+instance Arbitrary WalletSoftwareVersion where
+    arbitrary = WalletSoftwareVersion <$> arbitrary
+
+-- | NOTE: There is 'ToSchema' instance for 'V1 SoftwareVersion' type, but it's defined
+-- in 'cardano-sl-chain' package and we cannot touch it for now. So we have to define
+-- here some 'ToSchema'-instance for 'WalletSoftwareVersion'.
+instance ToSchema WalletSoftwareVersion where
+    declareNamedSchema _ =
+        pure $ NamedSchema (Just "WalletSoftwareVersion") $ mempty
+            & type_ .~ SwaggerObject
 
 -- | A type representing an upcoming wallet update.
 data WalletSoftwareUpdate = WalletSoftwareUpdate
@@ -2166,15 +2227,15 @@ instance Example AddressValidity
 instance Example NewAddress
 instance Example ShieldedRedemptionCode
 instance Example WalletPassPhrase
-instance Example (V1 Core.Coin)
+instance Example WalletCoin
 
 -- | We have a specific 'Example' instance for @'V1' 'Address'@ because we want
 -- to control the length of the examples. It is possible for the encoded length
 -- to become huge, up to 1000+ bytes, if the 'UnsafeMultiKeyDistr' constructor
 -- is used. We do not use this constructor, which keeps the address between
 -- ~80-150 bytes long.
-instance Example (V1 Core.Address) where
-    example = fmap V1 . Core.makeAddress
+instance Example WalAddress where
+    example = fmap WalAddress . Core.makeAddress
         <$> arbitrary
         <*> arbitraryAttributes
       where
@@ -2362,7 +2423,7 @@ data WalletError =
     -- | NotEnoughMoney weNeedMore
       NotEnoughMoney !ErrNotEnoughMoney
     -- | OutputIsRedeem weAddress
-    | OutputIsRedeem !(V1 Core.Address)
+    | OutputIsRedeem !WalAddress
     -- | UnknownError weMsg
     | UnknownError !Text
     -- | InvalidAddressFormat weMsg
@@ -2378,7 +2439,7 @@ data WalletError =
     | SignedTxSubmitError !Text
     | TxRedemptionDepleted
     -- | TxSafeSignerNotFound weAddress
-    | TxSafeSignerNotFound !(V1 Core.Address)
+    | TxSafeSignerNotFound !WalAddress
     -- | MissingRequiredParams requiredParams
     | MissingRequiredParams !(NonEmpty (Text, Text))
     -- | WalletIsNotReadyToProcessPayments weStillRestoring
@@ -2415,7 +2476,7 @@ instance Arbitrary WalletError where
             [ pure ErrCannotCoverFee
             , ErrAvailableBalanceIsInsufficient <$> Gen.choose (1, 1000)
             ]
-        , OutputIsRedeem . V1 <$> arbitrary
+        , OutputIsRedeem . WalAddress <$> arbitrary
         , UnknownError <$> arbitraryText
         , InvalidAddressFormat <$> arbitraryText
         , pure WalletNotFound
@@ -2427,7 +2488,7 @@ instance Arbitrary WalletError where
         , pure TooBigTransaction
         , pure TxFailedToStabilize
         , pure TxRedemptionDepleted
-        , TxSafeSignerNotFound . V1 <$> arbitrary
+        , TxSafeSignerNotFound . WalAddress <$> arbitrary
         , MissingRequiredParams <$> Gen.oneof
             [ unsafeMkNonEmpty <$> Gen.vectorOf 1 arbitraryParam
             , unsafeMkNonEmpty <$> Gen.vectorOf 2 arbitraryParam

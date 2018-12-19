@@ -9,8 +9,8 @@ import           Hedgehog (Property)
 import           Cardano.Wallet.API.Response (JSONValidationError (..),
                      UnsupportedMimeTypeError (..))
 import           Cardano.Wallet.API.V1.Swagger.Example (genExample)
-import           Cardano.Wallet.API.V1.Types (ErrNotEnoughMoney (..), V1 (..),
-                     WalletError (..), exampleWalletId)
+import           Cardano.Wallet.API.V1.Types (ErrNotEnoughMoney (..),
+                     WalAddress (..), WalletError (..), exampleWalletId)
 
 import           Test.Pos.Core.ExampleHelpers (exampleAddress)
 import           Test.Pos.Util.Golden (discoverGolden, goldenTestJSON)
@@ -46,7 +46,7 @@ golden_WalletError_NotEnoughMoneyCannotCoverFee =
 golden_WalletError_OutputIsRedeem :: Property
 golden_WalletError_OutputIsRedeem =
     goldenTestJSON
-        (OutputIsRedeem $ V1 exampleAddress)
+        (OutputIsRedeem $ WalAddress exampleAddress)
             "test/unit/Golden/golden/WalletError_OutputIsRedeem"
 
 golden_WalletError_UnknownError :: Property
@@ -118,7 +118,7 @@ golden_WalletError_TxRedemptionDepleted =
 golden_WalletError_TxSafeSignerNotFound :: Property
 golden_WalletError_TxSafeSignerNotFound =
     goldenTestJSON
-        (TxSafeSignerNotFound $ V1 exampleAddress)
+        (TxSafeSignerNotFound $ WalAddress exampleAddress)
             "test/unit/Golden/golden/WalletError_TxSafeSignerNotFound"
 
 golden_WalletError_MissingRequiredParams :: Property

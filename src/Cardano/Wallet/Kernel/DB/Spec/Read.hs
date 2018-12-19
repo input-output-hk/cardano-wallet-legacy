@@ -18,7 +18,7 @@ import qualified Data.Set as Set
 import qualified Pos.Chain.Txp as Core
 import qualified Pos.Core as Core
 
-import           Cardano.Wallet.API.V1.Types (V1 (..))
+import           Cardano.Wallet.API.V1.Types (WalAddress (..))
 import           Cardano.Wallet.Kernel.DB.BlockMeta (blockMetaSlotId,
                      localBlockMeta)
 import           Cardano.Wallet.Kernel.DB.HdWallet
@@ -72,7 +72,7 @@ cpChange ours cp =
       (Pending.change ours' $ cp ^. cpForeign)
   where
     ours' :: Core.Address -> Bool
-    ours' addr = IxSet.size (IxSet.getEQ (V1 addr) ours) == 1
+    ours' addr = IxSet.size (IxSet.getEQ (WalAddress addr) ours) == 1
 
 -- | Total balance (available balance plus change)
 cpTotalBalance :: IsCheckpoint c => IxSet (Indexed HdAddress) -> c -> Core.Coin

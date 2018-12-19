@@ -262,7 +262,7 @@ instance ToParamSchema Core.Address where
   toParamSchema _ = mempty
     & type_ .~ SwaggerString
 
-instance ToParamSchema (V1 Core.Address) where
+instance ToParamSchema WalAddress where
   toParamSchema _ = toParamSchema (Proxy @Core.Address)
 
 
@@ -345,7 +345,7 @@ $errors
     , inlineCodeBlock (T.decodeUtf8 $ BL.toStrict $ encodePretty err)
     ]
 
-  sampleAddress = V1 Core.Address
+  sampleAddress = WalAddress Core.Address
       { Core.addrRoot =
           Crypto.unsafeAbstractHash ("asdfasdf" :: String)
       , Core.addrAttributes =

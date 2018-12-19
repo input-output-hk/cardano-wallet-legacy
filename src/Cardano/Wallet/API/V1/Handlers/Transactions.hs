@@ -16,9 +16,7 @@ import           Servant
 
 import           Data.Coerce (coerce)
 
-import           Pos.Chain.Txp (TxId)
 import           Pos.Client.Txp.Util (defaultInputSelectionPolicy)
-import           Pos.Core (Address)
 
 import           Cardano.Wallet.API.Request
 import           Cardano.Wallet.API.Response
@@ -73,9 +71,9 @@ txFromMeta aw embedErr meta = do
 getTransactionsHistory :: PassiveWalletLayer IO
                        -> Maybe WalletId
                        -> Maybe AccountIndex
-                       -> Maybe (V1 Address)
+                       -> Maybe WalAddress
                        -> RequestParams
-                       -> FilterOperations '[V1 TxId, WalletTimestamp] Transaction
+                       -> FilterOperations '[WalletTxId, WalletTimestamp] Transaction
                        -> SortOperations Transaction
                        -> Handler (APIResponse [Transaction])
 getTransactionsHistory pw mwalletId mAccIdx mAddr requestParams fops sops =
@@ -98,7 +96,7 @@ estimateFees aw payment@Payment{..} = do
                                                   payment
     case res of
          Left err  -> throwM err
-         Right fee -> return $ single (EstimatedFees (V1 fee))
+         Right fee -> return $ single (EstimatedFees (WalletCoin fee))
 
 redeemAda :: ActiveWalletLayer IO
           -> Redemption

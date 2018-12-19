@@ -23,7 +23,6 @@ import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
 import           Pos.Crypto (PassPhrase, PublicKey, Signature (..))
 
 import           Cardano.Crypto.Wallet (xsignature)
-import           Cardano.Wallet.API.V1.Types (unV1)
 import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel as Kernel
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
@@ -134,7 +133,7 @@ createUnsignedTx activeWallet grouping regulation payment = liftIO $ do
         Right (tx, addrsAndPaths) -> do
             let txInHexFormat = V1.mkTransactionAsBase16 tx
                 srcAddrsWithDerivationPaths = NE.toList $
-                    NE.map (\(addr, path) -> V1.AddressAndPath (V1.V1 addr)
+                    NE.map (\(addr, path) -> V1.AddressAndPath (V1.WalAddress addr)
                                                                (map V1.word32ToAddressLevel path))
                            addrsAndPaths
             return $ Right $ V1.UnsignedTransaction txInHexFormat
@@ -173,7 +172,8 @@ submitSignedTx activeWallet (V1.SignedTransaction encodedTx encodedSrcAddrsWithP
         realTxSig <- withExceptT (const SubmitSignedTransactionInvalidSig) $ ExceptT $
             pure $ xsignature txSigItself
         let txSignature = Signature realTxSig :: Signature TxSigData
-        ExceptT $ pure $ Right (unV1 srcAddr, txSignature, derivedPK)
+            V1.WalAddress rawSrcAddr = srcAddr
+        ExceptT $ pure $ Right (rawSrcAddr, txSignature, derivedPK)
 
 -- | Redeem an Ada voucher
 --
@@ -231,7 +231,7 @@ setupPayment policy grouping regulation payment = do
                      _hdAccountIdParent = rootId
                    , _hdAccountIdIx     = accIx
                    }
-        payees = (\(V1.PaymentDistribution a c) -> (unV1 a, unV1 c)) <$>
+        payees = (\(V1.PaymentDistribution a c) -> (V1.unWalAddress a, V1.unWalletCoin c)) <$>
                    V1.pmtDestinations payment
     return (opts, accId, payees)
   where

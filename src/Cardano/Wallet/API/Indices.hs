@@ -22,7 +22,6 @@ import           Universum
 import           Cardano.Wallet.API.V1.Types
 import qualified Data.Text as T
 import           GHC.TypeLits
-import qualified Pos.Chain.Txp as Txp
 import qualified Pos.Core as Core
 import           Pos.Crypto (decodeHash)
 
@@ -48,22 +47,22 @@ instance ToIndex Wallet Core.Coin where
         Nothing                       -> Nothing
         Just c  | c > Core.maxCoinVal -> Nothing
         Just c                        -> Just (Core.mkCoin c)
-    accessIx Wallet{..} = let (V1 balance) = walBalance in balance
+    accessIx Wallet{..} = let (WalletCoin balance) = walBalance in balance
 
 instance ToIndex Wallet WalletTimestamp where
     toIndex _ = fmap WalletTimestamp . Core.parseTimestamp
     accessIx = walCreatedAt
 
-instance ToIndex Transaction (V1 Txp.TxId) where
-    toIndex _ = fmap V1 . rightToMaybe . decodeHash
+instance ToIndex Transaction WalletTxId where
+    toIndex _ = fmap WalletTxId . rightToMaybe . decodeHash
     accessIx Transaction{..} = txId
 
 instance ToIndex Transaction WalletTimestamp where
     toIndex _ = fmap WalletTimestamp . Core.parseTimestamp
     accessIx Transaction{..} = txCreationTime
 
-instance ToIndex WalletAddress (V1 Core.Address) where
-    toIndex _ = fmap V1 . either (const Nothing) Just . Core.decodeTextAddress
+instance ToIndex WalletAddress WalAddress where
+    toIndex _ = fmap WalAddress . either (const Nothing) Just . Core.decodeTextAddress
     accessIx WalletAddress{..} = addrId
 
 --
@@ -79,11 +78,11 @@ instance HasPrimKey Account where
     primKey = accIndex
 
 instance HasPrimKey Transaction where
-    type PrimKey Transaction = V1 Txp.TxId
+    type PrimKey Transaction = WalletTxId
     primKey = txId
 
 instance HasPrimKey WalletAddress where
-    type PrimKey WalletAddress = V1 Core.Address
+    type PrimKey WalletAddress = WalAddress
     primKey = addrId
 
 -- | The secondary indices for each major resource.
@@ -112,10 +111,10 @@ type instance IndicesOf WalletAddress = SecondaryWalletAddressIxs
 
 instance IxSet.Indexable (WalletId ': SecondaryWalletIxs)
                          (OrdByPrimKey Wallet) where
-    indices = ixList (ixFun ((:[]) . unV1 . walBalance))
+    indices = ixList (ixFun ((:[]) . unWalletCoin . walBalance))
                      (ixFun ((:[]) . walCreatedAt))
 
-instance IxSet.Indexable (V1 Txp.TxId ': SecondaryTransactionIxs)
+instance IxSet.Indexable (WalletTxId ': SecondaryTransactionIxs)
                          (OrdByPrimKey Transaction) where
     indices = ixList (ixFun (\Transaction{..} -> [txCreationTime]))
 
@@ -139,9 +138,9 @@ type family IndexToQueryParam resource ix where
     IndexToQueryParam Wallet  WalletId                = "id"
     IndexToQueryParam Wallet  WalletTimestamp         = "created_at"
 
-    IndexToQueryParam WalletAddress (V1 Core.Address) = "address"
+    IndexToQueryParam WalletAddress (WalAddress)      = "address"
 
-    IndexToQueryParam Transaction (V1 Txp.TxId)      = "id"
+    IndexToQueryParam Transaction WalletTxId         = "id"
     IndexToQueryParam Transaction WalletTimestamp    = "created_at"
 
     -- This is the fallback case. It will trigger a type error if you use
@@ -168,6 +167,6 @@ instance KnownQueryParam Account AccountIndex
 instance KnownQueryParam Wallet Core.Coin
 instance KnownQueryParam Wallet WalletId
 instance KnownQueryParam Wallet WalletTimestamp
-instance KnownQueryParam WalletAddress (V1 Core.Address)
-instance KnownQueryParam Transaction (V1 Txp.TxId)
+instance KnownQueryParam WalletAddress WalAddress
+instance KnownQueryParam Transaction WalletTxId
 instance KnownQueryParam Transaction WalletTimestamp

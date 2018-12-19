@@ -36,10 +36,10 @@ import qualified Prelude
 import           Test.QuickCheck (Arbitrary (..), oneof)
 
 import           Pos.Chain.Block (Blund)
-import           Pos.Chain.Txp (Tx, TxId, Utxo)
+import           Pos.Chain.Txp (Tx, Utxo)
 import           Pos.Chain.Update (ConfirmedProposalState, SoftwareVersion)
 import           Pos.Core (Coin)
-import qualified Pos.Core as Core (Address)
+import qualified Pos.Core as Core
 import           Pos.Core.Chrono (NE, NewestFirst (..), OldestFirst (..))
 import           Pos.Core.NetworkMagic (NetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, PassPhrase)
@@ -49,13 +49,14 @@ import           Cardano.Wallet.API.Request.Filter (FilterOperations (..))
 import           Cardano.Wallet.API.Request.Sort (SortOperations (..))
 import           Cardano.Wallet.API.Response (APIResponse, SliceOf (..))
 import           Cardano.Wallet.API.V1.Types (Account, AccountBalance,
-                     AccountIndex, AccountUpdate, Address, EosWallet,
-                     EosWalletId, ForceNtpCheck, NewAccount, NewAddress,
-                     NewEosWallet, NewWallet, NodeInfo, NodeSettings,
-                     PasswordUpdate, Payment, Redemption, SignedTransaction,
-                     SpendingPassword, Transaction, UnsignedTransaction,
-                     V1 (..), Wallet, WalletAddress, WalletId, WalletImport,
-                     WalletTimestamp, WalletUpdate)
+                     AccountIndex, AccountUpdate, EosWallet, EosWalletId,
+                     ForceNtpCheck, NewAccount, NewAddress, NewEosWallet,
+                     NewWallet, NodeInfo, NodeSettings, PasswordUpdate,
+                     Payment, Redemption, SignedTransaction, SpendingPassword,
+                     Transaction, UnsignedTransaction, WalAddress, Wallet,
+                     WalletAddress, WalletId, WalletImport,
+                     WalletSoftwareVersion, WalletTimestamp, WalletTxId,
+                     WalletUpdate)
 import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import qualified Cardano.Wallet.Kernel.Addresses as Kernel
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
@@ -451,7 +452,7 @@ data PassiveWalletLayer m = PassiveWalletLayer
     , getAccountAddresses  :: WalletId
                            -> AccountIndex
                            -> RequestParams
-                           -> FilterOperations '[V1 Address] WalletAddress
+                           -> FilterOperations '[WalAddress] WalletAddress
                            -> m (Either GetAccountError (APIResponse [WalletAddress]))
     , updateAccount        :: WalletId
                            -> AccountIndex
@@ -470,9 +471,9 @@ data PassiveWalletLayer m = PassiveWalletLayer
     -- transactions
     , getTransactions      :: Maybe WalletId
                            -> Maybe AccountIndex
-                           -> Maybe (V1 Address)
+                           -> Maybe (WalAddress)
                            -> RequestParams
-                           -> FilterOperations '[V1 TxId, WalletTimestamp] Transaction
+                           -> FilterOperations '[WalletTxId, WalletTimestamp] Transaction
                            -> SortOperations Transaction
                            -> m (Either GetTxError (APIResponse [Transaction]))
     , getTxFromMeta        :: TxMeta -> m (Either Kernel.UnknownHdAccount Transaction)
@@ -485,7 +486,7 @@ data PassiveWalletLayer m = PassiveWalletLayer
     , getNodeSettings      :: m NodeSettings
 
     -- internal
-    , nextUpdate           :: m (Maybe (V1 SoftwareVersion))
+    , nextUpdate           :: m (Maybe WalletSoftwareVersion)
     , applyUpdate          :: m ()
     , postponeUpdate       :: m ()
     , resetWalletState     :: m ()

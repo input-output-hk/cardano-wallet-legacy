@@ -45,7 +45,6 @@ import           Pos.Crypto (AesKey, RedeemSecretKey, aesDecrypt,
 
 import           Cardano.Mnemonic (mnemonicToAesKey)
 import           Cardano.Wallet.API.Types.UnitOfMeasure
-import           Cardano.Wallet.API.V1.Types (V1 (..))
 import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
                      (InputGrouping (..))
@@ -144,7 +143,7 @@ toAccount :: Kernel.DB -> HD.HdAccount -> V1.Account
 toAccount snapshot account = V1.Account {
       accIndex     = accountIndex
     , accAddresses = map (toAddress account . view ixedIndexed) addresses
-    , accAmount    = V1 accountAvailableBalance
+    , accAmount    = V1.WalletCoin accountAvailableBalance
     , accName      = account ^. HD.hdAccountName . to HD.getAccountName
     , accWalletId  = V1.WalletId (sformat build (hdRootId ^. to HD.getHdRootId . fromDb))
     }
@@ -163,7 +162,7 @@ toWallet db hdRoot = V1.Wallet {
       walId                         = (V1.WalletId walletId)
     , walName                       = hdRoot ^. HD.hdRootName
                                               . to HD.getWalletName
-    , walBalance                    = V1 (Kernel.rootTotalBalance db rootId)
+    , walBalance                    = V1.WalletCoin (Kernel.rootTotalBalance db rootId)
     , walHasSpendingPassword        = hasSpendingPassword
     , walSpendingPasswordLastUpdate = V1.WalletTimestamp lastUpdate
     , walCreatedAt                  = V1.WalletTimestamp createdAt
@@ -194,10 +193,10 @@ toAssuranceLevel HD.AssuranceLevelStrict = V1.StrictAssurance
 -- | Converts a Kernel 'HdAddress' into a V1 'WalletAddress'.
 toAddress :: HD.HdAccount -> HD.HdAddress -> V1.WalletAddress
 toAddress acc hdAddress =
-    V1.WalletAddress (V1 cardanoAddress)
+    V1.WalletAddress (V1.WalAddress cardanoAddress)
                      (addressMeta ^. addressMetaIsUsed)
                      (addressMeta ^. addressMetaIsChange)
-                     (V1 addressOwnership)
+                     addressOwnership
   where
     cardanoAddress   = hdAddress ^. HD.hdAddressAddress . fromDb
     addressMeta      = acc ^. HD.hdAccountState . HD.hdAccountStateCurrentCombined (<>) (cpAddressMeta cardanoAddress)

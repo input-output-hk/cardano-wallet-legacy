@@ -41,8 +41,6 @@ import           Control.Exception (Exception (..))
 import           Data.Swagger (Swagger)
 import           Servant.Client (GenResponse (..), Response, ServantError (..))
 
-import qualified Pos.Chain.Txp as Core
-import           Pos.Chain.Update (SoftwareVersion)
 import qualified Pos.Core as Core
 
 import           Cardano.Wallet.API.Request.Filter
@@ -121,7 +119,7 @@ data WalletClient m
          -> AccountIndex
          -> Maybe Page
          -> Maybe PerPage
-         -> FilterOperations '[V1 Address] WalletAddress
+         -> FilterOperations '[WalAddress] WalletAddress
          -> Resp m AccountAddresses
     , getAccountBalance
          :: WalletId -> AccountIndex -> Resp m AccountBalance
@@ -131,10 +129,10 @@ data WalletClient m
     , getTransactionIndexFilterSorts
          :: Maybe WalletId
          -> Maybe AccountIndex
-         -> Maybe (V1 Core.Address)
+         -> Maybe WalAddress
          -> Maybe Page
          -> Maybe PerPage
-         -> FilterOperations '[V1 Core.TxId, WalletTimestamp] Transaction
+         -> FilterOperations '[WalletTxId, WalletTimestamp] Transaction
          -> SortOperations Transaction
          -> Resp m [Transaction]
     , getTransactionFee
@@ -150,7 +148,7 @@ data WalletClient m
 
     -- Internal API
     , nextUpdate
-        :: Resp m (V1 SoftwareVersion)
+        :: Resp m WalletSoftwareVersion
     , applyUpdate
         :: m (Either ClientError ())
     , postponeUpdate
@@ -212,7 +210,7 @@ getTransactionIndex
     => WalletClient m
     -> Maybe WalletId
     -> Maybe AccountIndex
-    -> Maybe (V1 Core.Address)
+    -> Maybe WalAddress
     -> Resp m [Transaction]
 getTransactionIndex wc wid maid maddr =
     paginateAll $ \mp mpp -> getTransactionIndexFilterSorts wc wid maid maddr mp mpp NoFilters NoSorts

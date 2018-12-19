@@ -3,18 +3,17 @@
 -- Daedalus client, and aren't useful for wallets, exchanges, and other users.
 module Cardano.Wallet.API.Internal where
 
-import           Pos.Chain.Update (SoftwareVersion)
-
 import           Servant
 
 import           Cardano.Wallet.API.Response (APIResponse, ValidJSON)
 import           Cardano.Wallet.API.Types (Tags)
-import           Cardano.Wallet.API.V1.Types (V1, Wallet, WalletImport)
+import           Cardano.Wallet.API.V1.Types (Wallet, WalletImport,
+                     WalletSoftwareVersion)
 
 type API = Tags '["Internal"] :>
     (    "next-update"
         :> Summary "Version of the next update (404 if none)"
-        :> Get '[ValidJSON] (APIResponse (V1 SoftwareVersion))
+        :> Get '[ValidJSON] (APIResponse WalletSoftwareVersion)
 
     :<|> "apply-update"
         :> Summary "Apply the next available update"

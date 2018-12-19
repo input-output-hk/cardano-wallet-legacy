@@ -14,7 +14,6 @@ import           Universum
 import qualified Data.Char as C
 import           Pos.Core (decodeTextAddress)
 
-import           Cardano.Wallet.API.V1.Types (V1 (..))
 import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import qualified Cardano.Wallet.Kernel.Addresses as Kernel
@@ -274,7 +273,7 @@ newTransactionError e = case e of
           ex@(CoinSelHardErrOutputIsRedeemAddress addr) ->
                 case (decodeTextAddress addr) of
                     Right addr' ->
-                        V1.OutputIsRedeem (V1 addr')
+                        V1.OutputIsRedeem (V1.WalAddress addr')
                     Left _ ->
                         V1.UnknownError $ (sformat build ex)
 
@@ -297,11 +296,11 @@ newTransactionError e = case e of
 
     (Kernel.NewTransactionErrorSignTxFailed e') -> case e' of
         (Kernel.SignTransactionMissingKey addr) ->
-            V1.TxSafeSignerNotFound (V1 addr)
+            V1.TxSafeSignerNotFound (V1.WalAddress addr)
         (Kernel.SignTransactionErrorUnknownAddress _addr) ->
             V1.AddressNotFound
         (Kernel.SignTransactionErrorNotOwned addr) ->
-            V1.TxSafeSignerNotFound (V1 addr)
+            V1.TxSafeSignerNotFound (V1.WalAddress addr)
 
     Kernel.NewTransactionInvalidTxIn ->
             V1.SignedTxSubmitError "NewTransactionInvalidTxIn"

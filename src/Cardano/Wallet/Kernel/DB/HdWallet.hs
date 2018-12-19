@@ -116,7 +116,7 @@ import           Pos.Core.Chrono (NewestFirst (..))
 import           Pos.Core.NetworkMagic (NetworkMagic (..))
 import qualified Pos.Crypto as Core
 
-import           Cardano.Wallet.API.V1.Types (V1 (..))
+import           Cardano.Wallet.API.V1.Types (WalAddress (..))
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.Spec
@@ -590,7 +590,7 @@ instance HasPrimKey (Indexed HdAddress) where
 
 type SecondaryHdRootIxs           = '[]
 type SecondaryHdAccountIxs        = '[HdRootId]
-type SecondaryIndexedHdAddressIxs = '[AutoIncrementKey, HdRootId, HdAccountId, V1 Core.Address]
+type SecondaryIndexedHdAddressIxs = '[AutoIncrementKey, HdRootId, HdAccountId, WalAddress]
 
 type instance IndicesOf HdRoot              = SecondaryHdRootIxs
 type instance IndicesOf HdAccount           = SecondaryHdAccountIxs
@@ -611,7 +611,7 @@ instance IxSet.Indexable (HdAddressId ': SecondaryIndexedHdAddressIxs)
                 (ixFun ((:[]) . view ixedIndex))
                 (ixFun ((:[]) . view (ixedIndexed . hdAddressRootId)))
                 (ixFun ((:[]) . view (ixedIndexed . hdAddressAccountId)))
-                (ixFun ((:[]) . V1 . view (ixedIndexed . hdAddressAddress . fromDb)))
+                (ixFun ((:[]) . WalAddress . view (ixedIndexed . hdAddressAddress . fromDb)))
 
 {-------------------------------------------------------------------------------
   Top-level HD wallet structure
@@ -690,7 +690,7 @@ zoomHdCardanoAddress embedErr addr =
     findAddress :: Query' e HdWallets HdAddress
     findAddress = do
         addresses <- view hdWalletsAddresses
-        maybe err return $ (fmap _ixedIndexed $ getOne $ getEQ (V1 addr) addresses)
+        maybe err return $ (fmap _ixedIndexed $ getOne $ getEQ (WalAddress addr) addresses)
 
     err :: Query' e HdWallets x
     err = missing $ embedErr (UnknownHdCardanoAddress addr)

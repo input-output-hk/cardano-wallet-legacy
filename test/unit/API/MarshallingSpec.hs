@@ -54,13 +54,13 @@ spec = describe "Marshalling & Unmarshalling" $ do
         aesonRoundtripProp @AssuranceLevel Proxy
         aesonRoundtripProp @BackupPhrase Proxy
         aesonRoundtripProp @Redemption Proxy
-        aesonRoundtripProp @(V1 Core.SoftwareVersion) Proxy
+        aesonRoundtripProp @WalletSoftwareVersion Proxy
         aesonRoundtripProp @NodeSettings Proxy
         aesonRoundtripProp @Payment Proxy
         aesonRoundtripProp @PaymentDistribution Proxy
         aesonRoundtripProp @NewWallet Proxy
         aesonRoundtripProp @NewAddress Proxy
-        aesonRoundtripProp @(V1 Core.Coin) Proxy
+        aesonRoundtripProp @WalletCoin Proxy
         aesonRoundtripProp @WalletPassPhrase Proxy
         aesonRoundtripProp @WalletInputSelectionPolicy Proxy
         aesonRoundtripProp @TimeInfo Proxy
@@ -84,15 +84,15 @@ spec = describe "Marshalling & Unmarshalling" $ do
         aesonRoundtripProp @SyncProgress Proxy
         aesonRoundtripProp @SyncThroughput Proxy
         aesonRoundtripProp @AccountIndex Proxy
-        aesonRoundtripProp @(V1 AddressOwnership) Proxy
-        aesonRoundtripProp @(V1 Version) Proxy
+        aesonRoundtripProp @AddressOwnership Proxy
+        aesonRoundtripProp @Version Proxy
 
         -- HttpApiData roundtrips
         httpApiDataRoundtripProp @AccountIndex Proxy
-        httpApiDataRoundtripProp @(V1 Txp.TxId) Proxy
+        httpApiDataRoundtripProp @WalletTxId Proxy
         httpApiDataRoundtripProp @WalletId Proxy
         httpApiDataRoundtripProp @WalletTimestamp Proxy
-        httpApiDataRoundtripProp @(V1 Core.Address) Proxy
+        httpApiDataRoundtripProp @WalAddress Proxy
         httpApiDataRoundtripProp @PerPage Proxy
         httpApiDataRoundtripProp @Page Proxy
         httpApiDataRoundtripProp @Core.Coin Proxy
