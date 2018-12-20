@@ -31,6 +31,11 @@ import           Cardano.Crypto.Wallet (DerivationScheme (DerivationScheme2),
                      deriveXPrv, deriveXPub)
 import           Test.QuickCheck (Arbitrary (..), elements)
 
+-- | Each extended key has 2^31 normal child keys, and 2^31 hardened child keys.
+-- Each of these child keys has an index. The normal child keys use indices 0 through 2^31-1. The hardened child keys use indices 2^31 through 2^32-1.
+isHardened :: Word32 -> Bool
+isHardened = (>= 0x8000000)
+
 -- | Purpose is a constant set to 44' (or 0x8000002C) following the BIP43 recommendation.
 -- It indicates that the subtree of this node is used according to this specification.
 --
@@ -79,12 +84,14 @@ changeToIndex InternalChain = 1
 deriveAddressPublicKey
     :: PublicKey       -- Account Public Key
     -> ChangeChain     -- Change chain
-    -> Word32          -- Address Key Index
+    -> Word32          -- Non-hardened Address Key Index
     -> Maybe PublicKey -- Address Public Key
 deriveAddressPublicKey (PublicKey accXPub) changeChain addressIx = do
-    -- lvl4 derivation in bip44 is derivation of change chain
+    -- address index should be non-hardened
+    guard (not $ isHardened addressIx)
+    -- lvl4 derivation in bip44 is non-hardened derivation of change chain
     changeXPub <- deriveXPub DerivationScheme2 accXPub (changeToIndex changeChain)
-    -- lvl5 derivation in bip44 is derivation of change address chain
+    -- lvl5 derivation in bip44 is non-hardened derivation of change address chain
     PublicKey <$> deriveXPub DerivationScheme2 changeXPub addressIx
 
 -- | Generate extend private key from extended private key
@@ -97,15 +104,17 @@ derivePublicKey = encToPublic
 deriveAccountPrivateKey
     :: EncryptedSecretKey       -- Master Private Key
     -> PassPhrase               -- Passphrase used to encrypt Master Private Key
-    -> Word32                   -- Account Key Index
+    -> Word32                   -- Hardened Account Key Index
     -> Maybe EncryptedSecretKey -- Account Private Key
-deriveAccountPrivateKey masterEncPrvKey@(EncryptedSecretKey masterXPrv passHash) passPhrase addressIx = do
+deriveAccountPrivateKey masterEncPrvKey@(EncryptedSecretKey masterXPrv passHash) passPhrase accountIx = do
     -- enforce valid PassPhrase check
     checkPassMatches passPhrase masterEncPrvKey
-        -- lvl1 derivation in bip44 is derivation of purpose' chain
+    -- account index should be hardened
+    guard (isHardened accountIx)
+        -- lvl1 derivation in bip44 is hardened derivation of purpose' chain
     let purposeXPrv = deriveXPrv DerivationScheme2 passPhrase masterXPrv purposeIndex
-        -- lvl2 derivation in bip44 is derivation of coin_type' chain
+        -- lvl2 derivation in bip44 is hardened derivation of coin_type' chain
         coinTypeXPrv = deriveXPrv DerivationScheme2 passPhrase purposeXPrv coinTypeIndex
-        -- lvl3 derivation in bip44 is derivation of account' chain
-        accountXPrv = deriveXPrv DerivationScheme2 passPhrase coinTypeXPrv addressIx
+        -- lvl3 derivation in bip44 is hardened derivation of account' chain
+        accountXPrv = deriveXPrv DerivationScheme2 passPhrase coinTypeXPrv accountIx
     pure $ EncryptedSecretKey accountXPrv passHash
