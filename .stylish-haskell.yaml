@@ -237,6 +237,7 @@ language_extensions:
   - OverloadedLabels
   - OverloadedStrings
   - PolyKinds
+  - QuasiQuotes
   - RecordWildCards
   - ScopedTypeVariables
   - StandaloneDeriving

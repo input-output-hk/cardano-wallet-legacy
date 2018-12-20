@@ -5,7 +5,7 @@
 # This file contains a template configuration file, which is typically
 # placed as .hlint.yaml in the root of your project
 
-- arguments: [-XTypeApplications, --cpp-define=CONFIG=dev]
+- arguments: [-XTypeApplications, -XQuasiQuotes, --cpp-define=CONFIG=dev]
 
 - ignore: {name: Redundant do}
 - ignore: {name: Redundant bracket}

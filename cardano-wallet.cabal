@@ -557,6 +557,7 @@ test-suite integration
       NoMonomorphismRestriction
       OverloadedStrings
       OverloadedLabels
+      QuasiQuotes
       ScopedTypeVariables
       TupleSections
       TypeApplications
@@ -572,7 +573,10 @@ test-suite integration
   build-depends:
       base
     , QuickCheck
+    , aeson
+    , aeson-qq
     , async
+    , bytestring
     , cardano-sl
     , cardano-sl-chain
     , cardano-sl-client
@@ -588,7 +592,12 @@ test-suite integration
     , hspec
     , hspec-core
     , hspec-expectations-lifted
+    , http-api-data
+    , http-client
+    , http-types
     , optparse-applicative
+    , servant-client-core
+    , template-haskell
     , text
     , universum
 
