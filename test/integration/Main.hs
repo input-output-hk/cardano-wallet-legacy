@@ -30,15 +30,17 @@ main = do
         , ("relay", NodeRelay)
         , ("edge", NodeEdge)
         ]
-    let wClient = mkHttpClient (toBaseUrl $ env ! "WALLET_ADDRESS") manager
-    let dClient = mkHttpDocClient (toBaseUrl $ env ! "WALLET_DOC_ADDRESS") manager
+    let wAddr   = toBaseUrl $ env ! "WALLET_ADDRESS"
+    let dAddr   = toBaseUrl $ env ! "WALLET_DOC_ADDRESS"
+    let wClient = mkHttpClient wAddr manager
+    let dClient = mkHttpDocClient dAddr manager
     waitForNode wClient (MaxWaitingTime 90)
 
     -- Run tests
     hspec $ do
         describe "API Documentation" $ Documentation.spec dClient
 
-        beforeAll (newMVar $ Context keys wClient) $ do
+        beforeAll (newMVar $ Context keys wClient (wAddr, manager)) $ do
             describe "Accounts" Accounts.spec
             describe "Addresses" Addresses.spec
             describe "Transactions" Transactions.spec

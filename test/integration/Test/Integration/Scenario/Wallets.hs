@@ -4,12 +4,24 @@ module Test.Integration.Scenario.Wallets
 
 import           Universum
 
+import           Cardano.Wallet.Client.Http (ClientError, Wallet)
 import qualified Cardano.Wallet.Client.Http as Client
 import           Test.Integration.Framework.DSL
 
-
 spec :: Scenarios Context
 spec = do
+    scenario "demo unsafeRequest" $ do
+        fixture <- setup $ defaultSetup
+
+        let endpoint = "api" </> "v1" </> "wallets" </> fixture ^. wallet . walletId
+        response <- unsafeRequest ("PUT", endpoint) $ Just $ [json|{
+            "invalidField": #{fixture ^. wallet}
+        }|]
+
+        verify (response :: Either ClientError Wallet)
+            [ expectJSONError "key assuranceLevel was not present"
+            ]
+
     scenario "wallet is available after it's been created" $ do
         fixture <- setup $ defaultSetup
             & walletName .~ "漢patate字"

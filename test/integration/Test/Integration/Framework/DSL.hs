@@ -14,6 +14,7 @@ module Test.Integration.Framework.DSL
     , setup
     , request
     , request_
+    , unsafeRequest
     , verify
 
     -- * Requests (Only API types)
@@ -46,12 +47,13 @@ module Test.Integration.Framework.DSL
     , WalletError(..)
     , ErrNotEnoughMoney(..)
     , TransactionStatus(..)
+    , expectAddressInIndexOf
     , expectEqual
     , expectError
     , expectFieldEqual
+    , expectJSONError
     , expectSuccess
     , expectTxInHistoryOf
-    , expectAddressInIndexOf
     , expectTxStatusEventually
     , expectTxStatusNever
     , expectWalletError
@@ -60,6 +62,7 @@ module Test.Integration.Framework.DSL
 
     -- * Helpers
     , ($-)
+    , (</>)
     , amount
     , assuranceLevel
     , backupPhrase
@@ -68,25 +71,32 @@ module Test.Integration.Framework.DSL
     , wallet
     , walletId
     , walletName
+    , json
     ) where
 
 import           Universum hiding (getArgs, second)
 
 import           Control.Concurrent (threadDelay)
 import           Control.Concurrent.Async (race)
+import           Data.Aeson.QQ (aesonQQ)
 import           Data.Generics.Internal.VL.Lens (lens)
 import           Data.Generics.Product.Typed (HasType, typed)
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
+import           Language.Haskell.TH.Quote (QuasiQuoter)
 import           Test.Hspec.Core.Spec (SpecM, it, xit)
 import           Test.Hspec.Expectations.Lifted
 import           Test.QuickCheck (arbitrary, generate)
+import           Web.HttpApiData (ToHttpApiData (..))
 
 import           Cardano.Mnemonic (mkMnemonic, mnemonicToSeed)
 import           Cardano.Wallet.API.Request.Filter (FilterOperations (..))
 import           Cardano.Wallet.API.Request.Pagination (Page, PerPage)
 import           Cardano.Wallet.API.Request.Sort (SortOperations (..))
+import           Cardano.Wallet.API.Response (JSONValidationError (..))
 import           Cardano.Wallet.API.V1.Types
-import           Cardano.Wallet.Client.Http (ClientError (..), WalletClient)
+import           Cardano.Wallet.Client.Http (BaseUrl, ClientError (..), Manager,
+                     WalletClient)
 import qualified Cardano.Wallet.Client.Http as Client
 import           Pos.Chain.Txp (TxIn (..), TxOut (..), TxOutAux (..))
 import           Pos.Core (Coin, IsBootstrapEraAddr (..), deriveLvl2KeyPair,
@@ -95,7 +105,7 @@ import           Pos.Core.NetworkMagic (NetworkMagic (..))
 import           Pos.Crypto (ShouldCheckPassphrase (..),
                      safeDeterministicKeyGen)
 import           Test.Integration.Framework.Request (HasHttpClient, request,
-                     request_, successfulRequest, ($-))
+                     request_, successfulRequest, unsafeRequest, ($-))
 import           Test.Integration.Framework.Scenario (Scenario)
 
 --
@@ -112,6 +122,9 @@ data Context = Context
     , _client
         :: WalletClient IO
         -- A handle to the underlying wallet backend server
+    , _manager
+        :: (BaseUrl, Manager)
+        -- The underlying BaseUrl and Manager used by the Wallet Client
     } deriving (Generic)
 
 
@@ -243,6 +256,13 @@ noSpendingPassword = Nothing
 --
 -- HELPERS
 --
+
+json :: QuasiQuoter
+json = aesonQQ
+
+infixr 5 </>
+(</>) :: ToHttpApiData a => Text -> a -> Text
+base </> next = mconcat [base, "/", toQueryParam next]
 
 amount
     :: HasType WalletCoin s
@@ -440,6 +460,21 @@ expectWalletError
 expectWalletError e' = \case
     Right a -> wantedErrorButSuccess a
     Left e  -> (ClientWalletError e') `shouldBe` e
+
+
+-- | Verifies that the response is errored from a failed JSON validation
+-- matching part of the given message.
+expectJSONError
+    :: (MonadIO m, MonadFail m, Show a)
+    => String
+    -> Either ClientError a
+    -> m ()
+expectJSONError excerpt = \case
+    Right a -> wantedErrorButSuccess a
+    Left (ClientJSONError (JSONValidationFailed msg)) ->
+        T.unpack msg `shouldContain` excerpt
+    Left e ->
+        fail $ "expectJSONError: got something else than a JSON validation failure: " <> show e
 
 
 expectWalletUTxO
