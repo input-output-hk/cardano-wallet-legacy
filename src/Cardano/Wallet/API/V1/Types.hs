@@ -334,6 +334,14 @@ instance FromHttpApiData WalAddress where
 instance ToHttpApiData WalAddress where
     toQueryParam (WalAddress a) = sformat build a
 
+-- | We need 'FromHttpApiData' and 'ToHttpApiData' instances for 'Core.Address',
+-- it is required for 'filterHdAddress' in 'Cardano.Wallet.WalletLayer.Kernel.Accounts'.
+instance FromHttpApiData Core.Address where
+    parseQueryParam = Core.decodeTextAddress
+
+instance ToHttpApiData Core.Address where
+    toQueryParam = sformat build
+
 deriving instance Hashable WalAddress
 deriving instance NFData WalAddress
 

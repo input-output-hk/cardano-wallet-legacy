@@ -65,6 +65,10 @@ instance ToIndex WalletAddress WalAddress where
     toIndex _ = fmap WalAddress . either (const Nothing) Just . Core.decodeTextAddress
     accessIx WalletAddress{..} = addrId
 
+instance ToIndex WalletAddress Core.Address where
+    toIndex _ = either (const Nothing) Just . Core.decodeTextAddress
+    accessIx WalletAddress{..} = let (WalAddress addr) = addrId in addr
+
 --
 -- Primary and secondary indices for V1 types
 --
@@ -138,7 +142,8 @@ type family IndexToQueryParam resource ix where
     IndexToQueryParam Wallet  WalletId                = "id"
     IndexToQueryParam Wallet  WalletTimestamp         = "created_at"
 
-    IndexToQueryParam WalletAddress (WalAddress)      = "address"
+    IndexToQueryParam WalletAddress Core.Address      = "address"
+    IndexToQueryParam WalletAddress WalAddress        = "address"
 
     IndexToQueryParam Transaction WalletTxId         = "id"
     IndexToQueryParam Transaction WalletTimestamp    = "created_at"
@@ -167,6 +172,7 @@ instance KnownQueryParam Account AccountIndex
 instance KnownQueryParam Wallet Core.Coin
 instance KnownQueryParam Wallet WalletId
 instance KnownQueryParam Wallet WalletTimestamp
+instance KnownQueryParam WalletAddress Core.Address
 instance KnownQueryParam WalletAddress WalAddress
 instance KnownQueryParam Transaction WalletTxId
 instance KnownQueryParam Transaction WalletTimestamp

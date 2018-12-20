@@ -167,7 +167,7 @@ getAccountAddresses wId accIx rp fo snapshot = runExcept $ do
 -------------------------------------------------------------------------------}
 
 filterHdAddress :: FilterOperations '[V1.WalAddress] WalletAddress
-                -> FilterOperations '[V1.WalAddress] (Indexed HD.HdAddress)
+                -> FilterOperations '[Core.Address] (Indexed HD.HdAddress)
 filterHdAddress NoFilters               = NoFilters
 filterHdAddress (FilterNop NoFilters)   = FilterNop NoFilters
 filterHdAddress (FilterOp op NoFilters) = FilterOp (coerce op) NoFilters
