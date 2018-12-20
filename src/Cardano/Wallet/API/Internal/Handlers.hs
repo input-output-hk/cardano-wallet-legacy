@@ -15,7 +15,7 @@ import qualified Pos.Node.API as NodeClient
 import qualified Cardano.Wallet.API.Internal as Internal
 import           Cardano.Wallet.API.Response (APIResponse, single)
 import           Cardano.Wallet.API.V1.Types (Wallet, WalletImport,
-                     WalletSoftwareVersion(..))
+                     WalletSoftwareVersion (..))
 import           Cardano.Wallet.WalletLayer (PassiveWalletLayer)
 import qualified Cardano.Wallet.WalletLayer as WalletLayer
 

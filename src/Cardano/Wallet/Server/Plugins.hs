@@ -65,7 +65,8 @@ import           Pos.Infra.Shutdown (HasShutdownContext (shutdownContext),
                      ShutdownContext)
 import           Pos.Launcher.Configuration (HasConfigurations)
 import           Pos.Util.CompileInfo (HasCompileInfo)
-import           Pos.Util.Wlog (logInfo, logError, modifyLoggerName, usingLoggerName)
+import           Pos.Util.Wlog (logError, logInfo, modifyLoggerName,
+                     usingLoggerName)
 import           Pos.Web (serveDocImpl, serveImpl)
 import qualified Pos.Web.Server
 
