@@ -14,6 +14,7 @@ module Test.Integration.Framework.DSL
     , setup
     , request
     , request_
+    , successfulRequest
     , unsafeRequest
     , verify
 
@@ -69,9 +70,12 @@ module Test.Integration.Framework.DSL
     , initialCoins
     , mnemonicWords
     , wallet
+    , wallets
     , walletId
     , walletName
     , json
+    , hasSpendingPassword
+    , mkBackupPhrase
     ) where
 
 import           Universum hiding (getArgs, second)
@@ -298,8 +302,14 @@ initialCoins =
 mnemonicWords :: HasType [Text] s => Lens' s [Text]
 mnemonicWords = typed
 
+hasSpendingPassword :: HasType Bool s => Lens' s Bool
+hasSpendingPassword = typed
+
 wallet :: HasType Wallet s => Lens' s Wallet
 wallet = typed
+
+wallets :: HasType [Wallet] s => Lens' s [Wallet]
+wallets = typed
 
 walletId :: HasType WalletId s => Lens' s WalletId
 walletId = typed
@@ -329,7 +339,6 @@ expectFieldEqual getter a = \case
     Left e  -> wantedSuccessButError e
     Right s -> view getter s `shouldBe` a
 
-
 -- | Expects entire equality of two types
 expectEqual
     :: (MonadIO m, MonadFail m, Show a, Eq a)
@@ -338,7 +347,6 @@ expectEqual
     -> m ()
 expectEqual =
     expectFieldEqual id
-
 
 -- | Expect an errored response, without any further assumptions
 expectError
@@ -475,7 +483,6 @@ expectJSONError excerpt = \case
         T.unpack msg `shouldContain` excerpt
     Left e ->
         fail $ "expectJSONError: got something else than a JSON validation failure: " <> show e
-
 
 expectWalletUTxO
     :: (MonadIO m, MonadFail m)
