@@ -1,6 +1,7 @@
 {-# LANGUAGE ViewPatterns #-}
 module Cardano.Wallet.WalletLayer.Kernel.Addresses (
     createAddress
+  , createEosAddress
   , getAddresses
   , validateAddress
   ) where
@@ -24,10 +25,11 @@ import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (AutoIncrementKey (..),
                      Indexed (..), IxSet, ixedIndexed, (@>=<=))
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
+import           Cardano.Wallet.Kernel.Ed25519Bip44 (ChangeChain (..))
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import           Cardano.Wallet.WalletLayer (CreateAddressError (..),
-                     ValidateAddressError (..))
+                     CreateEosAddressError (..), ValidateAddressError (..))
 import           Cardano.Wallet.WalletLayer.Kernel.Conv
 
 createAddress :: MonadIO m
@@ -47,12 +49,25 @@ createAddress wallet
   where
     passPhrase = maybe mempty coerce mbSpendingPassword
 
-    -- | Creates a new 'WalletAddress'. As this is a brand new, fresh Address,
-    -- it's fine to have 'False' for 'isUsed'
-    mkAddress :: Address -> WalletAddress
-    mkAddress addr = WalletAddress (V1.WalAddress addr) False V1.AddressIsOurs
+-- | Creates a new address for account in EOS-wallet.
+createEosAddress
+    :: MonadIO m
+    => Kernel.PassiveWallet
+    -> V1.NewEosAddress
+    -> m (Either CreateEosAddressError WalletAddress)
+createEosAddress wallet (V1.NewEosAddress accIx eosWalletId) = runExceptT $ do
+    eosAccId <- withExceptT CreateEosAddressAddressDecodingFailed $
+                    fromEosAccountId eosWalletId accIx
+    -- TODO: Probably it should be changed (or specified by a caller).
+    let changeChain = ExternalChain
+    fmap mkAddress $
+        withExceptT CreateEosAddressError $ ExceptT $ liftIO $
+            Kernel.createEosAddress eosAccId changeChain wallet
 
-
+-- | Creates a new 'WalletAddress'. As this is a brand new, fresh Address,
+-- it's fine to have 'False' for both 'isUsed' and 'isChange'.
+mkAddress :: Address -> WalletAddress
+mkAddress addr = WalletAddress (V1.WalAddress addr) False V1.AddressIsOurs
 
 -- | Get all the addresses known to this node. Doing this efficiently is
 -- a bit of a challenge here due to the fact we don't have a way with IxSets to

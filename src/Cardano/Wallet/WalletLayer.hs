@@ -16,6 +16,7 @@ module Cardano.Wallet.WalletLayer
     , EstimateFeesError(..)
     , RedeemAdaError(..)
     , CreateAddressError(..)
+    , CreateEosAddressError(..)
     , ValidateAddressError(..)
     , CreateAccountError(..)
     , GetAccountError(..)
@@ -49,8 +50,8 @@ import           Cardano.Wallet.API.Request.Filter (FilterOperations (..))
 import           Cardano.Wallet.API.Request.Sort (SortOperations (..))
 import           Cardano.Wallet.API.Response (APIResponse, SliceOf (..))
 import           Cardano.Wallet.API.V1.Types (Account, AccountBalance,
-                     AccountIndex, AccountUpdate, EosWallet, EosWalletId,
-                     ForceNtpCheck, NewAccount, NewAddress, NewEosWallet,
+                     AccountIndex, AccountUpdate, EosWallet, ForceNtpCheck,
+                     NewAccount, NewAddress, NewEosAddress, NewEosWallet,
                      NewWallet, NodeInfo, NodeSettings, PasswordUpdate,
                      Payment, Redemption, SignedTransaction, SpendingPassword,
                      Transaction, UnsignedTransaction, WalAddress, Wallet,
@@ -247,6 +248,30 @@ instance Buildable CreateAddressError where
     build (CreateAddressAddressDecodingFailed txt) =
         bprint ("CreateAddressAddressDecodingFailed " % build) txt
 
+data CreateEosAddressError =
+      CreateEosAddressError Kernel.CreateEosAddressError
+    | CreateEosAddressAddressDecodingFailed Text
+    -- ^ Decoding the input 'Text' as an 'Address' failed.
+    deriving Eq
+
+-- | Unsound show instance needed for the 'Exception' instance.
+instance Show CreateEosAddressError where
+    show = formatToString build
+
+instance Exception CreateEosAddressError
+
+instance Arbitrary CreateEosAddressError where
+    arbitrary = oneof
+        [ CreateEosAddressError <$> arbitrary
+        , pure (CreateEosAddressAddressDecodingFailed "Ae2tdPwUPEZ18ZjTLnLVr9CEvUEUX4eW1LBHbxxx")
+        ]
+
+instance Buildable CreateEosAddressError where
+    build (CreateEosAddressError kernelError) =
+        bprint ("CreateEosAddressError " % build) kernelError
+    build (CreateEosAddressAddressDecodingFailed txt) =
+        bprint ("CreateEosAddressAddressDecodingFailed " % build) txt
+
 data ValidateAddressError =
       ValidateAddressDecodingFailed Text
     -- ^ When trying to decode this raw 'Text' into a proper Cardano
@@ -434,7 +459,7 @@ data PassiveWalletLayer m = PassiveWalletLayer
                            -> PasswordUpdate
                            -> m (Either UpdateWalletPasswordError Wallet)
     , deleteWallet         :: WalletId -> m (Either DeleteWalletError ())
-    , deleteEosWallet      :: EosWalletId -> m (Either DeleteEosWalletError ())
+    , deleteEosWallet      :: WalletId -> m (Either DeleteEosWalletError ())
     , getUtxos             :: WalletId
                            -> m (Either GetUtxosError [(Account, Utxo)])
     -- accounts
@@ -464,6 +489,8 @@ data PassiveWalletLayer m = PassiveWalletLayer
     -- addresses
     , createAddress        :: NewAddress
                            -> m (Either CreateAddressError WalletAddress)
+    , createEosAddress     :: NewEosAddress
+                           -> m (Either CreateEosAddressError WalletAddress)
     , getAddresses         :: RequestParams -> m (SliceOf WalletAddress)
     , validateAddress      :: Text
                            -> m (Either ValidateAddressError WalletAddress)

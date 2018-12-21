@@ -3,13 +3,16 @@
 module Cardano.Wallet.WalletLayer.Kernel.Conv (
     -- * From V1 to kernel types
     fromRootId
+  , fromEosRootId
   , fromAccountId
+  , fromEosAccountId
   , fromAssuranceLevel
   , fromRedemptionCode
   , fromRedemptionCodePaper
     -- * From kernel types to V1 types
   , toAccountId
   , toRootId
+  , toEosRootId
   , toAccount
   , toWallet
   , toAddress
@@ -49,6 +52,7 @@ import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
                      (InputGrouping (..))
 import           Cardano.Wallet.Kernel.DB.BlockMeta (addressMetaIsUsed)
+import qualified Cardano.Wallet.Kernel.DB.EosHdWallet as EosHD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
 import           Cardano.Wallet.Kernel.DB.Spec (cpAddressMeta)
@@ -74,6 +78,9 @@ fromRootId (V1.WalletId wId) =
     aux :: V1.Address -> HD.HdRootId
     aux = HD.HdRootId . InDb
 
+fromEosRootId :: Monad m => V1.WalletId -> ExceptT Text m EosHD.EosHdRootId
+fromEosRootId (V1.WalletId eosWId) = exceptT $ EosHD.decodeEosHdRootId eosWId
+
 fromAccountId :: Monad m
               => V1.WalletId -> V1.AccountIndex -> ExceptT Text m HD.HdAccountId
 fromAccountId wId accIx =
@@ -81,6 +88,14 @@ fromAccountId wId accIx =
   where
     aux :: HD.HdRootId -> HD.HdAccountId
     aux hdRootId = HD.HdAccountId hdRootId (HD.HdAccountIx $ V1.getAccIndex accIx)
+
+fromEosAccountId :: Monad m
+                 => V1.WalletId -> V1.AccountIndex -> ExceptT Text m EosHD.EosHdAccountId
+fromEosAccountId eosWalletId accIx =
+    aux <$> fromEosRootId eosWalletId
+  where
+    aux :: EosHD.EosHdRootId -> EosHD.EosHdAccountId
+    aux eosHdRootId = EosHD.EosHdAccountId eosHdRootId (HD.HdAccountIx $ V1.getAccIndex accIx)
 
 -- | Converts from the @V1@ 'AssuranceLevel' to the HD one.
 fromAssuranceLevel :: V1.AssuranceLevel -> HD.AssuranceLevel
@@ -135,6 +150,9 @@ toAccountId =
 
 toRootId :: HD.HdRootId -> V1.WalletId
 toRootId = V1.WalletId . sformat build . _fromDb . HD.getHdRootId
+
+toEosRootId :: EosHD.EosHdRootId -> V1.WalletId
+toEosRootId = V1.WalletId . EosHD.eosHdRootIdToText
 
 -- | Converts a Kernel 'HdAccount' into a V1 'Account'.
 --

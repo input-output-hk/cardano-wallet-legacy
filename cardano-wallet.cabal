@@ -184,7 +184,6 @@ library
       Cardano.Wallet.Kernel.AddressPoolGap
       Cardano.Wallet.Kernel.Addresses
       Cardano.Wallet.Kernel.Ed25519Bip44
-      Cardano.Wallet.Kernel.EosWalletId
       Cardano.Wallet.Kernel.BListener
       Cardano.Wallet.Kernel.CoinSelection
       Cardano.Wallet.Kernel.CoinSelection.FromGeneric
@@ -199,6 +198,7 @@ library
       Cardano.Wallet.Kernel.DB.Compression
       Cardano.Wallet.Kernel.DB.EosHdWallet
       Cardano.Wallet.Kernel.DB.EosHdWallet.Create
+      Cardano.Wallet.Kernel.DB.EosHdWallet.Read
       Cardano.Wallet.Kernel.DB.HdWallet
       Cardano.Wallet.Kernel.DB.HdWallet.Create
       Cardano.Wallet.Kernel.DB.HdWallet.Delete

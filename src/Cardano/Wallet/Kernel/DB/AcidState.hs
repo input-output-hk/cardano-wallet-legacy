@@ -27,6 +27,7 @@ module Cardano.Wallet.Kernel.DB.AcidState (
   , RestoreHdWallet(..)
   , CreateHdAccount(..)
   , CreateHdAddress(..)
+  , CreateEosHdAddress(..)
     -- *** UPDATE
   , UpdateHdWallet(..)
   , UpdateHdRootPassword(..)
@@ -85,7 +86,6 @@ import           Cardano.Wallet.Kernel.DB.Util.AcidState
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (IxSet)
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import qualified Cardano.Wallet.Kernel.DB.Util.Zoomable as Z
-import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
 import           Cardano.Wallet.Kernel.NodeStateAdaptor (SecurityParameter (..))
 import           Cardano.Wallet.Kernel.PrefilterTx (PrefilteredBlock (..),
                      emptyPrefilteredBlock)
@@ -552,21 +552,22 @@ createHdWallet newRoot defaultHdAccountId defaultHdAddress utxoByAccount =
 -- implementation we cannot create new addresses without root secret key).
 --
 createEosHdWallet :: EosHdRoot
-                  -> [PublicKey]
+                  -> [(PublicKey, Word32)]
                   -> Update DB (Either EosHD.CreateEosHdRootError ())
-createEosHdWallet newEosRoot accountsPKs =
+createEosHdWallet newEosRoot accountsPKsWithIxs =
     runUpdateDiscardSnapshot . zoom dbEosHdWallets $ do
       EosHD.createEosHdRoot newEosRoot
       mapM_ updateEosAccount eosAccountsUpdates
   where
-    eosAccountsUpdates = map mkEosAccountUpdate accountsPKs
+    eosAccountsUpdates = map mkEosAccountUpdate accountsPKsWithIxs
 
-    mkEosAccountUpdate :: PublicKey
+    mkEosAccountUpdate :: (PublicKey, Word32)
                        -> EosAccountUpdate EosHD.CreateEosHdRootError ()
-    mkEosAccountUpdate accPK = EosAccountUpdate {
-          eosAccountUpdatePK     = accPK
-        , eosAccountUpdateRootId = _eosHdRootId newEosRoot
-        , eosAccountUpdate       = return () -- just need to create it, no more
+    mkEosAccountUpdate (accPK, accIx) = EosAccountUpdate {
+          eosAccountUpdateId = EosHdAccountId (_eosHdRootId newEosRoot)
+                                              (HdAccountIx accIx)
+        , eosAccountUpdatePK = accPK
+        , eosAccountUpdate   = return () -- just need to create it, no more
         }
 
 -- | Begin restoration by creating an HdWallet with the given HdRoot,
@@ -646,15 +647,15 @@ data AccountUpdate e a = AccountUpdate {
 --
 -- See 'updateEosAccount' or 'updateEosAccounts'.
 data EosAccountUpdate e a = EosAccountUpdate {
+      -- | Account to update
+      eosAccountUpdateId :: !EosHdAccountId
+
       -- | Account's public key (we obtained it from the user during wallet
       -- creation).
-      eosAccountUpdatePK     :: !PublicKey
-
-      -- Root id of EOS-wallet this EOS-account belongs to.
-    , eosAccountUpdateRootId :: !EosWalletId
+    , eosAccountUpdatePK :: !PublicKey
 
       -- | The update to run
-    , eosAccountUpdate       :: !(Update' e EosHdAccount a)
+    , eosAccountUpdate   :: !(Update' e EosHdAccount a)
     }
 
 -- | Information we need to create new accounts
@@ -728,13 +729,13 @@ updateAccounts = fmap Map.fromList . mapM updateAccount
 updateAccounts_ :: [AccountUpdate e ()] -> Update' e HdWallets ()
 updateAccounts_ = mapM_ updateAccount
 
-updateEosAccount :: EosAccountUpdate e a -> Update' e EosHdWallets (PublicKey, a)
+updateEosAccount :: EosAccountUpdate e a -> Update' e EosHdWallets (EosHdAccountId, a)
 updateEosAccount EosAccountUpdate{..} =
     zoomOrCreateEosHdAccount
         assumeEosHdRootExists
-        (EosHdAccount eosAccountUpdatePK eosAccountUpdateRootId)
-        eosAccountUpdatePK
-        ((eosAccountUpdatePK, ) <$> eosAccountUpdate)
+        (EosHdAccount eosAccountUpdateId eosAccountUpdatePK)
+        eosAccountUpdateId
+        ((eosAccountUpdateId, ) <$> eosAccountUpdate)
 
 -- | Run each update, collecting all errors. Then, if there were any errors for any
 -- accounts, throw them all at once without updating the state.
@@ -760,6 +761,10 @@ createHdAccount hdAccount = runUpdate' . zoom dbHdWallets $
 createHdAddress :: HdAddress -> Update DB (Either HD.CreateHdAddressError ())
 createHdAddress hdAddress = runUpdateDiscardSnapshot . zoom dbHdWallets $
     HD.createHdAddress hdAddress
+
+createEosHdAddress :: EosHdAddress -> Update DB (Either EosHD.CreateEosHdAddressError ())
+createEosHdAddress eosHdAddress = runUpdateDiscardSnapshot . zoom dbEosHdWallets $
+    EosHD.createEosHdAddress eosHdAddress
 
 updateHdWallet :: HdRootId
                -> AssuranceLevel
@@ -878,6 +883,7 @@ makeAcidic ''DB [
     , 'restorationComplete
       -- Updates on HD wallets
     , 'createHdAddress
+    , 'createEosHdAddress
     , 'createHdAccount
     , 'createHdWallet
     , 'createEosHdWallet

@@ -5,9 +5,11 @@ module Cardano.Wallet.Kernel.DB.EosHdWallet.Create (
     -- * Errors
     CreateEosHdRootError(..)
   , CreateEosHdAccountError(..)
+  , CreateEosHdAddressError(..)
     -- * Functions
   , createEosHdRoot
   , createEosHdAccount
+  , createEosHdAddress
   ) where
 
 import           Universum
@@ -18,12 +20,10 @@ import           Data.SafeCopy (base, deriveSafeCopy)
 import           Formatting (bprint, build, (%))
 import qualified Formatting.Buildable
 
-import           Pos.Crypto (PublicKey)
-
 import           Cardano.Wallet.Kernel.DB.EosHdWallet
+import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.Util.AcidState
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
-import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
 
 {-------------------------------------------------------------------------------
   Errors
@@ -32,17 +32,25 @@ import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
 -- | Errors thrown by 'createEosHdWallet'
 data CreateEosHdRootError =
     -- | We already have an EOS-wallet with the specified ID
-    CreateEosHdRootExists EosWalletId
+    CreateEosHdRootExists EosHdRootId
 
 -- | Errors thrown by 'createEosHdAccount'
 data CreateEosHdAccountError =
     -- | The specified EOS-wallet could not be found
     CreateEosHdAccountUnknownRoot UnknownEosHdRoot
     -- | Account already exists
-  | CreateEosHdAccountExists PublicKey
+  | CreateEosHdAccountExists EosHdAccountId
+
+-- | Errors thrown by 'createEosHdAddress'
+data CreateEosHdAddressError =
+    -- | Account not found
+    CreateEosHdAddressUnknown UnknownHdAccount
+    -- | Address already used
+  | CreateEosHdAddressExists EosHdAddressId
 
 deriveSafeCopy 1 'base ''CreateEosHdRootError
 deriveSafeCopy 1 'base ''CreateEosHdAccountError
+deriveSafeCopy 1 'base ''CreateEosHdAddressError
 
 {-------------------------------------------------------------------------------
   CREATE
@@ -62,16 +70,26 @@ createEosHdRoot eosHdRoot = do
 createEosHdAccount :: EosHdAccount -> Update' CreateEosHdAccountError EosHdWallets ()
 createEosHdAccount eosHdAccount = do
     -- Check that the root ID exists
-    zoomEosWalletId CreateEosHdAccountUnknownRoot rootId $
+    zoomEosHdRootId CreateEosHdAccountUnknownRoot rootId $
       return ()
 
     zoom eosHdWalletsAccounts $ do
-      exists <- gets $ IxSet.member accountPK
-      when exists $ throwError $ CreateEosHdAccountExists accountPK
-      at accountPK .= Just eosHdAccount
+      exists <- gets $ IxSet.member accountId
+      when exists $ throwError $ CreateEosHdAccountExists accountId
+      at accountId .= Just eosHdAccount
   where
-    accountPK = eosHdAccount ^. eosHdAccountPK
+    accountId = eosHdAccount ^. eosHdAccountId
     rootId    = eosHdAccount ^. eosHdAccountRootId
+
+-- | Create a new address in account in EOS-account
+createEosHdAddress :: EosHdAddress -> Update' CreateEosHdAddressError EosHdWallets ()
+createEosHdAddress eosHdAddress = do
+    zoom eosHdWalletsAddresses $ do
+      exists <- gets $ IxSet.member addrId
+      when exists $ throwError $ CreateEosHdAddressExists addrId
+      at addrId .= Just eosHdAddress
+  where
+    addrId = eosHdAddress ^. eosHdAddressId
 
 {-------------------------------------------------------------------------------
   Pretty printing
@@ -86,3 +104,11 @@ instance Buildable CreateEosHdAccountError where
         = bprint ("CreateHdAccountError::CreateHdAccountUnknownRoot "%build) rootId
     build (CreateEosHdAccountExists accountId)
         = bprint ("CreateEosHdAccountError::CreateEosHdAccountExists "%build) accountId
+
+instance Buildable CreateEosHdAddressError where
+    build (CreateEosHdAddressUnknown (UnknownHdAccount accId))
+        = bprint ("CreateEosHdAddressError::CreateEosHdAddressUnknown UnknownHdAccount "%build) accId
+    build (CreateEosHdAddressUnknown (UnknownHdAccountRoot accId))
+        = bprint ("CreateEosHdAddressError::CreateEosHdAddressUnknown UnknownHdAccount "%build) accId
+    build (CreateEosHdAddressExists addrId)
+        = bprint ("CreateEosHdAddressError::CreateEosHdAddressExists "%build) addrId

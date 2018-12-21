@@ -38,7 +38,8 @@ import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (CreateEosHdWallet (..),
                      CreateHdWallet (..), DeleteHdRoot (..), RestoreHdWallet,
                      UpdateHdRootPassword (..), UpdateHdWallet (..))
-import           Cardano.Wallet.Kernel.DB.EosHdWallet (EosHdRoot (..))
+import           Cardano.Wallet.Kernel.DB.EosHdWallet (EosHdRoot (..),
+                     genEosHdRootId)
 import qualified Cardano.Wallet.Kernel.DB.EosHdWallet.Create as EosHD
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel,
                      HdAccountId (..), HdAccountIx (..), HdAddress,
@@ -47,7 +48,6 @@ import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel,
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
-import           Cardano.Wallet.Kernel.EosWalletId (genEosWalletId)
 import           Cardano.Wallet.Kernel.Internal (PassiveWallet, walletKeystore,
                      walletProtocolMagic, wallets)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
@@ -241,8 +241,8 @@ createHdWallet pw mnemonic spendingPassword assuranceLevel walletName = do
 
 -- | Creates a new EOS HD 'Wallet'.
 createEosHdWallet :: PassiveWallet
-                  -> [PublicKey]
-                  -- ^ External wallet's accounts public keys.
+                  -> [(PublicKey, Word32)]
+                  -- ^ External wallet's accounts public keys with indexes.
                   -> AddressPoolGap
                   -- ^ Address pool gap for this wallet.
                   -> AssuranceLevel
@@ -253,17 +253,17 @@ createEosHdWallet :: PassiveWallet
                   -> WalletName
                   -- ^ The name for this wallet.
                   -> IO (Either CreateEosWalletError EosHdRoot)
-createEosHdWallet pw accountsPKs addressPoolGap assuranceLevel walletName = do
+createEosHdWallet pw accountsPKsWithIxs addressPoolGap assuranceLevel walletName = do
     -- Here, we review the definition of a wallet down to a list of account public keys with
     -- no relationship whatsoever from the wallet's point of view. New addresses can be derived
     -- for each account at will and discovered using the address pool discovery algorithm
     -- described in BIP-44. Public keys are managed and provided from an external sources.
-    newEosWalletId <- genEosWalletId
-    let newEosRoot = EosHdRoot newEosWalletId
+    newEosHdRootId <- genEosHdRootId
+    let newEosRoot = EosHdRoot newEosHdRootId
                                walletName
                                assuranceLevel
                                addressPoolGap
-    res <- update' (pw ^. wallets) $ CreateEosHdWallet newEosRoot accountsPKs
+    res <- update' (pw ^. wallets) $ CreateEosHdWallet newEosRoot accountsPKsWithIxs
     return $ case res of
         Left e@(EosHD.CreateEosHdRootExists _) ->
             Left $ CreateEosWalletFailed e

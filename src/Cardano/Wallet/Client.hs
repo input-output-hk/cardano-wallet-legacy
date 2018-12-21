@@ -98,7 +98,9 @@ data WalletClient m
     , postEosWallet
          :: New EosWallet -> Resp m EosWallet
     , deleteEosWallet
-         :: EosWalletId -> m (Either ClientError ())
+         :: WalletId -> m (Either ClientError ())
+    , postEosAddress
+         :: NewEosAddress -> Resp m WalletAddress
     , postUnsignedTransaction
          :: Payment -> Resp m UnsignedTransaction
     , postSignedTransaction
@@ -254,6 +256,8 @@ natMapClient phi f wc = WalletClient
         f . phi . postEosWallet wc
     , deleteEosWallet =
         f . phi . deleteEosWallet wc
+    , postEosAddress =
+        f . phi . postEosAddress wc
     , postUnsignedTransaction =
         f . phi . postUnsignedTransaction wc
     , postSignedTransaction =

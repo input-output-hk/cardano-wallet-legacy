@@ -34,7 +34,6 @@ import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import qualified Cardano.Wallet.Kernel.DB.TxMeta.Types as Kernel
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (IxSet)
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
-import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
 import           Cardano.Wallet.Kernel.Internal (walletKeystore, walletMeta,
                      walletProtocolMagic, _wriProgress)
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
@@ -155,20 +154,24 @@ createEosWallet :: MonadIO m
                 -> V1.NewEosWallet
                 -> m (Either CreateEosWalletError V1.EosWallet)
 createEosWallet wallet newEosWalletRequest = runExceptT $ do
-    let accountsPublicKeys = V1.neweoswalAccountsPublicKeys newEosWalletRequest
+    let accounts = V1.neweoswalAccounts newEosWalletRequest
         addressPoolGap = maybe (def :: AddressPoolGap) id $
             V1.neweoswalAddressPoolGap newEosWalletRequest
         name = V1.neweoswalName newEosWalletRequest
         assuranceLevel = V1.neweoswalAssuranceLevel newEosWalletRequest
+        accountsPublicKeysWithIxs = map (\(V1.NewEosAccount publicKey accIx) ->
+                                            (publicKey, V1.getAccIndex accIx))
+                                        accounts
     root <- withExceptT CreateEosWalletError $ ExceptT $ liftIO $
         Kernel.createEosHdWallet
             wallet
-            accountsPublicKeys
+            accountsPublicKeysWithIxs
             addressPoolGap
             (fromAssuranceLevel assuranceLevel)
             (HD.WalletName name)
+    let eosWalletId = toEosRootId $ root ^. EosHD.eosHdRootId
     return $ V1.EosWallet {
-          eoswalId             = EosHD._eosHdRootId root
+          eoswalId             = eosWalletId
         , eoswalName           = name
         , eoswalAddressPoolGap = addressPoolGap
         , eoswalBalance        = V1.WalletCoin (mkCoin 0)
@@ -228,7 +231,7 @@ deleteWallet wallet wId = runExceptT $ do
 -- | Deletes external wallets. Please note that there's no actions in the
 -- 'Keystore', because it contains only root secret keys.
 deleteEosWallet :: Kernel.PassiveWallet
-                -> EosWalletId
+                -> V1.WalletId
                 -> m (Either DeleteEosWalletError ())
 deleteEosWallet _wallet _eosWalletId =
     error "TODO: it will be implemented in https://github.com/input-output-hk/cardano-wallet/issues/36"

@@ -16,9 +16,13 @@ type API = Tags '["WIP"] :>
                    :> ReqBody '[ValidJSON] (New EosWallet)
                    :> PostCreated '[ValidJSON] (APIResponse EosWallet)
     :<|> "external-wallets"
-                   :> Capture "eosWalletId" EosWalletId
+                   :> Capture "eosWalletId" WalletId
                    :> Summary "Deletes the given externally-owned sequential (EOS) wallet and all its accounts."
                    :> DeleteNoContent '[ValidJSON] NoContent
+    :<|> "external-addresses"
+                   :> Summary "Creates a new address for externally-owned sequential (EOS) wallet."
+                   :> ReqBody '[ValidJSON] NewEosAddress
+                   :> Post '[ValidJSON] (APIResponse WalletAddress)
     :<|> "external-transactions" :> "unsigned"
                    :> Summary "Creates a new unsigned transaction (it will be signed externally)."
                    :> ReqBody '[ValidJSON] Payment

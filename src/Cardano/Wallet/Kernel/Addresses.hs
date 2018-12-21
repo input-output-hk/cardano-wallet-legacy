@@ -1,8 +1,10 @@
 module Cardano.Wallet.Kernel.Addresses (
       createAddress
+    , createEosAddress
     , newHdAddress
     -- * Errors
     , CreateAddressError(..)
+    , CreateEosAddressError(..)
     ) where
 
 import qualified Prelude
@@ -16,23 +18,34 @@ import           System.Random.MWC (GenIO, createSystemRandom, uniformR)
 
 import           Data.Acid (update)
 
-import           Pos.Core (Address, IsBootstrapEraAddr (..), deriveLvl2KeyPair)
+import           Pos.Core (Address, IsBootstrapEraAddr (..), deriveLvl2KeyPair,
+                     makePubKeyAddressBoot)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, PassPhrase,
                      ShouldCheckPassphrase (..))
 
-import           Cardano.Wallet.Kernel.DB.AcidState (CreateHdAddress (..))
+import           Cardano.Wallet.Kernel.DB.AcidState (CreateEosHdAddress (..),
+                     CreateHdAddress (..))
+import           Cardano.Wallet.Kernel.DB.EosHdWallet (EosHdAccountId,
+                     EosHdAddress (..), EosHdAddressId (..))
 import           Cardano.Wallet.Kernel.DB.HdWallet (HdAccountId,
-                     HdAccountIx (..), HdAddress, HdAddressId (..),
+                     HdAccountIx (..), HdAddress (..), HdAddressId (..),
                      HdAddressIx (..), hdAccountIdIx, hdAccountIdParent,
                      hdAddressIdIx)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Create
                      (CreateHdAddressError (..), initHdAddress)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
                      (HardeningMode (..), deriveIndex)
+import           Cardano.Wallet.Kernel.DB.InDb
+import           Cardano.Wallet.Kernel.DB.Read (eosAccountPublicKey,
+                     eosAddressesByAccountId)
+import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
+import           Cardano.Wallet.Kernel.Ed25519Bip44 (ChangeChain,
+                     deriveAddressPublicKey)
 import           Cardano.Wallet.Kernel.Internal (PassiveWallet, walletKeystore,
                      walletProtocolMagic, wallets)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
+import           Cardano.Wallet.Kernel.Read (getWalletSnapshot)
 import           Cardano.Wallet.WalletLayer.Kernel.Conv (toCardanoAddress)
 
 import           Test.QuickCheck (Arbitrary (..), oneof)
@@ -73,6 +86,31 @@ instance Buildable CreateAddressError where
         bprint ("CreateAddressHdRndAddressSpaceSaturated " % F.build) hdAcc
 
 instance Show CreateAddressError where
+    show = formatToString build
+
+data CreateEosAddressError =
+      CreateEosAddressUnknownHdAccount EosHdAccountId
+      -- ^ When trying to create the 'Address' for EOS-wallet, the parent
+      -- 'Account' was not there.
+    | CreateEosAddressNoMoreAddresses EosHdAccountId
+      -- ^ Unable to derive address public key from EOS-wallet's account
+      -- public key (we are out of the non-hardened bound).
+    deriving Eq
+
+instance Arbitrary CreateEosAddressError where
+    arbitrary = oneof
+        [ CreateEosAddressUnknownHdAccount <$> arbitrary
+        , CreateEosAddressNoMoreAddresses <$> arbitrary
+        ]
+
+instance Buildable CreateEosAddressError where
+    build (CreateEosAddressUnknownHdAccount accId) =
+        bprint ("CreateEosAddressUnknownHdAccount " % F.build) accId
+    build (CreateEosAddressNoMoreAddresses accId) =
+        bprint ("CreateEosAddressNoMoreAddresses " % F.build) accId
+
+-- | TODO: Remove custom 'Show'-instance.
+instance Show CreateEosAddressError where
     show = formatToString build
 
 -- | Creates a new 'Address' for the input account.
@@ -178,3 +216,34 @@ newHdAddress nm esk spendingPassword accId hdAddressId =
     in case mbAddr of
          Nothing              -> Nothing
          Just (newAddress, _) -> Just $ initHdAddress hdAddressId newAddress
+
+-- | Creates a new 'Address' for the input account of EOS-wallet.
+-- Please note that we use non-hardened derivation, so it's possible
+-- to derive address keys from account public key only.
+createEosAddress
+    :: EosHdAccountId
+    -> ChangeChain
+    -> PassiveWallet
+    -> IO (Either CreateEosAddressError Address)
+createEosAddress eosAccId changeChain pw = do
+    snapshot <- getWalletSnapshot pw
+    -- Please note that for Ed25519Bip44-scheme address indexes
+    -- are created in a sequence from the last known address.
+    let newAddrIx = fromIntegral . IxSet.size $ eosAddressesByAccountId snapshot eosAccId
+    -- We use non-hardened derivation for EOS-wallet's addresses
+    -- (so we only need account's public key).
+    case eosAccountPublicKey snapshot eosAccId of
+        Left _ -> return . Left $ CreateEosAddressUnknownHdAccount eosAccId
+        Right accPublicKey ->
+            case deriveAddressPublicKey accPublicKey changeChain newAddrIx of
+                Nothing -> return $ Left $ CreateEosAddressNoMoreAddresses eosAccId
+                Just newAddressPublicKey -> do
+                    let nm = makeNetworkMagic (pw ^. walletProtocolMagic)
+                        newAddress = makePubKeyAddressBoot nm newAddressPublicKey
+                        eosHdAddressId = EosHdAddressId eosAccId (HdAddressIx newAddrIx)
+                        eosHdAddress = EosHdAddress eosHdAddressId (InDb newAddress)
+                        db = pw ^. wallets
+                    res <- update db (CreateEosHdAddress eosHdAddress)
+                    return $ case res of
+                        Right () -> Right newAddress
+                        _        -> Left $ CreateEosAddressUnknownHdAccount eosAccId

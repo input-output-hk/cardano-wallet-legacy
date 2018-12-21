@@ -63,9 +63,11 @@ module Cardano.Wallet.API.V1.Types (
   , mkAccountIndexM
   , unsafeMkAccountIndex
   , AccountIndexError(..)
+  , NewEosAccount (..)
   -- * Addresses
   , WalletAddress (..)
   , NewAddress (..)
+  , NewEosAddress (..)
   , AddressLevel
   , addressLevelToWord32
   , word32ToAddressLevel
@@ -126,8 +128,6 @@ module Cardano.Wallet.API.V1.Types (
   , ErrNotEnoughMoney(..)
   , toServantError
   , toHttpErrorStatus
-  -- * EOS-wallet id
-  , module Cardano.Wallet.Kernel.EosWalletId
   , module Cardano.Wallet.Types.UtxoStatistics
   ) where
 
@@ -174,7 +174,6 @@ import           Cardano.Wallet.API.V1.Generic (jsendErrorGenericParseJSON,
                      jsendErrorGenericToJSON)
 import           Cardano.Wallet.API.V1.Swagger.Example (Example, example)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
-import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
 import           Cardano.Wallet.Types.UtxoStatistics
 import           Cardano.Wallet.Util (mkJsonKey, showApiUtcTime)
 
@@ -590,44 +589,6 @@ mkTransactionSignatureAsBase16 (Core.Signature txSig) =
 instance Buildable [PublicKey] where
     build = bprint listJson
 
--- | A type modelling the request for a new 'EosWallet',
--- on the mobile client or hardware wallet.
-data NewEosWallet = NewEosWallet
-    { neweoswalAccountsPublicKeys :: ![PublicKey]
-    , neweoswalAddressPoolGap     :: !(Maybe AddressPoolGap)
-    , neweoswalAssuranceLevel     :: !AssuranceLevel
-    , neweoswalName               :: !WalletName
-    } deriving (Eq, Show, Generic)
-
-deriveJSON Aeson.defaultOptions ''NewEosWallet
-instance Arbitrary NewEosWallet where
-    arbitrary = NewEosWallet <$> arbitrary
-                             <*> arbitrary
-                             <*> arbitrary
-                             <*> pure "My EOS-wallet"
-
-instance ToSchema NewEosWallet where
-    declareNamedSchema =
-        genericSchemaDroppingPrefix "neweoswal" (\(--^) props -> props
-            & ("accountsPublicKeys" --^ "External wallet's accounts public keys.")
-            & ("addressPoolGap"     --^ "Address pool gap for this wallet.")
-            & ("assuranceLevel"     --^ "Desired assurance level based on the number of confirmations counter of each transaction.")
-            & ("name"               --^ "External wallet's name.")
-        )
-
-deriveSafeBuildable ''NewEosWallet
-instance BuildableSafeGen NewEosWallet where
-    buildSafeGen sl NewEosWallet{..} = bprint ("{"
-        %" accountsPublicKeys="%build
-        %" addressPoolGap="%build
-        %" assuranceLevel="%buildSafe sl
-        %" name="%buildSafe sl
-        %" }")
-        neweoswalAccountsPublicKeys
-        neweoswalAddressPoolGap
-        neweoswalAssuranceLevel
-        neweoswalName
-
 -- | A type modelling the update of an existing wallet.
 data WalletUpdate = WalletUpdate {
       uwalAssuranceLevel :: !AssuranceLevel
@@ -948,7 +909,7 @@ instance ToSchema PublicKey where
 
 -- | Externally-owned sequential (EOS) wallet (mobile client or hardware wallet).
 data EosWallet = EosWallet
-    { eoswalId             :: !EosWalletId
+    { eoswalId             :: !WalletId
     , eoswalName           :: !WalletName
     , eoswalAddressPoolGap :: !AddressPoolGap
     , eoswalBalance        :: !WalletCoin
@@ -1080,6 +1041,77 @@ instance Arbitrary WalletAddress where
 newtype AccountIndex = AccountIndex { getAccIndex :: Word32 }
     deriving (Show, Eq, Ord, Generic)
 
+-- | Since we cannot create new accounts for EOS-wallet,
+-- we receive accounts' public keys /and/ indexes as it is.
+data NewEosAccount = NewEosAccount
+    { neweoswalAccountPublicKey :: !PublicKey
+    , neweoswalAccountIndex     :: !AccountIndex
+    } deriving (Eq, Show, Generic)
+
+deriveJSON Aeson.defaultOptions ''NewEosAccount
+
+instance ToSchema NewEosAccount where
+    declareNamedSchema =
+        genericSchemaDroppingPrefix "neweoswal" (\(--^) props -> props
+            & ("accountPublicKey" --^ "EOS-wallet account's public key.")
+            & ("accountIndex"     --^ "Account's index.")
+        )
+
+instance Arbitrary NewEosAccount where
+    arbitrary = NewEosAccount
+        <$> arbitrary
+        <*> arbitrary
+
+deriveSafeBuildable ''NewEosAccount
+instance BuildableSafeGen NewEosAccount where
+    buildSafeGen _ NewEosAccount{..} = bprint ("{"
+        %" accountPublicKey="%build
+        %" accountIndex="%build
+        %" }")
+        neweoswalAccountPublicKey
+        neweoswalAccountIndex
+
+instance Buildable [NewEosAccount] where
+    build = bprint listJson
+
+-- | A type modelling the request for a new 'EosWallet',
+-- on the mobile client or hardware wallet.
+data NewEosWallet = NewEosWallet
+    { neweoswalAccounts       :: ![NewEosAccount]
+    , neweoswalAddressPoolGap :: !(Maybe AddressPoolGap)
+    , neweoswalAssuranceLevel :: !AssuranceLevel
+    , neweoswalName           :: !WalletName
+    } deriving (Eq, Show, Generic)
+
+deriveJSON Aeson.defaultOptions ''NewEosWallet
+instance Arbitrary NewEosWallet where
+    arbitrary = NewEosWallet <$> arbitrary
+                             <*> arbitrary
+                             <*> arbitrary
+                             <*> pure "My EOS-wallet"
+
+instance ToSchema NewEosWallet where
+    declareNamedSchema =
+        genericSchemaDroppingPrefix "neweoswal" (\(--^) props -> props
+            & ("accounts"       --^ "External wallet's accounts.")
+            & ("addressPoolGap" --^ "Address pool gap for this wallet.")
+            & ("assuranceLevel" --^ "Desired assurance level based on the number of confirmations counter of each transaction.")
+            & ("name"           --^ "External wallet's name.")
+        )
+
+deriveSafeBuildable ''NewEosWallet
+instance BuildableSafeGen NewEosWallet where
+    buildSafeGen sl NewEosWallet{..} = bprint ("{"
+        %" accounts="%build
+        %" addressPoolGap="%build
+        %" assuranceLevel="%buildSafe sl
+        %" name="%buildSafe sl
+        %" }")
+        neweoswalAccounts
+        neweoswalAddressPoolGap
+        neweoswalAssuranceLevel
+        neweoswalName
+
 newtype AccountIndexError = AccountIndexError Word32
     deriving (Eq, Show)
 
@@ -1154,6 +1186,38 @@ data Account = Account
     , accWalletId  :: !WalletId
     } deriving (Show, Ord, Eq, Generic)
 
+
+-- | To create a new address in account in EOS-wallet,
+-- we need account index and EOS-wallet id. Corresponding
+-- account's public key (which will be used for non-hardened
+-- derivation) is already stored in 'acid-state'.
+data NewEosAddress = NewEosAddress
+    { neweosaddrAccountIndex :: !AccountIndex
+    , neweosaddrEosWalletId  :: !WalletId
+    } deriving (Eq, Show, Generic)
+
+deriveJSON Aeson.defaultOptions ''NewEosAddress
+
+instance Arbitrary NewEosAddress where
+    arbitrary = NewEosAddress
+        <$> arbitrary
+        <*> arbitrary
+
+instance ToSchema NewEosAddress where
+    declareNamedSchema =
+        genericSchemaDroppingPrefix "neweosaddr" (\(--^) props -> props
+            & ("accountIndex" --^ "Account index.")
+            & ("eosWalletId"  --^ "EOS-wallet id.")
+        )
+
+deriveSafeBuildable ''NewEosAddress
+instance BuildableSafeGen NewEosAddress where
+    buildSafeGen _ NewEosAddress{..} = bprint ("{"
+        %" accountIndex="%build
+        %" eosWalletId="%build
+        %" }")
+        neweosaddrAccountIndex
+        neweosaddrEosWalletId
 
 --
 -- IxSet indices
@@ -2290,6 +2354,16 @@ instance Example NewEosWallet where
                            <*> example
                            <*> example
                            <*> pure "My EOS-Wallet"
+
+instance Example NewEosAddress where
+    example = NewEosAddress
+        <$> arbitrary
+        <*> arbitrary
+
+instance Example NewEosAccount where
+    example = NewEosAccount
+        <$> arbitrary
+        <*> arbitrary
 
 instance Example PaymentSource where
     example = PaymentSource <$> example

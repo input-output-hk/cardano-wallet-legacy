@@ -33,6 +33,7 @@ import           Cardano.Wallet.WalletLayer.Kernel.Conv (toRootId)
 translateWalletLayerErrors :: SomeException -> Maybe V1.WalletError
 translateWalletLayerErrors ex = do
        (    try' @CreateAddressError createAddressError
+        <|> try' @CreateEosAddressError createEosAddressError
         <|> try' @ValidateAddressError validateAddressError
 
         <|> try' @CreateAccountError createAccountError
@@ -72,6 +73,13 @@ createAddressErrorKernel e = case e of
     (Kernel.CreateAddressHdRndAddressSpaceSaturated _accId) ->
         V1.CannotCreateAddress (sformat build e)
 
+createEosAddressErrorKernel :: Kernel.CreateEosAddressError -> V1.WalletError
+createEosAddressErrorKernel e = case e of
+    (Kernel.CreateEosAddressUnknownHdAccount _accId) ->
+        V1.CannotCreateAddress (sformat build e)
+    (Kernel.CreateEosAddressNoMoreAddresses _accId) ->
+        V1.CannotCreateAddress (sformat build e)
+
 unknownHdAccount :: HD.UnknownHdAccount -> V1.WalletError
 unknownHdAccount e = case e of
     (HD.UnknownHdAccountRoot _rootId) ->
@@ -84,6 +92,13 @@ createAddressError e = case e of
     (CreateAddressError ex) ->
         createAddressErrorKernel ex
     ex@(CreateAddressAddressDecodingFailed _) ->
+        V1.InvalidAddressFormat (sformat build ex)
+
+createEosAddressError :: CreateEosAddressError -> V1.WalletError
+createEosAddressError e = case e of
+    (CreateEosAddressError ex) ->
+        createEosAddressErrorKernel ex
+    ex@(CreateEosAddressAddressDecodingFailed _) ->
         V1.InvalidAddressFormat (sformat build ex)
 
 validateAddressError :: ValidateAddressError -> V1.WalletError

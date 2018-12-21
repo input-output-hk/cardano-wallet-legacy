@@ -22,6 +22,7 @@ import           Cardano.Wallet.WalletLayer.Kernel.Conv (toInputGrouping)
 handlers :: ActiveWalletLayer IO -> ServerT WIP.API Handler
 handlers awl = newEosWallet pwl
            :<|> deleteEosWallet pwl
+           :<|> createEosAddress pwl
            :<|> newUnsignedTransaction awl
            :<|> submitSignedTransaction awl
   where
@@ -37,13 +38,24 @@ newEosWallet pwl newEosWalletRequest = do
         Right wallet -> return $ single wallet
 
 deleteEosWallet :: PassiveWalletLayer IO
-                -> EosWalletId
+                -> WalletId
                 -> Handler NoContent
 deleteEosWallet pwl encodedRootPK = do
     res <- liftIO $ WalletLayer.deleteEosWallet pwl encodedRootPK
     case res of
         Left err -> throwM err
         Right () -> return NoContent
+
+-- | Creates new address for account in EOS-wallet.
+createEosAddress
+    :: PassiveWalletLayer IO
+    -> NewEosAddress
+    -> Handler (APIResponse WalletAddress)
+createEosAddress pwl newEosAddressRequest = do
+    res <- liftIO $ WalletLayer.createEosAddress pwl newEosAddressRequest
+    case res of
+        Left err      -> throwM err
+        Right address -> return $ single address
 
 -- | Creates new unsigned transaction.
 --

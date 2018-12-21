@@ -122,6 +122,7 @@ bracketPassiveWallet pm mode logFunction keystore node fInjects f = do
         , updateAccount        = Accounts.updateAccount       w
         , deleteAccount        = Accounts.deleteAccount       w
         , createAddress        = Addresses.createAddress      w
+        , createEosAddress     = Addresses.createEosAddress   w
         , addUpdate            = Internal.addUpdate           w
         , nextUpdate           = Internal.nextUpdate          w
         , applyUpdate          = Internal.applyUpdate         w
