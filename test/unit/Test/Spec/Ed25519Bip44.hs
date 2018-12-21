@@ -8,8 +8,7 @@ import           Universum
 
 import           Cardano.Crypto.Wallet (generate)
 import           Pos.Crypto (EncryptedSecretKey, PassPhrase (..), PublicKey,
-                     ShouldCheckPassphrase (..), checkPassMatches, emptySalt,
-                     mkEncSecretWithSaltUnsafe)
+                     checkPassMatches, emptySalt, mkEncSecretWithSaltUnsafe)
 
 import           Cardano.Wallet.Kernel.Ed25519Bip44 (ChangeChain,
                      deriveAddressPrivateKey, deriveAddressPublicKey,
@@ -71,7 +70,6 @@ prop_deriveAddressPublicFromAccountPrivateKey (InfiniteList seed _) passPhrase@(
     -- N(CKDpriv((kpar, cpar), i))
     addrPubKey1 =
         derivePublicKey <$> deriveAddressPrivateKey
-            (ShouldCheckPassphrase False)
             passPhrase
             accEncPrvKey
             changeChain
@@ -83,24 +81,8 @@ prop_deriveAddressPublicFromAccountPrivateKey (InfiniteList seed _) passPhrase@(
             changeChain
             addressIx
 
--- | Deriving address private key should always succeed
--- if password is not checked
-prop_deriveAddressPrivateKeyNoPassword
-    :: PassPhrase
-    -> EncryptedSecretKey
-    -> ChangeChain
-    -> Word32
-    -> Property
-prop_deriveAddressPrivateKeyNoPassword passphrase accEncPrvKey changeChain =
-    property . isJust .
-        deriveAddressPrivateKey
-            (ShouldCheckPassphrase False)
-            passphrase
-            accEncPrvKey
-            changeChain
-
 -- | Deriving address private key should always fail
--- if password is checked and differs from account private key password
+-- if password differs from account private key password
 prop_deriveAddressPrivateKeyWrongPassword
     :: PassPhrase
     -> EncryptedSecretKey
@@ -115,7 +97,6 @@ prop_deriveAddressPrivateKeyWrongPassword passPhrase accEncPrvKey changeChain ad
   where
     addrPrvKey =
         deriveAddressPrivateKey
-            (ShouldCheckPassphrase True)
             passPhrase
             accEncPrvKey
             changeChain
@@ -129,7 +110,5 @@ spec = describe "Ed25519Bip44" $ do
         it "equals to deriving address private key and extracting public part from it: N(CKDpriv((kpar, cpar), i)) === CKDpub(N(kpar, cpar), i)" $
             property prop_deriveAddressPublicFromAccountPrivateKey
     describe "Deriving address private key" $ do
-        it "succeeds if password is not checked" $
-            property prop_deriveAddressPrivateKeyNoPassword
-        it "fails if password is checked and differs" $
+        it "fails if password differs" $
             expectFailure prop_deriveAddressPrivateKeyWrongPassword

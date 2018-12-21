@@ -2,8 +2,9 @@
 
   This module provides utils to perform child key derivation for bip44:
 
-    account (parent) extended public key -> address (child) extended public key
-    extended private key -> extended private key
+    extended private key -> extended public key
+    account extended public key -> address extended public key
+    account extended private key -> address extended private key
 
 -------------------------------------------------------------------------------}
 
@@ -22,8 +23,7 @@ module Cardano.Wallet.Kernel.Ed25519Bip44
 import           Universum
 
 import           Pos.Crypto (EncryptedSecretKey (..), PassPhrase,
-                     PublicKey (..), ShouldCheckPassphrase (..),
-                     checkPassMatches, encToPublic)
+                     PublicKey (..), checkPassMatches, encToPublic)
 
 import           Cardano.Crypto.Wallet (DerivationScheme (DerivationScheme2),
                      deriveXPrv, deriveXPub)
@@ -73,15 +73,14 @@ deriveAddressPublicKey (PublicKey accXPub) changeChain addressIx = do
 -- using derivation scheme 2 (please see 'cardano-crypto' package).
 -- TODO: EncryptedSecretKey will be renamed to EncryptedPrivateKey in #164
 deriveAddressPrivateKey
-    :: ShouldCheckPassphrase    -- Weather to call @checkPassMatches@
-    -> PassPhrase               -- Passphrase used to encrypt Account Private Key
+    :: PassPhrase               -- Passphrase used to encrypt Account Private Key
     -> EncryptedSecretKey       -- Account Private Key
     -> ChangeChain              -- Change chain
     -> Word32                   -- Address Key Index
     -> Maybe EncryptedSecretKey -- Address Private Key
-deriveAddressPrivateKey (ShouldCheckPassphrase checkPass) passPhrase accEncPrvKey@(EncryptedSecretKey accXPrv passHash) changeChain addressIx = do
+deriveAddressPrivateKey passPhrase accEncPrvKey@(EncryptedSecretKey accXPrv passHash) changeChain addressIx = do
     -- enforce valid PassPhrase check
-    when checkPass $ checkPassMatches passPhrase accEncPrvKey
+    checkPassMatches passPhrase accEncPrvKey
         -- lvl4 derivation in bip44 is derivation of change chain
     let changeXPrv = deriveXPrv DerivationScheme2 passPhrase accXPrv (changeToIndex changeChain)
         -- lvl5 derivation in bip44 is derivation of address chain
