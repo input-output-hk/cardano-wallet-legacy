@@ -13,7 +13,7 @@ in { supportedSystems ? [ "x86_64-linux" "x86_64-darwin" ]
 
 with (import (fixedNixpkgs.path + "/pkgs/top-level/release-lib.nix") {
   inherit supportedSystems scrubJobs nixpkgsArgs;
-  packageSet = import ./.;
+  packageSet = import cardano-wallet.outPath;
 });
 
 let
