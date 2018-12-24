@@ -86,7 +86,7 @@ emptyPrefilteredBlock context = PrefilteredBlock {
     , pfbForeignInputs  = Set.empty
     , pfbOutputs        = Map.empty
     , pfbAddrs          = []
-    , pfbMeta           = emptyLocalBlockMeta
+    , pfbMeta           = mempty
     , pfbContext        = context
     }
 
