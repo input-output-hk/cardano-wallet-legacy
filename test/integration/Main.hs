@@ -32,6 +32,7 @@ main = do
         ]
     let wClient = mkHttpClient (toBaseUrl $ env ! "WALLET_ADDRESS") manager
     let dClient = mkHttpDocClient (toBaseUrl $ env ! "WALLET_DOC_ADDRESS") manager
+    putText "Cluster started! Waiting for node..."
     waitForNode wClient (MaxWaitingTime 90)
 
     -- Run tests
