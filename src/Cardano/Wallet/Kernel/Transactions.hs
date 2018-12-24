@@ -64,8 +64,7 @@ import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
 import           Cardano.Wallet.Kernel.Pending (PartialTxMeta, newForeign,
                      newPending)
 import           Cardano.Wallet.Kernel.Read (getWalletSnapshot)
-import           Cardano.Wallet.Kernel.Types (AccountId (..),
-                     RawResolvedTx (..), WalletId (..))
+import           Cardano.Wallet.Kernel.Types (RawResolvedTx (..))
 import           Cardano.Wallet.Kernel.Util.Core
 import           Cardano.Wallet.WalletLayer.Kernel.Conv (exceptT)
 import           Pos.Chain.Txp (Tx (..), TxAttributes, TxAux (..), TxId,
@@ -417,7 +416,7 @@ newTransaction aw@ActiveWallet{..} spendingPassword options accountId payees = d
              -- STEP 1: Perform the signing and forge the final TxAux.
              mbEsk <- liftIO $ Keystore.lookup
                         nm
-                        (WalletIdHdRnd $ accountId ^. hdAccountIdParent)
+                        (accountId ^. hdAccountIdParent)
                         (walletPassive ^. Internal.walletKeystore)
 
              -- STEP 2: Generate the change addresses needed.
@@ -709,7 +708,7 @@ redeemAda w@ActiveWallet{..} accId pw rsk = runExceptT $ do
     changeAddr <- withExceptT RedeemAdaErrorCreateAddressFailed $ ExceptT $ liftIO $
                     Kernel.createAddress
                       pw
-                      (AccountIdHdRnd accId)
+                      accId
                       walletPassive
     (tx, meta) <- mkTx pm changeAddr
     withExceptT RedeemAdaNewForeignFailed $ ExceptT $ liftIO $
@@ -783,7 +782,7 @@ genChangeOuts changeCoins srcAccountId spendingPassword walletPassive =
                   => ExceptT Kernel.CreateAddressError m Address
     genChangeAddr = ExceptT $ liftIO $
         Kernel.createAddress spendingPassword
-                             (AccountIdHdRnd srcAccountId)
+                             srcAccountId
                              walletPassive
 
 {-------------------------------------------------------------------------------

@@ -38,14 +38,13 @@ import           Cardano.Wallet.Kernel.DB.Spec.Pending (Pending)
 import           Cardano.Wallet.Kernel.DB.Util.AcidState
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (Indexed, IxSet)
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
-import           Cardano.Wallet.Kernel.Types (WalletId (..))
 
 {-------------------------------------------------------------------------------
   Getters across the entire kernel
 -------------------------------------------------------------------------------}
 
-walletIds :: DB -> [WalletId]
-walletIds db = map (WalletIdHdRnd . view hdRootId)
+walletIds :: DB -> [HdRootId]
+walletIds db = map (view hdRootId)
              $ IxSet.toList
              $ db ^. dbHdWallets . hdWalletsRoots
 

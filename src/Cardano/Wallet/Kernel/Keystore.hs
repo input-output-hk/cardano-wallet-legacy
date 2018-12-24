@@ -44,8 +44,7 @@ import           Pos.Util.UserSecret (UserSecret, getUSPath, isEmptyUserSecret,
                      writeRaw, writeUserSecretRelease, _wusRootKey)
 import           Pos.Util.Wlog (addLoggerName)
 
-import           Cardano.Wallet.Kernel.DB.HdWallet (eskToHdRootId)
-import           Cardano.Wallet.Kernel.Types (WalletId (..))
+import           Cardano.Wallet.Kernel.DB.HdWallet (HdRootId, eskToHdRootId)
 import qualified Cardano.Wallet.Kernel.Util.Strict as Strict
 
 -- Internal storage necessary to smooth out the legacy 'UserSecret' API.
@@ -208,9 +207,9 @@ modifyKeystore (Keystore ks) f =
   Inserting things inside a keystore
 -------------------------------------------------------------------------------}
 
--- | Insert a new 'EncryptedSecretKey' indexed by the input 'WalletId'.
-insert :: WalletId -> EncryptedSecretKey -> Keystore -> IO ()
-insert _walletId esk ks = modifyKeystore_ ks (insertKey esk)
+-- | Insert a new 'EncryptedSecretKey' indexed by the input 'HdRootId'.
+insert :: HdRootId -> EncryptedSecretKey -> Keystore -> IO ()
+insert _ esk ks = modifyKeystore_ ks (insertKey esk)
 
 -- | Insert a new 'EncryptedSecretKey' directly inside the 'UserSecret'.
 insertKey :: EncryptedSecretKey -> UserSecret -> UserSecret
@@ -236,7 +235,7 @@ data ReplaceResult =
 -- | Replace an old 'EncryptedSecretKey' with a new one,
 -- verifying a pre-condition on the previously stored key.
 compareAndReplace :: NetworkMagic
-                  -> WalletId
+                  -> HdRootId
                   -> (EncryptedSecretKey -> Bool)
                   -> EncryptedSecretKey
                   -> Keystore
@@ -258,15 +257,15 @@ compareAndReplace nm walletId predicateOnOldKey newKey ks =
 
 -- | Lookup an 'EncryptedSecretKey' associated to the input 'HdRootId'.
 lookup :: NetworkMagic
-       -> WalletId
+       -> HdRootId
        -> Keystore
        -> IO (Maybe EncryptedSecretKey)
 lookup nm wId (Keystore ks) =
     Strict.withMVar ks $ \(InternalStorage us) -> return $ lookupKey nm us wId
 
 -- | Lookup a key directly inside the 'UserSecret'.
-lookupKey :: NetworkMagic -> UserSecret -> WalletId -> Maybe EncryptedSecretKey
-lookupKey nm us (WalletIdHdRnd walletId) =
+lookupKey :: NetworkMagic -> UserSecret -> HdRootId -> Maybe EncryptedSecretKey
+lookupKey nm us walletId =
     Data.List.find (\k -> eskToHdRootId nm k == walletId) (us ^. usKeys)
 
 -- | Return all Keystore 'usKeys'
@@ -280,11 +279,11 @@ getKeys (Keystore ks) =
 
 -- | Deletes an element from the 'Keystore'. This is an idempotent operation
 -- as in case a key was not present, no error would be thrown.
-delete :: NetworkMagic -> WalletId -> Keystore -> IO ()
+delete :: NetworkMagic -> HdRootId -> Keystore -> IO ()
 delete nm walletId ks = modifyKeystore_ ks (deleteKey nm walletId)
 
 -- | Delete a key directly inside the 'UserSecret'.
-deleteKey :: NetworkMagic -> WalletId -> UserSecret -> UserSecret
+deleteKey :: NetworkMagic -> HdRootId -> UserSecret -> UserSecret
 deleteKey nm walletId us =
     let mbEsk = lookupKey nm us walletId
         erase = Data.List.deleteBy (\a b -> hash a == hash b)

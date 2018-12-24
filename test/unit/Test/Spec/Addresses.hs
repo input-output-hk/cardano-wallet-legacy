@@ -42,7 +42,6 @@ import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import           Cardano.Wallet.Kernel.Internal (PassiveWallet, wallets)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import qualified Cardano.Wallet.Kernel.Read as Kernel
-import           Cardano.Wallet.Kernel.Types (AccountId (..), WalletId (..))
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
 import           Cardano.Wallet.WalletLayer (PassiveWalletLayer)
 import qualified Cardano.Wallet.WalletLayer as WalletLayer
@@ -61,7 +60,7 @@ import           Util.Buildable (ShowThroughBuild (..))
 data Fixture = Fixture {
       fixtureHdRootId  :: HdRootId
     , fixtureESK       :: EncryptedSecretKey
-    , fixtureAccountId :: AccountId
+    , fixtureAccountId :: HdAccountId
     , fixturePw        :: PassiveWallet
     }
 
@@ -90,7 +89,7 @@ prepareFixtures nm = do
         void $ liftIO $ update (pw ^. wallets) (CreateHdWallet newRoot hdAccountId hdAddress accounts)
         return $ Fixture {
                            fixtureHdRootId = newRootId
-                         , fixtureAccountId = AccountIdHdRnd newAccountId
+                         , fixtureAccountId = newAccountId
                          , fixtureESK = esk
                          , fixturePw  = pw
                          }
@@ -208,11 +207,10 @@ spec = describe "Addresses" $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \keystore layer _ Fixture{..} -> do
-                        Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
+                        Keystore.insert fixtureHdRootId fixtureESK keystore
                         let (HdRootId hdRoot) = fixtureHdRootId
-                            (AccountIdHdRnd myAccountId) = fixtureAccountId
                             wId = sformat build (view fromDb hdRoot)
-                            accIdx = Kernel.Conv.toAccountId myAccountId
+                            accIdx = Kernel.Conv.toAccountId fixtureAccountId
                         res <- WalletLayer.createAddress layer (V1.NewAddress Nothing accIdx (V1.WalletId wId))
                         (bimap STB STB res) `shouldSatisfy` isRight
 
@@ -221,7 +219,7 @@ spec = describe "Addresses" $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \keystore _ _ Fixture{..} -> do
-                        Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
+                        Keystore.insert fixtureHdRootId fixtureESK keystore
                         res <- Kernel.createAddress mempty fixtureAccountId fixturePw
                         (bimap STB STB res) `shouldSatisfy` isRight
 
@@ -238,9 +236,8 @@ spec = describe "Addresses" $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \keystore _ _ Fixture{..} -> do
-                        Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
-                        let (AccountIdHdRnd hdAccountId) = fixtureAccountId
-                        void $ update (fixturePw ^. wallets) (DeleteHdAccount hdAccountId)
+                        Keystore.insert fixtureHdRootId fixtureESK keystore
+                        void $ update (fixturePw ^. wallets) (DeleteHdAccount fixtureAccountId)
                         res <- Kernel.createAddress mempty fixtureAccountId fixturePw
                         case res of
                             Left (Kernel.CreateAddressUnknownHdAccount _) -> return ()
@@ -251,11 +248,10 @@ spec = describe "Addresses" $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture pm $ \keystore layer _ Fixture{..} -> do
-                        Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
+                        Keystore.insert fixtureHdRootId fixtureESK keystore
                         let (HdRootId hdRoot) = fixtureHdRootId
-                            (AccountIdHdRnd myAccountId) = fixtureAccountId
                             wId = sformat build (view fromDb hdRoot)
-                            accIdx = Kernel.Conv.toAccountId myAccountId
+                            accIdx = Kernel.Conv.toAccountId fixtureAccountId
                             req = V1.NewAddress Nothing accIdx (V1.WalletId wId)
                         res <- runExceptT . runHandler' $ Handlers.newAddress layer req
                         (bimap identity STB res) `shouldSatisfy` isRight
@@ -265,14 +261,13 @@ spec = describe "Addresses" $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     res1 <- withFixture pm $ \keystore _ _ Fixture{..} -> do
-                        Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
+                        Keystore.insert fixtureHdRootId fixtureESK keystore
                         Kernel.createAddress mempty fixtureAccountId fixturePw
                     res2 <- withFixture pm $ \keystore layer _ Fixture{..} -> do
-                        Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
+                        Keystore.insert fixtureHdRootId fixtureESK keystore
                         let (HdRootId hdRoot) = fixtureHdRootId
-                            (AccountIdHdRnd myAccountId) = fixtureAccountId
                             wId = sformat build (view fromDb hdRoot)
-                            accIdx = Kernel.Conv.toAccountId myAccountId
+                            accIdx = Kernel.Conv.toAccountId fixtureAccountId
                         WalletLayer.createAddress layer (V1.NewAddress Nothing accIdx (V1.WalletId wId))
                     case res2 of
                          Left (WalletLayer.CreateAddressError err) ->

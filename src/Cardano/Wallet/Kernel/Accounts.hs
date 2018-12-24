@@ -34,7 +34,6 @@ import           Cardano.Wallet.Kernel.DB.Spec (Checkpoints (..),
 import           Cardano.Wallet.Kernel.Internal (PassiveWallet, walletKeystore,
                      walletProtocolMagic, wallets)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
-import           Cardano.Wallet.Kernel.Types (WalletId (..))
 
 import           Test.QuickCheck (Arbitrary (..), oneof)
 
@@ -42,9 +41,9 @@ data CreateAccountError =
       CreateAccountUnknownHdRoot HdRootId
       -- ^ When trying to create the 'Account', the parent 'HdRoot' was not
       -- there.
-    | CreateAccountKeystoreNotFound WalletId
+    | CreateAccountKeystoreNotFound HdRootId
       -- ^ When trying to create the 'Account', the 'Keystore' didn't have
-      -- any secret associated with the input 'WalletId'.
+      -- any secret associated with the input HdRootId.
     | CreateAccountHdRndAccountSpaceSaturated HdRootId
       -- ^ The available number of HD accounts in use is such that trying
       -- to find another random index would be too expensive.
@@ -53,7 +52,7 @@ data CreateAccountError =
 instance Arbitrary CreateAccountError where
     arbitrary = oneof
         [ CreateAccountUnknownHdRoot <$> arbitrary
-        , CreateAccountKeystoreNotFound . WalletIdHdRnd <$> arbitrary
+        , CreateAccountKeystoreNotFound <$> arbitrary
         , CreateAccountHdRndAccountSpaceSaturated <$> arbitrary
         ]
 
@@ -75,24 +74,22 @@ createAccount :: PassPhrase
               -- ^ The 'Passphrase' (a.k.a the \"Spending Password\").
               -> AccountName
               -- ^ The name for this account.
-              -> WalletId
+              -> HdRootId
               -- ^ An abstract notion of a 'Wallet identifier
               -> PassiveWallet
               -> IO (Either CreateAccountError (DB, HdAccount))
-createAccount spendingPassword accountName walletId pw = do
+createAccount spendingPassword accountName hdRootId pw = do
     let nm = makeNetworkMagic (pw ^. walletProtocolMagic)
         keystore = pw ^. walletKeystore
-    case walletId of
-         WalletIdHdRnd hdRootId -> do
-             mbEsk <- Keystore.lookup nm (WalletIdHdRnd hdRootId) keystore
-             case mbEsk of
-                  Nothing  -> return (Left $ CreateAccountKeystoreNotFound walletId)
-                  Just esk ->
-                      createHdRndAccount spendingPassword
-                                         accountName
-                                         esk
-                                         hdRootId
-                                         pw
+    mbEsk <- Keystore.lookup nm hdRootId keystore
+    case mbEsk of
+         Nothing  -> return (Left $ CreateAccountKeystoreNotFound hdRootId)
+         Just esk ->
+             createHdRndAccount spendingPassword
+                                accountName
+                                esk
+                                hdRootId
+                                pw
 
 -- | Creates a new 'Account' using the random HD derivation under the hood.
 -- This code follows the same pattern of 'createHdRndAddress', but the two

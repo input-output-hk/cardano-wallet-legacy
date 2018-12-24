@@ -10,10 +10,6 @@ module Cardano.Wallet.Kernel.Types (
   , RawResolvedBlock(..)
   , invRawResolvedBlock
   , mkRawResolvedBlock
-  -- ** Abstract Wallet/AccountIds
-  , WalletId (..)
-  , AccountId (..)
-  , accountToWalletId
     -- ** From raw to derived types
   , fromRawResolvedTx
   , fromRawResolvedBlock
@@ -22,65 +18,16 @@ module Cardano.Wallet.Kernel.Types (
 import           Universum
 
 import qualified Data.List.NonEmpty as NE
-import           Formatting.Buildable (Buildable (..))
 
 import           Pos.Chain.Block (MainBlock, gbBody, mbTxs, mbWitnesses)
 import           Pos.Chain.Txp (Tx, TxAux (..), TxId, TxIn (..), txInputs)
 import qualified Pos.Core as Core
 
-import           Formatting (bprint, (%))
-import qualified Formatting as F
-
 import           Cardano.Wallet.Kernel.DB.BlockContext
-import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.Resolved
 import qualified Cardano.Wallet.Kernel.Util.Core as Core
 
-{-------------------------------------------------------------------------------
-  Abstract WalletId and AccountId
--------------------------------------------------------------------------------}
-
--- | Wallet Id
---
--- A Wallet Id can take several forms, the simplest of which is a hash
--- of the Wallet public key
-data WalletId =
-    -- | HD wallet with randomly generated addresses
-  WalletIdHdRnd HD.HdRootId
-
-    {- potential future kinds of wallet IDs:
-    -- | HD wallet with sequentially generated addresses
-    | WalletIdHdSeq ...
-
-    -- | External wallet (all crypto done off-site, like hardware wallets)
-    | WalletIdExt ...
-    -}
-
-    deriving (Eq, Ord, Generic)
-
-instance NFData WalletId
-
-instance Buildable WalletId where
-    build (WalletIdHdRnd rootId) =
-        bprint ("WalletIdHdRnd " % F.build) rootId
-
-accountToWalletId :: HD.HdAccountId -> WalletId
-accountToWalletId accountId
-    = WalletIdHdRnd $ accountId ^. HD.hdAccountIdParent
-
--- | Account Id
---
--- An Account Id can take several forms, the simplest of which is a
--- random-indexed, hardeded HD Account.
-data AccountId =
-    -- | HD wallet with randomly generated (hardened) index.
-    AccountIdHdRnd HD.HdAccountId
-    deriving (Eq, Ord)
-
-instance Buildable AccountId where
-    build (AccountIdHdRnd accountId) =
-        bprint ("AccountIdHdRnd " % F.build) accountId
 
 {-------------------------------------------------------------------------------
   Input resolution: raw types

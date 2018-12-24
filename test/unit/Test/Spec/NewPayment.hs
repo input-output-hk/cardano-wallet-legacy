@@ -55,7 +55,6 @@ import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
 import qualified Cardano.Wallet.Kernel.PrefilterTx as Kernel
 import qualified Cardano.Wallet.Kernel.Transactions as Kernel
-import           Cardano.Wallet.Kernel.Types (AccountId (..), WalletId (..))
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
 import           Cardano.Wallet.WalletLayer (ActiveWalletLayer)
 import qualified Cardano.Wallet.WalletLayer as WalletLayer
@@ -74,7 +73,7 @@ import           Servant.Server
 data Fixture = Fixture {
       fixtureHdRootId  :: HdRootId
     , fixtureESK       :: EncryptedSecretKey
-    , fixtureAccountId :: AccountId
+    , fixtureAccountId :: HdAccountId
     , fixturePw        :: PassiveWallet
     , fixturePayees    :: NonEmpty (Address, Coin)
     }
@@ -113,7 +112,7 @@ prepareFixtures nm initialBalance toPay = do
     payees <- fmap (\(TxOut addr coin) -> (addr, coin)) <$> pick (genPayeeWithNM nm utxo toPay)
 
     return $ \keystore aw -> do
-        liftIO $ Keystore.insert (WalletIdHdRnd newRootId) esk keystore
+        liftIO $ Keystore.insert newRootId esk keystore
         let pw = Kernel.walletPassive aw
 
         let accounts    = Kernel.prefilterUtxo nm newRootId esk utxo'
@@ -123,7 +122,7 @@ prepareFixtures nm initialBalance toPay = do
         void $ liftIO $ update (pw ^. wallets) (CreateHdWallet newRoot hdAccountId hdAddress accounts)
         return $ Fixture {
                            fixtureHdRootId = newRootId
-                         , fixtureAccountId = AccountIdHdRnd newAccountId
+                         , fixtureAccountId = newAccountId
                          , fixtureESK = esk
                          , fixturePw  = pw
                          , fixturePayees = payees
@@ -164,11 +163,10 @@ withPayment :: MonadIO n
             -> PropertyM IO ()
 withPayment pm initialBalance toPay action = do
     withFixture pm initialBalance toPay $ \keystore activeLayer _ Fixture{..} -> do
-        liftIO $ Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
-        let (AccountIdHdRnd hdAccountId)  = fixtureAccountId
+        liftIO $ Keystore.insert fixtureHdRootId fixtureESK keystore
         let (HdRootId (InDb rootAddress)) = fixtureHdRootId
         let sourceWallet = V1.WalletId (sformat build rootAddress)
-        let accountIndex = Kernel.Conv.toAccountId hdAccountId
+        let accountIndex = Kernel.Conv.toAccountId fixtureAccountId
         let destinations =
                 fmap (\(addr, coin) -> V1.PaymentDistribution (V1.WalAddress addr) (V1.WalletCoin coin)
                      ) fixturePayees
@@ -206,11 +204,10 @@ spec = describe "NewPayment" $ do
                                csoExpenseRegulation = SenderPaysFee
                              , csoInputGrouping     = IgnoreGrouping
                              }
-                    let (AccountIdHdRnd hdAccountId) = fixtureAccountId
                     res <- liftIO (Kernel.newTransaction aw
                                                          mempty
                                                          opts
-                                                         hdAccountId
+                                                         fixtureAccountId
                                                          fixturePayees
                                   )
                     liftIO ((bimap STB (const $ STB ()) res) `shouldSatisfy` isRight)
@@ -224,11 +221,10 @@ spec = describe "NewPayment" $ do
                                csoExpenseRegulation = ReceiverPaysFee
                              , csoInputGrouping     = IgnoreGrouping
                              }
-                    let (AccountIdHdRnd hdAccountId) = fixtureAccountId
                     res <- liftIO (Kernel.newTransaction aw
                                                          mempty
                                                          opts
-                                                         hdAccountId
+                                                         fixtureAccountId
                                                          fixturePayees
                                   )
                     liftIO ((bimap STB (const $ STB ()) res) `shouldSatisfy` isRight)
@@ -268,11 +264,10 @@ spec = describe "NewPayment" $ do
                                    csoExpenseRegulation = SenderPaysFee
                                  , csoInputGrouping     = IgnoreGrouping
                                  }
-                        let (AccountIdHdRnd hdAccountId) = fixtureAccountId
 
                         res <- liftIO (Kernel.estimateFees aw
                                                            opts
-                                                           hdAccountId
+                                                           fixtureAccountId
                                                            fixturePayees
                                       )
 
@@ -288,11 +283,9 @@ spec = describe "NewPayment" $ do
                                    csoExpenseRegulation = SenderPaysFee
                                  , csoInputGrouping     = IgnoreGrouping
                                  }
-                        let (AccountIdHdRnd hdAccountId) = fixtureAccountId
-
                         res <- liftIO (Kernel.estimateFees aw
                                                            opts
-                                                           hdAccountId
+                                                           fixtureAccountId
                                                            fixturePayees
                                       )
 
@@ -309,11 +302,9 @@ spec = describe "NewPayment" $ do
                                    csoExpenseRegulation = SenderPaysFee
                                  , csoInputGrouping     = IgnoreGrouping
                                  }
-                        let (AccountIdHdRnd hdAccountId) = fixtureAccountId
-
                         res <- liftIO (Kernel.estimateFees aw
                                                            opts
-                                                           hdAccountId
+                                                           fixtureAccountId
                                                            fixturePayees
                                       )
 
