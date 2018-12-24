@@ -29,7 +29,6 @@ import           Cardano.Wallet.Kernel.DB.Util.IxSet (Indexed (..), IxSet)
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
 import qualified Cardano.Wallet.Kernel.Read as Kernel
-import           Cardano.Wallet.Kernel.Types (WalletId (..))
 import           Cardano.Wallet.WalletLayer (CreateAccountError (..),
                      DeleteAccountError (..), GetAccountError (..),
                      GetAccountsError (..), UpdateAccountError (..))
@@ -49,7 +48,7 @@ createAccount wallet wId (V1.NewAccount mbSpendingPassword accountName) = liftIO
     (db, acc) <- withExceptT CreateAccountError $ ExceptT $ liftIO $
                      Kernel.createAccount passPhrase
                                           (HD.AccountName accountName)
-                                          (WalletIdHdRnd rootId)
+                                          rootId
                                           wallet
     let accId = acc ^. HD.hdAccountId
     let accountAddresses = addressesByAccountId db accId

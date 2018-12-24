@@ -49,7 +49,6 @@ import           Cardano.Wallet.Kernel.Read (foreignPendingByAccount,
                      getWalletCredentials, getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Restore
 import qualified Cardano.Wallet.Kernel.Submission as Submission
-import           Cardano.Wallet.Kernel.Types (WalletId (..))
 import           Cardano.Wallet.Kernel.Util.NonEmptyMap (NonEmptyMap)
 import qualified Cardano.Wallet.Kernel.Util.NonEmptyMap as NEM
 import           Cardano.Wallet.WalletLayer.Kernel.Wallets
@@ -330,9 +329,7 @@ switchToFork pw@PassiveWallet{..} oldest bs = do
         -- Find any new restorations that we didn't know about.
         restorationInfo <- currentRestorations pw
         let restorations  = Map.elems   restorationInfo
-            restoringWals = Set.fromList $
-              Map.keys restorationInfo <&> \case
-                WalletIdHdRnd rootId -> rootId
+            restoringWals = Map.keysSet restorationInfo
         -- Stop the restorations.
         mapM_ cancelRestoration restorations
         -- Switch to the fork, retrying if another restoration begins in the meantime.

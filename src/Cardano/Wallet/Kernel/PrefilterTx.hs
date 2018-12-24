@@ -49,7 +49,6 @@ import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types
 import           Cardano.Wallet.Kernel.Decrypt (WalletDecrCredentials,
                      eskToWalletDecrCredentials, selectOwnAddresses)
-import           Cardano.Wallet.Kernel.Types (WalletId (..))
 import           Cardano.Wallet.Kernel.Util.Core
 
 {-------------------------------------------------------------------------------
@@ -101,7 +100,7 @@ emptyPrefilteredBlock context = PrefilteredBlock {
     , pfbContext        = context
     }
 
-type WalletKey = (WalletId, WalletDecrCredentials)
+type WalletKey = (HdRootId, WalletDecrCredentials)
 
 -- | Summary of an address as it appears in a transaction.
 --   NOTE: Since an address can occur in multiple transactions, there could be
@@ -251,7 +250,7 @@ prefilterUtxo :: NetworkMagic -> HdRootId -> EncryptedSecretKey -> Utxo -> Map H
 prefilterUtxo nm rootId esk utxo = map toPrefilteredUtxo prefUtxo
     where
         (_,prefUtxo) = prefilterUtxo' wKey utxo
-        wKey         = (WalletIdHdRnd rootId, eskToWalletDecrCredentials nm esk)
+        wKey         = (rootId, eskToWalletDecrCredentials nm esk)
 
 -- | Produce Utxo along with all (extended) addresses occurring in the Utxo
 toPrefilteredUtxo :: UtxoWithAddrId -> (Utxo,[AddrWithId])
@@ -298,8 +297,8 @@ filterOurs (wid,wdc) selectAddr rtxs
     where f (addr,meta) = (addr, toHdAddressId wid meta)
 
 -- TODO (@mn): move this into Util or something
-toHdAddressId :: WalletId -> V1.WAddressMeta -> HdAddressId
-toHdAddressId (WalletIdHdRnd rootId) meta' = HdAddressId accountId addressIx
+toHdAddressId :: HdRootId -> V1.WAddressMeta -> HdAddressId
+toHdAddressId rootId meta' = HdAddressId accountId addressIx
   where
     accountIx = HdAccountIx (V1._wamAccountIndex meta')
     accountId = HdAccountId rootId accountIx
@@ -337,7 +336,7 @@ prefilterBlock
     :: NetworkMagic
     -> Map HdAccountId Pending
     -> ResolvedBlock
-    -> [(WalletId, EncryptedSecretKey)]
+    -> [(HdRootId, EncryptedSecretKey)]
     -> (Map HdAccountId PrefilteredBlock, [TxMeta])
 prefilterBlock nm foreignPendingByAccount block rawKeys =
       (Map.fromList
@@ -364,7 +363,7 @@ prefilterBlock nm foreignPendingByAccount block rawKeys =
 
     accountIds = Map.keysSet inpAll `Set.union` Map.keysSet outAll
 
-    toWalletKey :: (WalletId, EncryptedSecretKey) -> WalletKey
+    toWalletKey :: (HdRootId, EncryptedSecretKey) -> WalletKey
     toWalletKey (wid, esk) = (wid, eskToWalletDecrCredentials nm esk)
 
     reindexByTransaction :: Map HdAccountId (Set TxIn) -> Map TxIn HdAccountId

@@ -33,7 +33,6 @@ import           Cardano.Wallet.Kernel.Internal
 import           Cardano.Wallet.Kernel.PrefilterTx (filterOurs)
 import           Cardano.Wallet.Kernel.Read (getWalletCredentials)
 import           Cardano.Wallet.Kernel.Submission (Cancelled, addPending)
-import           Cardano.Wallet.Kernel.Types (WalletId (..))
 import           Cardano.Wallet.Kernel.Util.Core
 
 {-------------------------------------------------------------------------------
@@ -99,7 +98,7 @@ newTx ActiveWallet{..} accountId tx partialMeta upd = do
         Right () -> do
             -- process transaction on success
             -- myCredentials should be a list with a single element.
-            let myCredentials = filter (\(WalletIdHdRnd hdRoot, _) -> accountId ^. hdAccountIdParent == hdRoot) allCredentials
+            let myCredentials = filter (\(hdRoot, _) -> accountId ^. hdAccountIdParent == hdRoot) allCredentials
                 ourOutputCoins = snd <$> allOurs myCredentials
                 gainedOutputCoins = sumCoinsUnsafe ourOutputCoins
                 allOutsOurs = length ourOutputCoins == length txOut
@@ -112,10 +111,10 @@ newTx ActiveWallet{..} accountId tx partialMeta upd = do
 
         -- | NOTE: we recognise addresses in the transaction outputs that belong to _all_ wallets,
         --  not only for the wallet to which this transaction is being submitted
-        allOurs :: [(WalletId, EncryptedSecretKey)] -> [(HdAddress,Coin)]
+        allOurs :: [(HdRootId, EncryptedSecretKey)] -> [(HdAddress,Coin)]
         allOurs = concatMap ourAddrs
 
-        ourAddrs :: (WalletId, EncryptedSecretKey) -> [(HdAddress,Coin)]
+        ourAddrs :: (HdRootId, EncryptedSecretKey) -> [(HdAddress,Coin)]
         ourAddrs (wid, esk) =
             map f $ filterOurs wKey txOutAddress txOut
             where

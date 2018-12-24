@@ -54,7 +54,6 @@ import           Cardano.Wallet.Kernel.Internal (PassiveWallet, walletKeystore,
                      walletProtocolMagic, wallets)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import qualified Cardano.Wallet.Kernel.Read as Kernel
-import           Cardano.Wallet.Kernel.Types (WalletId (..))
 import           Cardano.Wallet.Kernel.Util.Core (getCurrentTimestamp)
 
 import           Test.QuickCheck (Arbitrary (..), oneof)
@@ -187,7 +186,7 @@ createHdWallet pw mnemonic spendingPassword assuranceLevel walletName = do
     -- We can fix this properly as part of [CBR-404].
     let nm = makeNetworkMagic (pw ^. walletProtocolMagic)
         newRootId = eskToHdRootId nm esk
-    Keystore.insert (WalletIdHdRnd newRootId) esk (pw ^. walletKeystore)
+    Keystore.insert newRootId esk (pw ^. walletKeystore)
 
     -- STEP 2.5: Generate the fresh Cardano Address which will be used for the
     -- companion 'HdAddress'
@@ -200,7 +199,7 @@ createHdWallet pw mnemonic spendingPassword assuranceLevel walletName = do
     case mbHdAddress of
         Nothing -> do
             -- Here, ideally, we would like to do some cleanup and call
-            -- >>> Keystore.delete (WalletIdHdRnd newRootId) (pw ^. walletKeystore)
+            -- >>> Keystore.delete newRootId (pw ^. walletKeystore)
             -- However, this wouldn't be correct in case, for example, the user
             -- is trying to create the same wallet twice. In that case we would
             -- wipe a pre-existing, perfectly valid key!
@@ -390,7 +389,7 @@ deleteHdWallet nm wallet rootId = do
             -- an 'HdRoot' without any associated keys in the keystore is
             -- unusable.
             -- Fix properly as part of [CBR-404].
-            Keystore.delete nm (WalletIdHdRnd rootId) (wallet ^. walletKeystore)
+            Keystore.delete nm rootId (wallet ^. walletKeystore)
             return $ Right ()
 
 deleteEosHdWallet :: PassiveWallet
@@ -429,7 +428,7 @@ updatePassword :: PassiveWallet
 updatePassword pw hdRootId oldPassword newPassword = do
     let nm       = makeNetworkMagic (pw ^. walletProtocolMagic)
         keystore = pw ^. walletKeystore
-        wId      = WalletIdHdRnd hdRootId
+        wId      = hdRootId
     -- STEP 1: Lookup the key from the keystore
     mbKey <- Keystore.lookup nm wId keystore
     case mbKey of

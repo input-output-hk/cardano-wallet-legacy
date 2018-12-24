@@ -32,7 +32,6 @@ import           Cardano.Wallet.Kernel.DB.InDb (InDb (..))
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import qualified Cardano.Wallet.Kernel.Internal as Internal
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
-import           Cardano.Wallet.Kernel.Types (WalletId (..))
 import           Cardano.Wallet.Kernel.Wallets (CreateWalletError (..))
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
 import qualified Cardano.Wallet.WalletLayer as WalletLayer
@@ -173,7 +172,7 @@ spec = describe "Wallets" $ do
                                  Right hdRoot -> do
                                      --  Check that the key is in the keystore
                                      let nm  = makeNetworkMagic pm
-                                         wid = WalletIdHdRnd (hdRoot ^. hdRootId)
+                                         wid = hdRoot ^. hdRootId
                                      mbEsk <- Keystore.lookup nm wid (wallet ^. Internal.walletKeystore)
                                      mbEsk `shouldSatisfy` isJust
 
@@ -282,7 +281,7 @@ spec = describe "Wallets" $ do
                     withNewWalletFixture pm $ \ks _ wallet Fixture{..} -> do
                         liftIO $ do
                             let nm  = makeNetworkMagic pm
-                                wId = WalletIdHdRnd fixtureHdRootId
+                                wId = fixtureHdRootId
 
                             mbKey <- Keystore.lookup nm wId ks
                             mbKey `shouldSatisfy` isJust
@@ -333,7 +332,7 @@ spec = describe "Wallets" $ do
                     pm     <- pick arbitrary
                     withNewWalletFixture pm $ \ keystore _ wallet Fixture{..} -> do
                         let nm  = makeNetworkMagic pm
-                            wid = WalletIdHdRnd fixtureHdRootId
+                            wid = fixtureHdRootId
                         oldKey <- Keystore.lookup nm wid keystore
                         let V1.WalletPassPhrase corePassword = fixtureSpendingPassword
                         res <- Kernel.updatePassword wallet

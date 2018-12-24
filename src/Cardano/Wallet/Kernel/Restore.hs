@@ -61,7 +61,7 @@ import           Cardano.Wallet.Kernel.PrefilterTx (AddrWithId,
 import           Cardano.Wallet.Kernel.Read (foreignPendingByAccount,
                      getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Types (RawResolvedBlock (..),
-                     WalletId (..), fromRawResolvedBlock, rawResolvedBlock,
+                     fromRawResolvedBlock, rawResolvedBlock,
                      rawResolvedBlockInputs, rawResolvedContext, rawTimestamp)
 import           Cardano.Wallet.Kernel.Util.Core (utxoBalance)
 import           Cardano.Wallet.Kernel.Wallets (createWalletHdRnd)
@@ -159,7 +159,7 @@ restoreWallet pw hasSpendingPassword defaultCardanoAddress name assurance esk = 
                 update (pw ^. wallets) $ ResetAllHdWalletAccounts (root ^. HD.hdRootId) tgt utxos
                 beginRestoration pw wId prefilter root Nothing tgt (restart root)
 
-    wId    = WalletIdHdRnd (HD.eskToHdRootId nm esk)
+    wId    = HD.eskToHdRootId nm esk
     wkey   = (wId, eskToWalletDecrCredentials nm esk)
 
 -- Synchronously restore the wallet balance, and begin to
@@ -168,7 +168,7 @@ mkPrefilter
     :: NetworkMagic
     -> EncryptedSecretKey
     -> Kernel.PassiveWallet
-    -> WalletId
+    -> HD.HdRootId
     -> Blund
     -> IO (Map HD.HdAccountId PrefilteredBlock, [TxMeta])
 mkPrefilter nm esk wallet wId blund = do
@@ -186,19 +186,18 @@ restoreKnownWallet :: Kernel.PassiveWallet
                    -> IO ()
 restoreKnownWallet pw rootId = do
     let nm  = makeNetworkMagic (pw ^. walletProtocolMagic)
-        wId = WalletIdHdRnd rootId
-    lookupRestorationInfo pw wId >>= \case
+    lookupRestorationInfo pw rootId >>= \case
         -- Restart a pre-existing restoration
         Just wri -> do
             cancelRestoration  wri
             restartRestoration wri
 
         -- Start a new restoration of a seemingly up-to-date wallet.
-        Nothing -> Keystore.lookup nm wId (pw ^. walletKeystore) >>= \case
+        Nothing -> Keystore.lookup nm rootId (pw ^. walletKeystore) >>= \case
             Nothing  -> return () -- TODO (@mn): raise an error
             Just esk -> do
-                let prefilter = mkPrefilter nm esk pw wId
-                    wkey      = (wId, eskToWalletDecrCredentials nm esk)
+                let prefilter = mkPrefilter nm esk pw rootId
+                    wkey      = (rootId, eskToWalletDecrCredentials nm esk)
 
                 coreConfig <- getCoreConfig (pw ^. walletNode)
                 db <- getWalletSnapshot pw
@@ -214,7 +213,7 @@ restoreKnownWallet pw rootId = do
                                     return ()
                                   WalletRestore utxos tgt -> do
                                     update (pw ^. wallets) $ ResetAllHdWalletAccounts rootId tgt utxos
-                                    beginRestoration pw wId prefilter root Nothing tgt restart
+                                    beginRestoration pw rootId prefilter root Nothing tgt restart
                       in restart
 
 -- | Take a wallet that is in an incomplete state but not restoring, and
@@ -227,7 +226,7 @@ continueRestoration :: Kernel.PassiveWallet
                     -> IO ()
 continueRestoration pw root cur tgt = do
     let nm  = makeNetworkMagic (pw ^. walletProtocolMagic)
-        wId = WalletIdHdRnd (root ^. HD.hdRootId)
+        wId = root ^. HD.hdRootId
     Keystore.lookup nm wId (pw ^. walletKeystore) >>= \case
         Nothing  ->
             -- TODO (@mn): raise an error, trying to continue
@@ -252,7 +251,7 @@ continueRestoration pw root cur tgt = do
 
 -- | Register and start up a background restoration task.
 beginRestoration  :: Kernel.PassiveWallet
-                  -> WalletId
+                  -> HD.HdRootId
                   -> (Blund -> IO (Map HD.HdAccountId PrefilteredBlock, [TxMeta]))
                   -> HD.HdRoot
                   -> Maybe BlockContext
@@ -397,9 +396,6 @@ restoreWalletHistoryAsync wallet rootId prefilter progress start (tgtHash, tgtSl
     let batchSize = 1000
     restore genesisHash startingPoint batchSize
   where
-    wId :: WalletId
-    wId = WalletIdHdRnd rootId
-
     -- Process the restoration of the next `batchSize` blocks (or up until the
     -- target hash), starting from the given 'HeaderHash'.
     restore :: GenesisHash -> HeaderHash -> Int -> IO ()
@@ -437,7 +433,7 @@ restoreWalletHistoryAsync wallet rootId prefilter progress start (tgtHash, tgtSl
     finish = do
         k <- getSecurityParameter (wallet ^. walletNode)
         update (wallet ^. wallets) $ RestorationComplete k rootId
-        removeRestoration wallet wId
+        removeRestoration wallet rootId
 
     -- Step forward to the successor of the given block.
     nextHistoricalHash :: HeaderHash -> IO (Maybe HeaderHash)

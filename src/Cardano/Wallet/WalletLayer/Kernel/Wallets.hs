@@ -43,7 +43,6 @@ import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import           Cardano.Wallet.Kernel.Restore (blundToResolvedBlock,
                      restoreWallet)
-import           Cardano.Wallet.Kernel.Types (WalletId (..))
 import           Cardano.Wallet.Kernel.Util.Core (getCurrentTimestamp)
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
 import           Cardano.Wallet.WalletLayer (CreateEosWalletError (..),
@@ -107,10 +106,9 @@ createWallet wallet newWalletRequest = liftIO $ do
                    -> IO (Either CreateWalletError V1.Wallet)
     restoreFromESK nm esk pwd now walletName hdAssuranceLevel = runExceptT $ do
         let rootId = HD.eskToHdRootId nm esk
-            wId    = WalletIdHdRnd rootId
 
         -- Insert the 'EncryptedSecretKey' into the 'Keystore'
-        liftIO $ Keystore.insert wId esk (wallet ^. walletKeystore)
+        liftIO $ Keystore.insert rootId esk (wallet ^. walletKeystore)
 
         -- Synchronously restore the wallet balance, and begin to
         -- asynchronously reconstruct the wallet's history.
@@ -133,7 +131,7 @@ createWallet wallet newWalletRequest = liftIO $ do
 
                 -- Return the wallet information, with an updated balance.
                 let root' = mkRoot walletName (toAssuranceLevel hdAssuranceLevel) now root
-                updateSyncState wallet wId (root' { V1.walBalance = V1.WalletCoin coins })
+                updateSyncState wallet rootId (root' { V1.walBalance = V1.WalletCoin coins })
 
     mkRoot :: Text -> V1.AssuranceLevel -> Timestamp -> HD.HdRoot -> V1.Wallet
     mkRoot v1WalletName v1AssuranceLevel now hdRoot = V1.Wallet {
@@ -196,7 +194,7 @@ updateWallet wallet wId (V1.WalletUpdate v1Level v1Name) = runExceptT $ do
     v1wal <- fmap (uncurry toWallet) $
                withExceptT UpdateWalletError $ ExceptT $ liftIO $
                  Kernel.updateHdWallet wallet rootId newLevel newName
-    updateSyncState wallet (WalletIdHdRnd rootId) v1wal
+    updateSyncState wallet rootId v1wal
   where
     newLevel = fromAssuranceLevel v1Level
     newName  = HD.WalletName v1Name
@@ -217,7 +215,7 @@ updateWalletPassword wallet
     v1wal <- fmap (uncurry toWallet) $
               withExceptT UpdateWalletPasswordError $ ExceptT $ liftIO $
                 Kernel.updatePassword wallet rootId oldPwd newPwd
-    updateSyncState wallet (WalletIdHdRnd rootId) v1wal
+    updateSyncState wallet rootId v1wal
 
 -- | Deletes a wallet, together with every account & addresses belonging to it.
 -- If this wallet was restoring, then the relevant async worker is correctly
@@ -231,7 +229,7 @@ deleteWallet wallet wId = runExceptT $ do
     withExceptT DeleteWalletError $ ExceptT $ liftIO $ do
         let nm = makeNetworkMagic (wallet ^. walletProtocolMagic)
         let walletId = HD.getHdRootId rootId ^. fromDb
-        Kernel.removeRestoration wallet (WalletIdHdRnd rootId)
+        Kernel.removeRestoration wallet rootId
         Kernel.deleteTxMetas (wallet ^. walletMeta) walletId Nothing
         Kernel.deleteHdWallet nm wallet rootId
 
@@ -254,7 +252,7 @@ getWallet wallet wId db = runExceptT $ do
     v1wal <- fmap (toWallet db) $
                 withExceptT GetWalletError $ exceptT $
                     Kernel.lookupHdRootId db rootId
-    updateSyncState wallet (WalletIdHdRnd rootId) v1wal
+    updateSyncState wallet rootId v1wal
 
 -- | Gets all the wallets known to this edge node.
 --
@@ -269,7 +267,7 @@ getWallets :: MonadIO m
 getWallets wallet db =
     fmap IxSet.fromList $ forM (IxSet.toList allRoots) $ \root -> do
         let rootId = root ^. HD.hdRootId
-        updateSyncState wallet (WalletIdHdRnd rootId) (toWallet db root)
+        updateSyncState wallet rootId (toWallet db root)
   where
     allRoots = db ^. dbHdWallets . HD.hdWalletsRoots
 
@@ -295,7 +293,7 @@ getWalletUtxos wId db = runExcept $ do
 
 updateSyncState :: MonadIO m
                 => Kernel.PassiveWallet
-                -> WalletId
+                -> HD.HdRootId
                 -> V1.Wallet
                 -> m V1.Wallet
 updateSyncState wallet wId v1wal = liftIO $ do
