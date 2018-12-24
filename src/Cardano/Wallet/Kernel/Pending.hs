@@ -17,23 +17,18 @@ import           Data.Acid.Advanced (update')
 
 import           Pos.Chain.Txp (Tx (..), TxAux (..), TxOut (..))
 import           Pos.Core (Coin (..))
-import           Pos.Core.NetworkMagic (makeNetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey)
 
 import           Cardano.Wallet.Kernel.DB.AcidState (CancelPending (..),
                      NewForeign (..), NewForeignError (..), NewPending (..),
                      NewPendingError (..))
 import           Cardano.Wallet.Kernel.DB.HdWallet
-import           Cardano.Wallet.Kernel.DB.HdWallet.Create (initHdAddress)
 import           Cardano.Wallet.Kernel.DB.InDb
 import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending
 import           Cardano.Wallet.Kernel.DB.TxMeta (TxMeta, putTxMeta)
-import           Cardano.Wallet.Kernel.Decrypt (eskToWalletDecrCredentials)
 import           Cardano.Wallet.Kernel.Internal
-import           Cardano.Wallet.Kernel.PrefilterTx (filterOurs)
 import           Cardano.Wallet.Kernel.Read (getWalletCredentials)
 import           Cardano.Wallet.Kernel.Submission (Cancelled, addPending)
-import           Cardano.Wallet.Kernel.Types (WalletId (..))
 import           Cardano.Wallet.Kernel.Util.Core
 
 {-------------------------------------------------------------------------------
@@ -99,7 +94,7 @@ newTx ActiveWallet{..} accountId tx partialMeta upd = do
         Right () -> do
             -- process transaction on success
             -- myCredentials should be a list with a single element.
-            let myCredentials = filter (\(WalletIdHdRnd hdRoot, _) -> accountId ^. hdAccountIdParent == hdRoot) allCredentials
+            let myCredentials = filter (\(hdRoot, _) -> accountId ^. hdAccountIdParent == hdRoot) allCredentials
                 ourOutputCoins = snd <$> allOurs myCredentials
                 gainedOutputCoins = sumCoinsUnsafe ourOutputCoins
                 allOutsOurs = length ourOutputCoins == length txOut
@@ -112,16 +107,12 @@ newTx ActiveWallet{..} accountId tx partialMeta upd = do
 
         -- | NOTE: we recognise addresses in the transaction outputs that belong to _all_ wallets,
         --  not only for the wallet to which this transaction is being submitted
-        allOurs :: [(WalletId, EncryptedSecretKey)] -> [(HdAddress,Coin)]
-        allOurs = concatMap ourAddrs
+        allOurs
+            :: [(HdRootId, EncryptedSecretKey)]
+            -> [(HdAddress, Coin)]
+        allOurs = evalState $ fmap catMaybes $ forM txOut $ \out -> do
+            fmap (, txOutValue out) <$> state (isOurs $ txOutAddress out)
 
-        ourAddrs :: (WalletId, EncryptedSecretKey) -> [(HdAddress,Coin)]
-        ourAddrs (wid, esk) =
-            map f $ filterOurs wKey txOutAddress txOut
-            where
-                nm = makeNetworkMagic $ walletPassive ^. walletProtocolMagic
-                f (txOut',addressId) = (initHdAddress addressId (txOutAddress txOut'), txOutValue txOut')
-                wKey = (wid, eskToWalletDecrCredentials nm esk)
 
         submitTx :: IO ()
         submitTx = modifyMVar_ (walletPassive ^. walletSubmission) $

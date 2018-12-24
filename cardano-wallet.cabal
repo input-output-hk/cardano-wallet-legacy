@@ -219,7 +219,6 @@ library
       Cardano.Wallet.Kernel.DB.Util.AcidState
       Cardano.Wallet.Kernel.DB.Util.IxSet
       Cardano.Wallet.Kernel.DB.Util.Zoomable
-      Cardano.Wallet.Kernel.Decrypt
       Cardano.Wallet.Kernel.Diffusion
       Cardano.Wallet.Kernel.Internal
       Cardano.Wallet.Kernel.Invariants
@@ -558,6 +557,7 @@ test-suite integration
       NoMonomorphismRestriction
       OverloadedStrings
       OverloadedLabels
+      QuasiQuotes
       ScopedTypeVariables
       TupleSections
       TypeApplications
@@ -573,7 +573,10 @@ test-suite integration
   build-depends:
       base
     , QuickCheck
+    , aeson
+    , aeson-qq
     , async
+    , bytestring
     , cardano-sl
     , cardano-sl-chain
     , cardano-sl-client
@@ -589,7 +592,12 @@ test-suite integration
     , hspec
     , hspec-core
     , hspec-expectations-lifted
+    , http-api-data
+    , http-client
+    , http-types
     , optparse-applicative
+    , servant-client-core
+    , template-haskell
     , text
     , universum
 

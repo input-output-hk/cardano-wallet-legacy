@@ -3,21 +3,42 @@ module Test.Integration.Framework.Request
     , request
     , request_
     , successfulRequest
+    , unsafeRequest
     , ($-)
     ) where
 
-import           Universum
+import           Universum hiding (ByteString)
 
+import           Data.Aeson (FromJSON)
+import qualified Data.Aeson as Aeson
+import           Data.ByteString.Lazy (ByteString)
 import           Data.Generics.Product.Typed (HasType, typed)
+import qualified Data.Text as T
+import           GHC.Exts (IsList (..))
+import           Network.HTTP.Client (RequestBody (..), httpLbs, method,
+                     parseRequest, requestBody, requestHeaders, responseBody,
+                     responseHeaders, responseStatus, responseVersion)
+import qualified Network.HTTP.Client as HTTP
+import           Network.HTTP.Types.Method (Method)
+import           Network.HTTP.Types.Status (status200, status300)
+import           Servant.Client.Core.Internal.BaseUrl (BaseUrl (..),
+                     showBaseUrl)
+import           Servant.Client.Core.Internal.Request (ServantError (..))
+import qualified Servant.Client.Core.Internal.Request as Servant
 
-import           Cardano.Wallet.Client.Http (ClientError (..), WalletClient)
+import           Cardano.Wallet.Client.Http (ClientError (..), Manager,
+                     WalletClient)
 import           Pos.Util.Servant (APIResponse (..))
 
 class (HasType (WalletClient IO) ctx) => HasHttpClient ctx where
     httpClient :: Lens' ctx (WalletClient IO)
     httpClient = typed @(WalletClient IO)
-
 instance (HasType (WalletClient IO) ctx) => HasHttpClient ctx
+
+class (HasType (BaseUrl, Manager) ctx) => HasManager ctx where
+    manager :: Lens' ctx (BaseUrl, Manager)
+    manager = typed @(BaseUrl, Manager)
+instance (HasType (BaseUrl, Manager) ctx) => HasManager ctx
 
 -- | Removes some boilerplates getting the content of a 'Resp' directly.
 class Request originalResponse where
@@ -58,6 +79,47 @@ instance Request () where
     type Response () = ()
     request action =
         view httpClient >>= liftIO . action
+
+unsafeRequest
+    :: forall a m ctx.
+        ( FromJSON a
+        , MonadIO m
+        , MonadThrow m
+        , MonadReader ctx m
+        , HasManager ctx
+        )
+    => (Method, Text)
+    -> Maybe Aeson.Value
+    -> m (Either ClientError a)
+unsafeRequest (verb, path) body = do
+    (base, man) <- view manager
+    req <- parseRequest (showBaseUrl $ base { baseUrlPath = T.unpack path })
+    res <- liftIO $ httpLbs (prepare req) man
+    return $ case responseStatus res of
+        s | s >= status200 && s <= status300 -> maybe (Left $ decodeFailure res)
+            (Right . wrData) (Aeson.decode $ responseBody res)
+        _ -> fromMaybe (Left $ decodeFailure res) $
+            (Left . ClientWalletError <$> Aeson.decode (responseBody res)) <|>
+            (Left. ClientJSONError <$> Aeson.decode (responseBody res))
+  where
+    prepare :: HTTP.Request -> HTTP.Request
+    prepare req = req
+        { method = verb
+        , requestBody = maybe mempty (RequestBodyLBS . Aeson.encode) body
+        , requestHeaders =
+            [ ("Content-Type", "application/json")
+            , ("Accept", "application/json")
+            ]
+        }
+
+    decodeFailure :: HTTP.Response ByteString -> ClientError
+    decodeFailure res = ClientHttpError $ DecodeFailure mempty $ Servant.Response
+        { Servant.responseStatusCode = responseStatus res
+        , Servant.responseHeaders = fromList $ responseHeaders res
+        , Servant.responseHttpVersion = responseVersion res
+        , Servant.responseBody = responseBody res
+        }
+
 
 -- | Provide "next" arguments to a function, leaving the first one untouched.
 --

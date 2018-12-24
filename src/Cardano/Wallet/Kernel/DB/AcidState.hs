@@ -75,7 +75,7 @@ import           Cardano.Wallet.Kernel.DB.HdWallet
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Delete as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Update as HD
-import           Cardano.Wallet.Kernel.DB.InDb (InDb (InDb), fromDb)
+import           Cardano.Wallet.Kernel.DB.InDb (InDb (InDb))
 import           Cardano.Wallet.Kernel.DB.Spec
 import           Cardano.Wallet.Kernel.DB.Spec.Pending (Pending)
 import qualified Cardano.Wallet.Kernel.DB.Spec.Update as Spec
@@ -87,8 +87,8 @@ import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import qualified Cardano.Wallet.Kernel.DB.Util.Zoomable as Z
 import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
 import           Cardano.Wallet.Kernel.NodeStateAdaptor (SecurityParameter (..))
-import           Cardano.Wallet.Kernel.PrefilterTx (AddrWithId,
-                     PrefilteredBlock (..), emptyPrefilteredBlock)
+import           Cardano.Wallet.Kernel.PrefilterTx (PrefilteredBlock (..),
+                     emptyPrefilteredBlock)
 import           Cardano.Wallet.Kernel.Util.NonEmptyMap (NonEmptyMap)
 import qualified Cardano.Wallet.Kernel.Util.NonEmptyMap as NEM
 import           Test.QuickCheck (Arbitrary (..), oneof)
@@ -196,7 +196,6 @@ ensureExistsHdAddress newAddress = do
     zoomOrCreateHdAddress
         assumeHdAccountExists
         newAddress
-        (newAddress ^. hdAddressId)
         (return ())
 
 -- | Cancels the input transactions from the 'Checkpoints' of each of
@@ -522,14 +521,14 @@ createHdWallet :: HdRoot
                -- 'HdAccount'.
                -> Maybe HdAddress
                -- ^ An optional default HdAddress to go with this HdRoot.
-               -> Map HdAccountId (Utxo,[AddrWithId])
+               -> Map HdAccountId (Utxo,[HdAddress])
                -> Update DB (Either HD.CreateHdRootError ())
 createHdWallet newRoot defaultHdAccountId defaultHdAddress utxoByAccount =
     runUpdateDiscardSnapshot . zoom dbHdWallets $ do
       HD.createHdRoot newRoot
       updateAccounts_ $ map mkUpdate (Map.toList (insertDefault utxoByAccount))
   where
-    mkUpdate :: (HdAccountId, (Utxo, [AddrWithId]))
+    mkUpdate :: (HdAccountId, (Utxo, [HdAddress]))
              -> AccountUpdate HD.CreateHdRootError ()
     mkUpdate (accId, (utxo, addrs)) = AccountUpdate {
           accountUpdateId    = accId
@@ -538,10 +537,10 @@ createHdWallet newRoot defaultHdAccountId defaultHdAddress utxoByAccount =
         , accountUpdate      = return () -- just need to create it, no more
         }
 
-    insertDefault :: Map HdAccountId (Utxo, [AddrWithId])
-                  -> Map HdAccountId (Utxo, [AddrWithId])
+    insertDefault :: Map HdAccountId (Utxo, [HdAddress])
+                  -> Map HdAccountId (Utxo, [HdAddress])
     insertDefault m =
-        let addrWithId = fmap toAddrWithId defaultHdAddress
+        let addrWithId = defaultHdAddress
         in case Map.lookup defaultHdAccountId m of
                Just (utxo, addrs) ->
                    Map.insert defaultHdAccountId (utxo, maybe addrs (: addrs) addrWithId) m
@@ -588,7 +587,7 @@ restoreHdWallet :: HdRoot
                 -- ^ Optional default HdAddress to go with this HdRoot
                 -> BlockContext
                 -- ^ The initial block context for restorations
-                -> Map HdAccountId (Utxo, Utxo, [AddrWithId])
+                -> Map HdAccountId (Utxo, Utxo, [HdAddress])
                 -- ^ Current and genesis UTxO per account
                 -> Update DB (Either HD.CreateHdRootError ())
 restoreHdWallet newRoot defaultHdAccountId defaultHdAddress ctx utxoByAccount =
@@ -597,7 +596,7 @@ restoreHdWallet newRoot defaultHdAccountId defaultHdAddress ctx utxoByAccount =
           HD.createHdRoot newRoot
           updateAccounts_ $ map mkUpdate (Map.toList (insertDefault utxoByAccount))
   where
-    mkUpdate :: (HdAccountId, (Utxo, Utxo, [AddrWithId]))
+    mkUpdate :: (HdAccountId, (Utxo, Utxo, [HdAddress]))
              -> AccountUpdate HD.CreateHdRootError ()
     mkUpdate (accId, (curUtxo, genUtxo, addrs)) = AccountUpdate {
           accountUpdateId    = accId
@@ -606,20 +605,16 @@ restoreHdWallet newRoot defaultHdAccountId defaultHdAddress ctx utxoByAccount =
         , accountUpdate      = return () -- Create it only
         }
 
-    insertDefault :: Map HdAccountId (Utxo, Utxo, [AddrWithId])
-                  -> Map HdAccountId (Utxo, Utxo, [AddrWithId])
+    insertDefault :: Map HdAccountId (Utxo, Utxo, [HdAddress])
+                  -> Map HdAccountId (Utxo, Utxo, [HdAddress])
     insertDefault m =
-        let addrWithId = fmap toAddrWithId defaultHdAddress
+        let addrWithId = defaultHdAddress
         in case Map.lookup defaultHdAccountId m of
                Just (utxo, utxo', addrs) ->
                    Map.insert defaultHdAccountId (utxo, utxo', maybe addrs (: addrs) addrWithId) m
                Nothing ->
                    Map.insert defaultHdAccountId (mempty, mempty, maybeToList addrWithId) m
 
-toAddrWithId :: HdAddress -> AddrWithId
-toAddrWithId addr = ( addr ^. hdAddressId
-                    , addr ^. hdAddressAddress . fromDb
-                    )
 {-------------------------------------------------------------------------------
   Internal: support for updating accounts
 -------------------------------------------------------------------------------}
@@ -641,7 +636,7 @@ data AccountUpdate e a = AccountUpdate {
       --
       -- NOTE: At the moment these addresses are created /after/ the
       -- update has been run.
-    , accountUpdateAddrs :: ![AddrWithId]
+    , accountUpdateAddrs :: ![HdAddress]
 
       -- | The update to run
     , accountUpdate      :: !(Update' e HdAccount a)
@@ -720,12 +715,11 @@ updateAccount AccountUpdate{..} = do
     return res
   where
     -- Create address (if needed)
-    createAddress :: AddrWithId -> Update' e HdWallets ()
-    createAddress (addressId, address) =
+    createAddress :: HdAddress -> Update' e HdWallets ()
+    createAddress hdAddress =
         zoomOrCreateHdAddress
             assumeHdAccountExists -- we just created it
-            (HD.initHdAddress addressId address)
-            addressId
+            hdAddress
             (return ())
 
 updateAccounts :: [AccountUpdate e a] -> Update' e HdWallets (Map HdAccountId a)
@@ -805,7 +799,7 @@ deleteHdAccount accId = runUpdateDiscardSnapshot . zoom dbHdWallets $
 --       we "fill in" a corresponding 'AccountUpdate' using 'markMissingMapEntries'
 resetAllHdWalletAccounts :: HdRootId
                          -> BlockContext
-                         -> Map HdAccountId (Utxo, Utxo, [AddrWithId])
+                         -> Map HdAccountId (Utxo, Utxo, [HdAddress])
                          -> Update DB ()
 resetAllHdWalletAccounts rootId context utxoByAccount = mustBeRight <$> do
     runUpdateDiscardSnapshot $ zoom dbHdWallets $
@@ -819,7 +813,7 @@ resetAllHdWalletAccounts rootId context utxoByAccount = mustBeRight <$> do
         $ utxoByAccount
 
     -- The account update: set every account back to the incomplete state.
-    mkUpdate :: (HdAccountId, Maybe (Utxo, Utxo, [AddrWithId]))
+    mkUpdate :: (HdAccountId, Maybe (Utxo, Utxo, [HdAddress]))
              -> AccountUpdate Void ()
     mkUpdate (accId, utxos) = AccountUpdate {
           accountUpdateId    = accId

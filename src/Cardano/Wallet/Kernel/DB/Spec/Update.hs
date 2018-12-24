@@ -196,7 +196,7 @@ applyBlock (SecurityParameter k) pb = do
         balance           = current ^. checkpointUtxoBalance . fromDb
         (utxo', balance') = updateUtxo      pb (utxo, balance)
         (pending', rem1)  = updatePending   (pfbInputs pb) (current ^. checkpointPending)
-        blockMeta'        = updateBlockMeta pb (current ^. checkpointBlockMeta)
+        blockMeta'        = (current ^. checkpointBlockMeta) <> (localBlockMeta $ pfbMeta pb)
         (foreign', rem2)  = updatePending   (pfbForeignInputs pb) (current ^. checkpointForeign)
     if (pfbContext pb) `blockContextSucceeds` (current ^. checkpointContext . lazy) then do
       put $ Checkpoints . takeNewest k . NewestFirst $ Checkpoint {
@@ -229,7 +229,7 @@ applyBlockPartial pb = do
         balance           = current ^. pcheckpointUtxoBalance . fromDb
         (utxo', balance') = updateUtxo           pb (utxo, balance)
         (pending', rem1)  = updatePending        (pfbInputs pb) (current ^. pcheckpointPending)
-        blockMeta'        = updateLocalBlockMeta pb (current ^. pcheckpointBlockMeta)
+        blockMeta'        = (current ^. pcheckpointBlockMeta) <> pfbMeta pb
         (foreign', rem2)  = updatePending        (pfbForeignInputs pb) (current ^. pcheckpointForeign)
     if (pfbContext pb) `blockContextSucceeds` (current ^. cpContext . lazy) then do
       put $ Checkpoints $ NewestFirst $ PartialCheckpoint {
@@ -331,12 +331,6 @@ switchToFork k oldest blocksToApply = do
 {-------------------------------------------------------------------------------
   Internal auxiliary
 -------------------------------------------------------------------------------}
-
-updateBlockMeta :: PrefilteredBlock -> BlockMeta -> BlockMeta
-updateBlockMeta = flip appendBlockMeta . pfbMeta
-
-updateLocalBlockMeta :: PrefilteredBlock -> LocalBlockMeta -> LocalBlockMeta
-updateLocalBlockMeta = flip appendLocalBlockMeta . pfbMeta
 
 -- | Update (utxo,balance) with the given prefiltered block
 updateUtxo :: PrefilteredBlock -> (Utxo, Core.Coin) -> (Utxo, Core.Coin)

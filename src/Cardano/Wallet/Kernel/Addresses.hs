@@ -33,7 +33,6 @@ import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
 import           Cardano.Wallet.Kernel.Internal (PassiveWallet, walletKeystore,
                      walletProtocolMagic, wallets)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
-import           Cardano.Wallet.Kernel.Types (AccountId (..), WalletId (..))
 import           Cardano.Wallet.WalletLayer.Kernel.Conv (toCardanoAddress)
 
 import           Test.QuickCheck (Arbitrary (..), oneof)
@@ -42,7 +41,7 @@ data CreateAddressError =
       CreateAddressUnknownHdAccount HdAccountId
       -- ^ When trying to create the 'Address', the parent 'Account' was not
       -- there.
-    | CreateAddressKeystoreNotFound AccountId
+    | CreateAddressKeystoreNotFound HdAccountId
       -- ^ When trying to create the 'Address', the 'Keystore' didn't have
       -- any secret associated with this 'Account'.
       -- there.
@@ -58,7 +57,7 @@ data CreateAddressError =
 instance Arbitrary CreateAddressError where
     arbitrary = oneof
         [ CreateAddressUnknownHdAccount <$> arbitrary
-        , CreateAddressKeystoreNotFound . AccountIdHdRnd <$> arbitrary
+        , CreateAddressKeystoreNotFound <$> arbitrary
         , CreateAddressHdRndGenerationFailed <$> arbitrary
         , CreateAddressHdRndAddressSpaceSaturated <$> arbitrary
         ]
@@ -79,37 +78,35 @@ instance Show CreateAddressError where
 -- | Creates a new 'Address' for the input account.
 createAddress :: PassPhrase
               -- ^ The 'Passphrase' (a.k.a the \"Spending Password\").
-              -> AccountId
+              -> HdAccountId
               -- ^ An abstract notion of an 'Account' identifier
               -> PassiveWallet
               -> IO (Either CreateAddressError Address)
-createAddress spendingPassword accId pw = do
+createAddress spendingPassword hdAccId pw = do
     let nm       = makeNetworkMagic (pw ^. walletProtocolMagic)
         keystore = pw ^. walletKeystore
-    case accId of
-         -- \"Standard\" HD random derivation. The strategy is as follows:
-         --
-         -- 1. Generate the Address' @index@ and @HdAddress@ structure outside
-         --    of an atomic acid-state transaction. This could lead to data
-         --    races in the sense that an index is picked and such index
-         --    is already claimed, but if this happens we simply try again.
-         -- 2. Perform the actual creation of the 'HdAddress' as an atomic
-         --    transaction in acid-state.
-         --
-         -- The reason why we do this is because:
-         -- 1. We cannot do IO (thus index derivation) in an acid-state
-         --    transaction
-         -- 2. In order to create an 'HdAddress' we need a proper 'Address',
-         -- but this cannot be derived with having access to the
-         -- 'EncryptedSecretKey' and the 'PassPhrase', and we do not want
-         -- these exposed in the acid-state transaction log.
-         (AccountIdHdRnd hdAccId) -> do
-             mbEsk <- Keystore.lookup nm
-                                      (WalletIdHdRnd (hdAccId ^. hdAccountIdParent))
-                                      keystore
-             case mbEsk of
-                  Nothing  -> return (Left $ CreateAddressKeystoreNotFound accId)
-                  Just esk -> createHdRndAddress spendingPassword esk hdAccId pw
+    -- \"Standard\" HD random derivation. The strategy is as follows:
+    --
+    -- 1. Generate the Address' @index@ and @HdAddress@ structure outside
+    --    of an atomic acid-state transaction. This could lead to data
+    --    races in the sense that an index is picked and such index
+    --    is already claimed, but if this happens we simply try again.
+    -- 2. Perform the actual creation of the 'HdAddress' as an atomic
+    --    transaction in acid-state.
+    --
+    -- The reason why we do this is because:
+    -- 1. We cannot do IO (thus index derivation) in an acid-state
+    --    transaction
+    -- 2. In order to create an 'HdAddress' we need a proper 'Address',
+    -- but this cannot be derived with having access to the
+    -- 'EncryptedSecretKey' and the 'PassPhrase', and we do not want
+    -- these exposed in the acid-state transaction log.
+    mbEsk <- Keystore.lookup nm
+                             (hdAccId ^. hdAccountIdParent)
+                             keystore
+    case mbEsk of
+         Nothing  -> return (Left $ CreateAddressKeystoreNotFound hdAccId)
+         Just esk -> createHdRndAddress spendingPassword esk hdAccId pw
 
 -- | Creates a new 'Address' using the random HD derivation under the hood.
 -- Being this an operation bound not only by the number of available derivation

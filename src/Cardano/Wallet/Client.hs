@@ -373,6 +373,8 @@ data ClientError
     = ClientWalletError WalletError
     -- ^ The 'WalletError' type represents known failures that the API
     -- might return.
+    | ClientJSONError JSONValidationError
+    -- ^ Error returned when submitting an invalid JSON object
     | ClientHttpError ServantError
     -- ^ We directly expose the 'ServantError' type as part of this
     | UnknownClientError SomeException
@@ -384,6 +386,7 @@ data ClientError
 -- | General (and naive) equality instance.
 instance Eq ClientError where
     ClientWalletError  e1 == ClientWalletError  e2 = e1 == e2
+    ClientJSONError    e1 == ClientJSONError    e2 = e1 == e2
     ClientHttpError    e1 == ClientHttpError    e2 = e1 == e2
     UnknownClientError _  == UnknownClientError _  = True
     _ == _ = False
@@ -391,5 +394,6 @@ instance Eq ClientError where
 -- | General exception instance.
 instance Exception ClientError where
     toException (ClientWalletError  e) = toException e
+    toException (ClientJSONError    e) = toException e
     toException (ClientHttpError    e) = toException e
     toException (UnknownClientError e) = toException e

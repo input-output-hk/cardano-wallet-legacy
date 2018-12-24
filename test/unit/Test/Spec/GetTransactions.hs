@@ -60,7 +60,6 @@ import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
 import qualified Cardano.Wallet.Kernel.PrefilterTx as Kernel
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import qualified Cardano.Wallet.Kernel.Transactions as Kernel
-import           Cardano.Wallet.Kernel.Types (AccountId (..), WalletId (..))
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
 import           Cardano.Wallet.WalletLayer (ActiveWalletLayer (..),
                      walletPassiveLayer)
@@ -84,7 +83,7 @@ data Fix = Fix {
       fixtureHdRootId  :: HdRootId
     , fixtureHdRoot    :: HdRoot
     , fixtureESK       :: EncryptedSecretKey
-    , fixtureAccountId :: AccountId
+    , fixtureAccountId :: HdAccountId
     , fixtureUtxo      :: Core.Utxo
     }
 
@@ -127,7 +126,7 @@ prepareFixtures nm initialBalance = do
         return $ Fix {
               fixtureHdRootId = newRootId
             , fixtureHdRoot = newRoot
-            , fixtureAccountId = AccountIdHdRnd newAccountId
+            , fixtureAccountId = newAccountId
             , fixtureESK = esk
             , fixtureUtxo = utxo'
             }
@@ -135,9 +134,9 @@ prepareFixtures nm initialBalance = do
     return $ \keystore aw -> do
         let pw = Kernel.walletPassive aw
         forM_ fixt $ \Fix{..} -> do
-            liftIO $ Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
+            liftIO $ Keystore.insert fixtureHdRootId fixtureESK keystore
 
-            let accounts    = Kernel.prefilterUtxo nm fixtureHdRootId fixtureESK fixtureUtxo
+            let accounts    = Kernel.prefilterUtxo fixtureHdRootId fixtureESK fixtureUtxo
                 hdAccountId = Kernel.defaultHdAccountId fixtureHdRootId
                 hdAddress   = Kernel.defaultHdAddress nm fixtureESK emptyPassphrase fixtureHdRootId
 
@@ -174,8 +173,8 @@ prepareUTxoFixtures nm coins = do
         ) M.empty (mkCoin <$> coins)
     return $ \keystore aw -> do
         let pw = Kernel.walletPassive aw
-        Keystore.insert (WalletIdHdRnd newRootId) esk keystore
-        let accounts    = Kernel.prefilterUtxo nm newRootId esk utxo
+        Keystore.insert newRootId esk keystore
+        let accounts    = Kernel.prefilterUtxo newRootId esk utxo
             hdAccountId = Kernel.defaultHdAccountId newRootId
             hdAddress   = Kernel.defaultHdAddress nm esk emptyPassphrase newRootId
 
@@ -183,7 +182,7 @@ prepareUTxoFixtures nm coins = do
         return $ Fix {
             fixtureHdRootId = newRootId
           , fixtureHdRoot = newRoot
-          , fixtureAccountId = AccountIdHdRnd newAccountId
+          , fixtureAccountId = newAccountId
           , fixtureESK = esk
           , fixtureUtxo = utxo
           }
@@ -237,8 +236,7 @@ getNonFixedAddress :: WalletLayer.ActiveWalletLayer IO -> Fix -> IO Core.Address
 getNonFixedAddress layer Fix{..} = do
     let params = RequestParams (PaginationParams (Page 1) (PerPage 10))
     let filters = NoFilters
-    let (AccountIdHdRnd hdAccountId) = fixtureAccountId
-    let index = getHdAccountIx $ hdAccountId ^. hdAccountIdIx
+    let index = getHdAccountIx $ fixtureAccountId ^. hdAccountIdIx
     Right wr <- WalletLayer.getAccountAddresses (walletPassiveLayer layer)
             (Kernel.Conv.toRootId fixtureHdRootId)
             (V1.unsafeMkAccountIndex index)
@@ -250,8 +248,7 @@ getNonFixedAddress layer Fix{..} = do
 
 getAccountBalanceNow :: Kernel.PassiveWallet -> Fix -> IO Word64
 getAccountBalanceNow pw Fix{..} = do
-    let (AccountIdHdRnd hdAccountId) = fixtureAccountId
-    let index = getHdAccountIx $ hdAccountId ^. hdAccountIdIx
+    let index = getHdAccountIx $ fixtureAccountId ^. hdAccountIdIx
     db <- Kernel.getWalletSnapshot pw
     let res =
             Accounts.getAccountBalance
@@ -305,9 +302,8 @@ spec = do
                     -- get the balance before the payment
                     coinsBefore <- getAccountBalanceNow pw f
                     -- do the payment
-                    let (AccountIdHdRnd myAccountId) = fixtureAccountId
-                        src = V1.PaymentSource (Kernel.Conv.toRootId fixtureHdRootId)
-                                        (V1.unsafeMkAccountIndex $ getHdAccountIx $ myAccountId ^. hdAccountIdIx)
+                    let src = V1.PaymentSource (Kernel.Conv.toRootId fixtureHdRootId)
+                                        (V1.unsafeMkAccountIndex $ getHdAccountIx $ fixtureAccountId ^. hdAccountIdIx)
                         payment = V1.Payment src distr Nothing Nothing
                     Right _ <- Active.pay aw emptyPassphrase PreferGrouping SenderPaysFee payment
                     -- get the balance after the payment.
@@ -327,9 +323,8 @@ spec = do
                 withUtxosFixture @IO pm [300, 400, 500, 600, 5000000] $ \_keystore _activeLayer aw Fix{..} -> do
                     let pw = Kernel.walletPassive aw
                     -- do the payment
-                    let (AccountIdHdRnd myAccountId) = fixtureAccountId
-                        src = V1.PaymentSource (Kernel.Conv.toRootId fixtureHdRootId)
-                                        (V1.unsafeMkAccountIndex $ getHdAccountIx $ myAccountId ^. hdAccountIdIx)
+                    let src = V1.PaymentSource (Kernel.Conv.toRootId fixtureHdRootId)
+                                        (V1.unsafeMkAccountIndex $ getHdAccountIx $ fixtureAccountId ^. hdAccountIdIx)
                         payment = V1.Payment src distr Nothing Nothing
                     Right c <- Active.estimateFees aw PreferGrouping SenderPaysFee payment
                     -- sanity check.
@@ -342,11 +337,10 @@ spec = do
                 testMetaSTB <- pick genMeta
                 pm          <- pick arbitrary
                 Addresses.withFixture pm $ \keystore layer pwallet Addresses.Fixture{..} -> do
-                    liftIO $ Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
+                    liftIO $ Keystore.insert fixtureHdRootId fixtureESK keystore
                     let (HdRootId hdRoot) = fixtureHdRootId
-                        (AccountIdHdRnd myAccountId) = fixtureAccountId
                         wId = sformat build (view fromDb hdRoot)
-                        accIdx = myAccountId ^. hdAccountIdIx . to getHdAccountIx
+                        accIdx = fixtureAccountId ^. hdAccountIdIx . to getHdAccountIx
                         hdl = (pwallet ^. Kernel.walletMeta)
                         testMeta = unSTB testMetaSTB
                     case decodeTextAddress wId of
@@ -392,11 +386,10 @@ spec = do
             monadicIO $ do
                 pm <- pick arbitrary
                 NewPayment.withFixture @IO pm (InitialADA 10000) (PayLovelace 25) $ \keystore activeLayer aw NewPayment.Fixture{..} -> do
-                    liftIO $ Keystore.insert (WalletIdHdRnd fixtureHdRootId) fixtureESK keystore
-                    let (AccountIdHdRnd hdAccountId)  = fixtureAccountId
+                    liftIO $ Keystore.insert fixtureHdRootId fixtureESK keystore
                     let (HdRootId (InDb rootAddress)) = fixtureHdRootId
                     let sourceWallet = V1.WalletId (sformat build rootAddress)
-                    let accountIndex = Kernel.Conv.toAccountId hdAccountId
+                    let accountIndex = Kernel.Conv.toAccountId fixtureAccountId
                     let destinations =
                             fmap (\(addr, coin) -> V1.PaymentDistribution (V1.WalAddress addr) (V1.WalletCoin coin)
                                 ) fixturePayees
@@ -419,10 +412,10 @@ spec = do
                                 layer = walletPassiveLayer activeLayer
                                 (HdRootId hdRoot) = fixtureHdRootId
                                 wId = sformat build (view fromDb hdRoot)
-                                accIdx = Kernel.Conv.toAccountId hdAccountId
+                                accIdx = Kernel.Conv.toAccountId fixtureAccountId
                                 hdl = (pw ^. Kernel.walletMeta)
                             db <- Kernel.getWalletSnapshot pw
-                            let isPending = Kernel.currentTxIsPending db txid hdAccountId
+                            let isPending = Kernel.currentTxIsPending db txid fixtureAccountId
                             _ <- case isPending of
                                 Left _err -> expectationFailure "hdAccountId not found in Acid State from Kernel"
                                 Right False -> expectationFailure "txid not found in Acid State from Kernel"
@@ -480,8 +473,7 @@ spec = do
                 pm <- pick arbitrary
                 NewPayment.withFixture @IO pm (InitialADA 10000) (PayLovelace 100) $ \_ _ aw NewPayment.Fixture{..} -> do
                     -- we use constant fees here, to have predictable txAmount.
-                    let (AccountIdHdRnd hdAccountId) = fixtureAccountId
-                    (_tx, txMeta) <- payAux aw hdAccountId fixturePayees 200
+                    (_tx, txMeta) <- payAux aw fixtureAccountId fixturePayees 200
                     txMeta ^. txMetaAmount `shouldBe` Coin 300
 
     describe "Transactions with multiple wallets" $ do
@@ -506,9 +498,8 @@ spec = do
                 withFixture @IO pm (InitialADA 10000) $ \_ layer aw (Fixture [w1, w2] _) -> do
                     let pw = Kernel.walletPassive aw
                     address <- getFixedAddress layer w2
-                    let (AccountIdHdRnd hdAccountId1) = fixtureAccountId w1
                     let payees = (NonEmpty.fromList [(address, Coin 100)])
-                    (_tx, txMeta) <- payAux aw hdAccountId1 payees 200
+                    (_tx, txMeta) <- payAux aw (fixtureAccountId w1) payees 200
                     txMeta ^. txMetaAmount `shouldBe` Coin 300
                     txMeta ^. txMetaIsOutgoing `shouldBe` True
                     txMeta ^. txMetaIsLocal `shouldBe` False
@@ -523,9 +514,8 @@ spec = do
                 pm <- pick arbitrary
                 withFixture @IO pm (InitialADA 10000) $ \_ layer aw (Fixture [w1, w2] _) -> do
                     address <- getNonFixedAddress layer w2
-                    let (AccountIdHdRnd hdAccountId1) = fixtureAccountId w1
                     let payees = (NonEmpty.fromList [(address, Coin 100)])
-                    (_tx, txMeta) <- payAux aw hdAccountId1 payees 200
+                    (_tx, txMeta) <- payAux aw (fixtureAccountId w1) payees 200
                     txMeta ^. txMetaAmount `shouldBe` Coin 300
 
         prop "payment to different wallet changes the balance the same as txAmount" $ withMaxSuccess 5 $
@@ -536,10 +526,9 @@ spec = do
                     -- get the balance before the payment
                     coinsBefore <- getAccountBalanceNow pw w1
                     -- do the payment
-                    let (AccountIdHdRnd hdAccountId1) = fixtureAccountId w1
                     address <- getFixedAddress layer w2
                     let payees = (NonEmpty.fromList [(address, Coin 100)])
-                    (_tx, txMeta) <- payAux aw hdAccountId1 payees 200
+                    (_tx, txMeta) <- payAux aw (fixtureAccountId w1) payees 200
                     txMeta ^. txMetaAmount `shouldBe` Coin 300
                     -- get the balance after the payment
                     coinsAfter <- getAccountBalanceNow pw w1
@@ -550,13 +539,12 @@ spec = do
                 pm <- pick arbitrary
                 withFixture @IO pm (InitialADA 10000) $ \_ layer aw (Fixture [w1, w2] _) -> do
                     let pw = Kernel.walletPassive aw
-                    let (AccountIdHdRnd hdAccountId1) = fixtureAccountId w1
                     -- get the balance before the payment
                     coinsBefore <- getAccountBalanceNow pw w1
                     -- do the payment
                     address <- getNonFixedAddress layer w2
                     let payees = (NonEmpty.fromList [(address, Coin 100)])
-                    (_tx, txMeta) <- payAux aw hdAccountId1 payees 200
+                    (_tx, txMeta) <- payAux aw (fixtureAccountId w1) payees 200
                     txMeta ^. txMetaAmount `shouldBe` Coin 300
                     -- get the balance after the payment
                     coinsAfter <- getAccountBalanceNow pw w1
@@ -570,15 +558,14 @@ spec = do
                     -- get the balance before the payment
                     coinsBefore <- getAccountBalanceNow pw w1
                     -- do the payment
-                    let (AccountIdHdRnd hdAccountId1) = fixtureAccountId w1
                     address1 <- getFixedAddress layer w2
                     address2 <- getNonFixedAddress layer w2
                     let payees1 = (NonEmpty.fromList [(address1, Coin 100)])
-                    (_, txMeta1) <- payAux aw hdAccountId1 payees1 200
+                    (_, txMeta1) <- payAux aw (fixtureAccountId w1) payees1 200
                     txMeta1 ^. txMetaAmount `shouldBe` Coin 300
                     -- do the second payment
                     let payees2 = (NonEmpty.fromList [(address2, Coin 400)])
-                    (_, txMeta2) <- payAux aw hdAccountId1 payees2 800
+                    (_, txMeta2) <- payAux aw (fixtureAccountId w1) payees2 800
                     txMeta2 ^. txMetaAmount `shouldBe` Coin 1200
                     -- get the balance after the payment
                     coinsAfter <- getAccountBalanceNow pw w1
@@ -594,9 +581,8 @@ spec = do
                     coinsBefore <- getAccountBalanceNow pw w1
                     -- do the payment
                     address <- getFixedAddress layer w1
-                    let (AccountIdHdRnd hdAccountId1) = fixtureAccountId w1
                     let payees = (NonEmpty.fromList [(address, Coin 100)])
-                    (_, txMeta) <- payAux aw hdAccountId1 payees 200
+                    (_, txMeta) <- payAux aw (fixtureAccountId w1) payees 200
                     -- this is 200 because the outputs is at the same wallet.
                     txMeta ^. txMetaAmount `shouldBe` Coin 200
                     txMeta ^. txMetaIsOutgoing `shouldBe` True

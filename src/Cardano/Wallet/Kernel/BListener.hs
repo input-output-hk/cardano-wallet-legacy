@@ -27,7 +27,6 @@ import           Pos.Chain.Block (HeaderHash)
 import           Pos.Chain.Genesis (Config (..))
 import           Pos.Chain.Txp (TxId)
 import           Pos.Core.Chrono (OldestFirst (..))
-import           Pos.Core.NetworkMagic (makeNetworkMagic)
 import           Pos.DB.Block (getBlund)
 import           Pos.Util.Log (Severity (..))
 
@@ -49,7 +48,6 @@ import           Cardano.Wallet.Kernel.Read (foreignPendingByAccount,
                      getWalletCredentials, getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Restore
 import qualified Cardano.Wallet.Kernel.Submission as Submission
-import           Cardano.Wallet.Kernel.Types (WalletId (..))
 import           Cardano.Wallet.Kernel.Util.NonEmptyMap (NonEmptyMap)
 import qualified Cardano.Wallet.Kernel.Util.NonEmptyMap as NEM
 import           Cardano.Wallet.WalletLayer.Kernel.Wallets
@@ -71,12 +69,11 @@ prefilterBlocks :: PassiveWallet
                 -> [ResolvedBlock]
                 -> IO (Maybe [PrefilterResult])
 prefilterBlocks pw bs = do
-    let nm = makeNetworkMagic (pw ^. walletProtocolMagic)
     res <- getWalletCredentials pw
     foreignPendings <- foreignPendingByAccount <$> getWalletSnapshot pw
     return $ case res of
          [] -> Nothing
-         xs -> Just $ map (\b -> first (b ^. rbContext,) $ prefilterBlock nm foreignPendings b xs) bs
+         xs -> Just $ map (\b -> first (b ^. rbContext,) $ prefilterBlock foreignPendings b xs) bs
 
 data BackfillFailed
     = SuccessorChanged BlockContext (Maybe BlockContext)
@@ -330,9 +327,7 @@ switchToFork pw@PassiveWallet{..} oldest bs = do
         -- Find any new restorations that we didn't know about.
         restorationInfo <- currentRestorations pw
         let restorations  = Map.elems   restorationInfo
-            restoringWals = Set.fromList $
-              Map.keys restorationInfo <&> \case
-                WalletIdHdRnd rootId -> rootId
+            restoringWals = Map.keysSet restorationInfo
         -- Stop the restorations.
         mapM_ cancelRestoration restorations
         -- Switch to the fork, retrying if another restoration begins in the meantime.

@@ -26,7 +26,6 @@ import           Cardano.Wallet.Kernel.DB.Util.IxSet (AutoIncrementKey (..),
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
 import qualified Cardano.Wallet.Kernel.Read as Kernel
-import           Cardano.Wallet.Kernel.Types (AccountId (..))
 import           Cardano.Wallet.WalletLayer (CreateAddressError (..),
                      ValidateAddressError (..))
 import           Cardano.Wallet.WalletLayer.Kernel.Conv
@@ -44,7 +43,7 @@ createAddress wallet
                fromAccountId wId accIx
     fmap mkAddress $
         withExceptT CreateAddressError $ ExceptT $ liftIO $
-            Kernel.createAddress passPhrase (AccountIdHdRnd accId) wallet
+            Kernel.createAddress passPhrase accId wallet
   where
     passPhrase = maybe mempty coerce mbSpendingPassword
 
