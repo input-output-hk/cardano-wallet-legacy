@@ -27,7 +27,6 @@ import           Pos.Chain.Block (HeaderHash)
 import           Pos.Chain.Genesis (Config (..))
 import           Pos.Chain.Txp (TxId)
 import           Pos.Core.Chrono (OldestFirst (..))
-import           Pos.Core.NetworkMagic (makeNetworkMagic)
 import           Pos.DB.Block (getBlund)
 import           Pos.Util.Log (Severity (..))
 
@@ -70,12 +69,11 @@ prefilterBlocks :: PassiveWallet
                 -> [ResolvedBlock]
                 -> IO (Maybe [PrefilterResult])
 prefilterBlocks pw bs = do
-    let nm = makeNetworkMagic (pw ^. walletProtocolMagic)
     res <- getWalletCredentials pw
     foreignPendings <- foreignPendingByAccount <$> getWalletSnapshot pw
     return $ case res of
          [] -> Nothing
-         xs -> Just $ map (\b -> first (b ^. rbContext,) $ prefilterBlock nm foreignPendings b xs) bs
+         xs -> Just $ map (\b -> first (b ^. rbContext,) $ prefilterBlock foreignPendings b xs) bs
 
 data BackfillFailed
     = SuccessorChanged BlockContext (Maybe BlockContext)

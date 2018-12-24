@@ -43,7 +43,7 @@ getWalletCredentials pw = do
       forM (walletIds snapshot) $ \walletId ->
         aux walletId <$> Keystore.lookup nm walletId (pw ^. walletKeystore)
     unless (null missing) $ (pw ^. walletLogMessage) Error (errMissing missing)
-    return $ map (\(rootId, esk) -> (rootId, esk)) creds
+    return creds
   where
     nm :: NetworkMagic
     nm = makeNetworkMagic (pw ^. walletProtocolMagic)

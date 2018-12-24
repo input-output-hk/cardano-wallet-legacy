@@ -27,9 +27,9 @@ import           Data.Acid.Advanced (update')
 
 import           Pos.Core (Address, Timestamp)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
-import           Pos.Crypto (EncryptedSecretKey, HDPassphrase, PassPhrase,
-                     PublicKey, changeEncPassphrase, checkPassMatches,
-                     emptyPassphrase, firstHardened, safeDeterministicKeyGen)
+import           Pos.Crypto (EncryptedSecretKey, PassPhrase, PublicKey,
+                     changeEncPassphrase, checkPassMatches, emptyPassphrase,
+                     firstHardened, safeDeterministicKeyGen)
 
 import           Cardano.Mnemonic (Mnemonic)
 import qualified Cardano.Mnemonic as Mnemonic
@@ -47,8 +47,6 @@ import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel,
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
-import           Cardano.Wallet.Kernel.Decrypt (decryptHdLvl2DerivationPath,
-                     eskToWalletDecrCredentials)
 import           Cardano.Wallet.Kernel.EosWalletId (genEosWalletId)
 import           Cardano.Wallet.Kernel.Internal (PassiveWallet, walletKeystore,
                      walletProtocolMagic, wallets)
@@ -308,8 +306,6 @@ createWalletHdRnd pw hasSpendingPassword defaultCardanoAddress name assuranceLev
                                 assuranceLevel
                                 created
 
-        hdPass = fst $ eskToWalletDecrCredentials nm esk
-
         -- Atomically generate a new wallet with a default account & optional address
         doCreateOrRestore :: Maybe HdAddress -> IO (Either HD.CreateHdRootError HdRoot)
         doCreateOrRestore addr_ = do
@@ -327,7 +323,7 @@ createWalletHdRnd pw hasSpendingPassword defaultCardanoAddress name assuranceLev
             -- this fails, we consider it an error.
             maybe (return $ Left HD.CreateHdRootDefaultAddressDerivationFailed)
                   (doCreateOrRestore . Just)
-                  (defaultHdAddressWith hdPass rootId addr)
+                  (defaultHdAddressWith esk rootId addr)
     where
         hdSpendingPassword :: InDb Timestamp -> HD.HasSpendingPassword
         hdSpendingPassword created =
@@ -346,18 +342,15 @@ defaultHdAddress nm esk spendingPassword rootId =
         hdAddressId = HdAddressId hdAccountId (HdAddressIx firstHardened)
     in newHdAddress nm esk spendingPassword hdAccountId hdAddressId
 
+
 -- | Given a Cardano 'Address', it returns a default 'HdAddress' at a fixed
 -- and predictable generation path.
--- module Cardano.Wallet.Kernel.Decrypt
-defaultHdAddressWith :: HDPassphrase
+defaultHdAddressWith :: EncryptedSecretKey
                      -> HD.HdRootId
                      -> Address
                      -> Maybe HdAddress
-defaultHdAddressWith hdPass rootId cardanoAddress = do
-    (hdAccountIx, hdAddressIx) <- decryptHdLvl2DerivationPath hdPass cardanoAddress
-    let hdAccountId = HdAccountId rootId hdAccountIx
-        hdAddressId = HdAddressId hdAccountId hdAddressIx
-    pure $ HD.HdAddress hdAddressId (InDb cardanoAddress)
+defaultHdAddressWith esk rootId addr =
+    fst $ HD.isOurs addr [(rootId, esk)]
 
 defaultHdAccountId :: HdRootId -> HdAccountId
 defaultHdAccountId rootId = HdAccountId rootId (HdAccountIx firstHardened)
