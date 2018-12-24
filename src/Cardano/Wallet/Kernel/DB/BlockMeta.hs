@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingStrategies         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE StandaloneDeriving         #-}
@@ -8,12 +9,8 @@ module Cardano.Wallet.Kernel.DB.BlockMeta (
     BlockMeta(..)
   , AddressMeta(..)
   , addressMeta
-  , emptyBlockMeta
     -- * Local block metadata
   , LocalBlockMeta(..)
-  , emptyLocalBlockMeta
-  , appendBlockMeta
-  , appendLocalBlockMeta
     -- ** Lenses
   , addressMetaIsChange
   , addressMetaIsUsed
@@ -36,7 +33,6 @@ import qualified Pos.Core as Core
 
 import           Cardano.Wallet.Kernel.DB.InDb
 
-import           Data.Semigroup (Semigroup)
 
 {-------------------------------------------------------------------------------
   Address metadata
@@ -75,9 +71,18 @@ data BlockMeta = BlockMeta {
       -- | Address metadata
     , _blockMetaAddressMeta :: !(Map (InDb Core.Address) AddressMeta)
     } deriving Eq
-
 makeLenses ''BlockMeta
 deriveSafeCopy 1 'base ''BlockMeta
+
+-- In the typical case, we have 'BlockMeta' for the chain so far, then derive
+-- local blockmeta for the new block that just arrived and want to combine this
+-- with the existing 'BlockMeta'.
+instance Semigroup BlockMeta where
+    BlockMeta (InDb a1) b1 <> BlockMeta (InDb a2) b2 =
+        BlockMeta (InDb (a1 <> a2)) (Map.unionWith (<>) b1 b2)
+
+instance Monoid BlockMeta where
+    mempty = BlockMeta (InDb mempty) mempty
 
 -- | Address metadata for the specified address
 --
@@ -86,11 +91,6 @@ deriveSafeCopy 1 'base ''BlockMeta
 addressMeta :: Core.Address -> Lens' BlockMeta AddressMeta
 addressMeta addr = blockMetaAddressMeta . at (InDb addr) . non mempty
 
-emptyBlockMeta :: BlockMeta
-emptyBlockMeta = BlockMeta {
-      _blockMetaSlotId      = InDb Map.empty
-    , _blockMetaAddressMeta = Map.empty
-    }
 
 {-------------------------------------------------------------------------------
   Local block metadata
@@ -103,44 +103,11 @@ emptyBlockMeta = BlockMeta {
 -- 'BlockMeta' type is the same; 'LocalBlockMeta' serves merely as a marker that
 -- this data is potentially incomplete.
 newtype LocalBlockMeta = LocalBlockMeta { localBlockMeta :: BlockMeta }
-        deriving Eq
-
+        deriving stock Eq
+        deriving newtype (Semigroup, Monoid)
 makeWrapped ''LocalBlockMeta
-
 deriveSafeCopy 1 'base ''LocalBlockMeta
 
--- | Apply local block metadata
---
--- In the typical case, we have 'BlockMeta' for the chain so far, then derive
--- local blockmeta for the new block that just arrived and want to combine this
--- with the existing 'BlockMeta'.
-appendBlockMeta :: BlockMeta -> LocalBlockMeta -> BlockMeta
-appendBlockMeta cur (LocalBlockMeta new) = BlockMeta {
-        _blockMetaSlotId      = combineUsing (liftA2 Map.union)
-                                  _blockMetaSlotId
-      , _blockMetaAddressMeta = combineUsing (Map.unionWith (<>))
-                                  _blockMetaAddressMeta
-      }
-  where
-    combineUsing :: (a -> a -> a) -> (BlockMeta -> a) -> a
-    combineUsing op f = f cur `op` f new
-
--- | Apply local block metadata to local block metadata
---
--- During wallet restoration we may only have local block metadata available for
--- the most recent checkpoint. In this case, we have no choice but to apply
--- the new local block metadata to the running local block metadata.
---
--- See also 'applyBlockMeta'.
-appendLocalBlockMeta :: LocalBlockMeta -> LocalBlockMeta -> LocalBlockMeta
-appendLocalBlockMeta (LocalBlockMeta cur) = LocalBlockMeta . appendBlockMeta cur
-
--- | Empty local block metadata
---
--- This corresponds to the block metadata of blocks that do not contain
--- any information that is relevant to the wallet.
-emptyLocalBlockMeta :: LocalBlockMeta
-emptyLocalBlockMeta = LocalBlockMeta emptyBlockMeta
 
 {-------------------------------------------------------------------------------
   Pretty-printing

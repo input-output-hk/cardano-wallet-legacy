@@ -140,7 +140,7 @@ initCheckpoint utxo = Checkpoint {
                                         Core.utxoBalance utxo
     , _checkpointPending     = Pending.empty
     , _checkpointForeign     = Pending.empty
-    , _checkpointBlockMeta   = emptyBlockMeta
+    , _checkpointBlockMeta   = mempty
     , _checkpointContext     = Strict.Nothing
     }
 
@@ -175,7 +175,7 @@ makeLenses ''PartialCheckpoint
 -- for all blocks /after/ the initial partial checkpoint, and we have (complete)
 -- block metadata for all historical checkpoints that we recover, but this is
 -- only checkpoint for which we have no block metadata at all. Therefore we set
--- the block metadata to 'emptyBlockMeta'. Then during restoration when we are
+-- the block metadata to 'mempty'. Then during restoration when we are
 -- recovering  historical checkpoints, we don't stop until the historical
 -- checkpoints /overlap/ one block with the partial checkpoints, so that the
 -- block metadata of this initial partial checkpoint is not used.
@@ -225,13 +225,10 @@ toFullCheckpoint prevBlockMeta PartialCheckpoint{..} = Checkpoint {
       _checkpointUtxo        =             _pcheckpointUtxo
     , _checkpointUtxoBalance =             _pcheckpointUtxoBalance
     , _checkpointPending     =             _pcheckpointPending
-    , _checkpointBlockMeta   =    withPrev _pcheckpointBlockMeta
+    , _checkpointBlockMeta   = prevBlockMeta <> localBlockMeta _pcheckpointBlockMeta
     , _checkpointContext     = Strict.Just _pcheckpointContext
     , _checkpointForeign     =             _pcheckpointForeign
     }
-  where
-    withPrev :: LocalBlockMeta -> BlockMeta
-    withPrev = appendBlockMeta prevBlockMeta
 
 {-------------------------------------------------------------------------------
   Checkpoints Wrapper
