@@ -115,7 +115,7 @@ prepareFixtures nm initialBalance toPay = do
         liftIO $ Keystore.insert newRootId esk keystore
         let pw = Kernel.walletPassive aw
 
-        let accounts    = Kernel.prefilterUtxo nm newRootId esk utxo'
+        let accounts    = Kernel.prefilterUtxo newRootId esk utxo'
             hdAccountId = Kernel.defaultHdAccountId newRootId
             hdAddress   = Kernel.defaultHdAddress nm esk emptyPassphrase newRootId
 

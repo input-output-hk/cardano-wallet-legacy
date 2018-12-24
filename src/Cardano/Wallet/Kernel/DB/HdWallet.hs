@@ -95,6 +95,9 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
     -- * General-utility functions
   , eskToHdRootId
   , pkToHdRootId
+    -- * IsOurs
+  , IsOurs(..)
+  , ourAddresses
   ) where
 
 import           Universum hiding ((:|))
@@ -111,9 +114,11 @@ import           Formatting (bprint, build, (%))
 import qualified Formatting.Buildable
 import           Serokell.Util (listJson)
 
+import           Pos.Chain.Txp (TxOut (..), TxOutAux (..))
 import qualified Pos.Core as Core
 import           Pos.Core.Chrono (NewestFirst (..))
 import           Pos.Core.NetworkMagic (NetworkMagic (..))
+import           Pos.Crypto (HDPassphrase)
 import qualified Pos.Crypto as Core
 
 import           Cardano.Wallet.API.V1.Types (WalAddress (..))
@@ -121,7 +126,7 @@ import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.Spec
 import           Cardano.Wallet.Kernel.DB.Util.AcidState
-import           Cardano.Wallet.Kernel.DB.Util.IxSet
+import           Cardano.Wallet.Kernel.DB.Util.IxSet hiding (foldl')
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet hiding (Indexable)
 import qualified Cardano.Wallet.Kernel.DB.Util.Zoomable as Z
 import           Cardano.Wallet.Kernel.NodeStateAdaptor (SecurityParameter (..))
@@ -199,6 +204,44 @@ deriveSafeCopy 1 'base ''HdAddressIx
 deriveSafeCopy 1 'base ''AssuranceLevel
 deriveSafeCopy 1 'base ''HasSpendingPassword
 
+
+{-------------------------------------------------------------------------------
+  Address relationship: isOurs?
+-------------------------------------------------------------------------------}
+
+class IsOurs s where
+    isOurs :: Core.Address -> s -> (Maybe HdAddress, s)
+
+-- | NOTE: We could modify the given state here to actually store decrypted
+-- addresses in a `Map` to trade a decryption against a map lookup for already
+-- decrypted addresses.
+instance IsOurs [(HdRootId, Core.EncryptedSecretKey)] where
+    isOurs addr s = (,s) $ foldl' (<|>) Nothing $ flip map s $ \(rootId, esk) -> do
+        (accountIx, addressIx) <- decryptHdLvl2DerivationPath (eskToHdPassphrase esk) addr
+        let accId = HdAccountId rootId accountIx
+        let addrId = HdAddressId accId addressIx
+        return $ HdAddress addrId (InDb addr)
+
+-- | Extract our addresses from block outputs.
+ourAddresses
+    :: [TxOutAux]
+    -> [(HdRootId, Core.EncryptedSecretKey)]
+    -> [HdAddress]
+ourAddresses outs = evalState $
+    fmap catMaybes $ mapM (state . isOurs . txOutAddress . toaOut) outs
+
+decryptHdLvl2DerivationPath
+    :: Core.HDPassphrase
+    -> Core.Address
+    -> Maybe (HdAccountIx, HdAddressIx)
+decryptHdLvl2DerivationPath hdPass addr = do
+    hdPayload <- Core.aaPkDerivationPath $ Core.addrAttributesUnwrapped addr
+    derPath <- Core.unpackHDAddressAttr hdPass hdPayload
+    case derPath of
+        [a,b] -> Just (HdAccountIx a, HdAddressIx b)
+        _     -> Nothing
+
+
 {-------------------------------------------------------------------------------
   General-utility functions
 -------------------------------------------------------------------------------}
@@ -210,6 +253,9 @@ deriveSafeCopy 1 'base ''HasSpendingPassword
 -- TODO: This may well disappear as part of [CBR-325].
 eskToHdRootId :: NetworkMagic -> Core.EncryptedSecretKey -> HdRootId
 eskToHdRootId nm = HdRootId . InDb . (Core.makePubKeyAddressBoot nm) . Core.encToPublic
+
+eskToHdPassphrase :: Core.EncryptedSecretKey -> HDPassphrase
+eskToHdPassphrase = Core.deriveHDPassphrase . Core.encToPublic
 
 pkToHdRootId :: NetworkMagic -> Core.PublicKey -> HdRootId
 pkToHdRootId nm = HdRootId . InDb . (Core.makePubKeyAddressBoot nm)
@@ -350,7 +396,7 @@ data HdAddress = HdAddress {
 
       -- | The actual address
     , _hdAddressAddress :: !(InDb Core.Address)
-    } deriving Eq
+    } deriving (Eq, Ord)
 
 
 
@@ -806,18 +852,17 @@ zoomOrCreateHdAccount checkRootExists newAccount accId upd = do
     zoomCreate (return newAccount) (hdWalletsAccounts . at accId) $ upd
 
 -- | Variation on 'zoomHdAddressId' that creates the 'HdAddress' if it doesn't exist
---
--- Precondition: @newAddress ^. hdAddressId == AddressId@
 zoomOrCreateHdAddress :: (HdAccountId -> Update' e HdWallets ())
                       -> HdAddress
-                      -> HdAddressId
                       -> Update' e HdAddress a
                       -> Update' e HdWallets a
-zoomOrCreateHdAddress checkAccountExists newAddress addrId upd = do
+zoomOrCreateHdAddress checkAccountExists newAddress upd = do
     checkAccountExists accId
     zoomCreate createAddress
                (hdWalletsAddresses . at addrId) . zoom ixedIndexed $ upd
     where
+        addrId :: HdAddressId
+        addrId = newAddress ^. hdAddressId
         accId :: HdAccountId
         accId = addrId ^. hdAddressIdParent
 

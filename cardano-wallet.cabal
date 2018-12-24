@@ -218,7 +218,6 @@ library
       Cardano.Wallet.Kernel.DB.Util.AcidState
       Cardano.Wallet.Kernel.DB.Util.IxSet
       Cardano.Wallet.Kernel.DB.Util.Zoomable
-      Cardano.Wallet.Kernel.Decrypt
       Cardano.Wallet.Kernel.Diffusion
       Cardano.Wallet.Kernel.Internal
       Cardano.Wallet.Kernel.Invariants
