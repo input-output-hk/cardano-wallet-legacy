@@ -8,7 +8,8 @@ import           Universum
 
 import           Cardano.Crypto.Wallet (generate)
 import           Pos.Crypto (EncryptedSecretKey, PassPhrase (..), PublicKey,
-                     checkPassMatches, emptySalt, mkEncSecretWithSaltUnsafe)
+                     checkPassMatches, emptySalt, isHardened,
+                     mkEncSecretWithSaltUnsafe)
 
 import           Cardano.Wallet.Kernel.Ed25519Bip44 (ChangeChain,
                      deriveAddressPrivateKey, deriveAddressPublicKey,
@@ -28,15 +29,12 @@ prop_cannotDeriveAddressPublicKeyForBigIx
     -> ChangeChain
     -> Word32
     -> Property
-prop_cannotDeriveAddressPublicKeyForBigIx accountPublicKey change addressIx = property $
-    if addressIx >= maxIx
+prop_cannotDeriveAddressPublicKeyForBigIx accPubKey change addressIx = property $
+    if isHardened addressIx
         then isNothing addrPubKey
         else isJust addrPubKey
   where
-    addrPubKey = deriveAddressPublicKey accountPublicKey change addressIx
-    -- This is maximum value for soft derivation (only soft derivation
-    -- is allowed to derive public key from public key).
-    maxIx = 0x80000000
+    addrPubKey = deriveAddressPublicKey accPubKey change addressIx
 
 -- | Deriving address public key should be equal to deriving address
 -- private key and extracting public key from it (works only for non-hardened child keys).
@@ -63,10 +61,9 @@ prop_deriveAddressPublicFromAccountPrivateKey (InfiniteList seed _) passPhrase@(
     -- FIXME (akegalj): instead of doing this create generator for non-hardened keys.
     -- This should in average discard 50% of examples and will thus be
     -- 50% slower.
-    isNonHardened addressIx ==> (addrPubKey1 === addrPubKey2)
+    not (isHardened addressIx) ==> (addrPubKey1 === addrPubKey2)
   where
     accEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
-    isNonHardened = (< 0x80000000)
     -- N(CKDpriv((kpar, cpar), i))
     addrPubKey1 =
         derivePublicKey <$> deriveAddressPrivateKey
@@ -93,7 +90,7 @@ prop_deriveAddressPrivateKeyWrongPassword passPhrase accEncPrvKey changeChain ad
     -- There is a really small possibility we will generate
     -- two equal passwords - so this precondition will rarely fail
     -- TODO (akegalj): check coverage with quickcheck @cover@
-    (isNothing $ checkPassMatches passPhrase accEncPrvKey) ==> property (isJust addrPrvKey)
+    isNothing (checkPassMatches passPhrase accEncPrvKey) ==> property (isJust addrPrvKey)
   where
     addrPrvKey =
         deriveAddressPrivateKey
