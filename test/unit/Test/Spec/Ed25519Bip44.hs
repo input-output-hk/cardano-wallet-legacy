@@ -79,6 +79,25 @@ prop_deriveAddressPublicFromAccountPrivateKey (InfiniteList seed _) passPhrase@(
             addressIx
 
 -- | Deriving address private key should always fail
+-- if account index is hardened
+prop_deriveAddressPrivateKeyNoHardened
+    :: InfiniteList Word8
+    -> PassPhrase
+    -> ChangeChain
+    -> Word32
+    -> Property
+prop_deriveAddressPrivateKeyNoHardened (InfiniteList seed _) passPhrase@(PassPhrase passBytes) changeChain addressIx =
+    isHardened addressIx ==> property (isJust addrPrvKey)
+  where
+    accEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
+    addrPrvKey =
+        deriveAddressPrivateKey
+            passPhrase
+            accEncPrvKey
+            changeChain
+            addressIx
+
+-- | Deriving address private key should always fail
 -- if password differs from account private key password
 prop_deriveAddressPrivateKeyWrongPassword
     :: PassPhrase
@@ -102,10 +121,12 @@ prop_deriveAddressPrivateKeyWrongPassword passPhrase accEncPrvKey changeChain ad
 spec :: Spec
 spec = describe "Ed25519Bip44" $ do
     describe "Deriving address public key" $ do
-        it "fails if address index is too big" $
+        it "fails if address index is too big (hardened)" $
             property prop_cannotDeriveAddressPublicKeyForBigIx
         it "equals to deriving address private key and extracting public part from it: N(CKDpriv((kpar, cpar), i)) === CKDpub(N(kpar, cpar), i)" $
             property prop_deriveAddressPublicFromAccountPrivateKey
     describe "Deriving address private key" $ do
         it "fails if password differs" $
             expectFailure prop_deriveAddressPrivateKeyWrongPassword
+        it "fails if address index is hardened" $
+            expectFailure prop_deriveAddressPrivateKeyNoHardened

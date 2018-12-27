@@ -23,7 +23,7 @@ module Cardano.Wallet.Kernel.Ed25519Bip44
 import           Universum
 
 import           Pos.Crypto (EncryptedSecretKey (..), PassPhrase,
-                     PublicKey (..), checkPassMatches, encToPublic)
+                     PublicKey (..), checkPassMatches, encToPublic, isHardened)
 
 import           Cardano.Crypto.Wallet (DerivationScheme (DerivationScheme2),
                      deriveXPrv, deriveXPub)
@@ -61,9 +61,11 @@ derivePublicKey = encToPublic
 deriveAddressPublicKey
     :: PublicKey       -- Account Public Key
     -> ChangeChain     -- Change chain
-    -> Word32          -- Address Key Index
+    -> Word32          -- Non-hardened Address Key Index
     -> Maybe PublicKey -- Address Public Key
 deriveAddressPublicKey (PublicKey accXPub) changeChain addressIx = do
+    -- address index should be non hardened
+    guard (not $ isHardened addressIx)
     -- lvl4 derivation in bip44 is derivation of change chain
     changeXPub <- deriveXPub DerivationScheme2 accXPub (changeToIndex changeChain)
     -- lvl5 derivation in bip44 is derivation of address chain
@@ -76,11 +78,13 @@ deriveAddressPrivateKey
     :: PassPhrase               -- Passphrase used to encrypt Account Private Key
     -> EncryptedSecretKey       -- Account Private Key
     -> ChangeChain              -- Change chain
-    -> Word32                   -- Address Key Index
+    -> Word32                   -- Non-hardened Address Key Index
     -> Maybe EncryptedSecretKey -- Address Private Key
 deriveAddressPrivateKey passPhrase accEncPrvKey@(EncryptedSecretKey accXPrv passHash) changeChain addressIx = do
     -- enforce valid PassPhrase check
     checkPassMatches passPhrase accEncPrvKey
+    -- address index should be non hardened
+    guard (not $ isHardened addressIx)
         -- lvl4 derivation in bip44 is derivation of change chain
     let changeXPrv = deriveXPrv DerivationScheme2 passPhrase accXPrv (changeToIndex changeChain)
         -- lvl5 derivation in bip44 is derivation of address chain
