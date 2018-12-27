@@ -459,7 +459,7 @@ expectWalletError
     -> m ()
 expectWalletError e' = \case
     Right a -> wantedErrorButSuccess a
-    Left e  -> (ClientWalletError e') `shouldBe` e
+    Left e  -> e `shouldBe` (ClientWalletError e')
 
 
 -- | Verifies that the response is errored from a failed JSON validation
