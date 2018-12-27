@@ -80,13 +80,13 @@ prop_deriveAddressPublicFromAccountPrivateKey (InfiniteList seed _) passPhrase@(
 
 -- | Deriving address private key should always fail
 -- if account index is hardened
-prop_deriveAddressPrivateKeyNoHardened
+prop_deriveAddressPrivateKeyHardened
     :: InfiniteList Word8
     -> PassPhrase
     -> ChangeChain
     -> Word32
     -> Property
-prop_deriveAddressPrivateKeyNoHardened (InfiniteList seed _) passPhrase@(PassPhrase passBytes) changeChain addressIx =
+prop_deriveAddressPrivateKeyHardened (InfiniteList seed _) passPhrase@(PassPhrase passBytes) changeChain addressIx =
     isHardened addressIx ==> property (isJust addrPrvKey)
   where
     accEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
@@ -129,4 +129,4 @@ spec = describe "Ed25519Bip44" $ do
         it "fails if password differs" $
             expectFailure prop_deriveAddressPrivateKeyWrongPassword
         it "fails if address index is hardened" $
-            expectFailure prop_deriveAddressPrivateKeyNoHardened
+            expectFailure prop_deriveAddressPrivateKeyHardened
