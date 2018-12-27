@@ -6,14 +6,18 @@ module Test.Spec.Ed25519Bip44 (spec) where
 
 import           Universum
 
-import           Pos.Crypto (PublicKey)
+import           Cardano.Crypto.Wallet (generate)
+import           Pos.Crypto (PassPhrase (..), PublicKey, emptySalt, isHardened,
+                     mkEncSecretWithSaltUnsafe)
 
 import           Cardano.Wallet.Kernel.Ed25519Bip44 (ChangeChain,
-                     deriveAddressPublicKey)
+                     deriveAccountPrivateKey, deriveAddressPublicKey)
 
+import qualified Data.ByteString as BS
 import           Test.Hspec (Spec, describe, it)
 import           Test.Pos.Core.Arbitrary ()
-import           Test.QuickCheck (Property, property)
+import           Test.QuickCheck (InfiniteList (..), Property, expectFailure,
+                     property, (==>))
 
 -- | It proves that we cannot derive address public key
 -- if address index is too big. We should be able to derive
@@ -33,7 +37,29 @@ prop_cannotDeriveAddressPublicKeyForBigIx accountPublicKey change addressIx = pr
     -- is allowed to derive public key from public key).
     maxIx = 0x8000000
 
+-- | Deriving account private key should always fail
+-- if account index is non-hardened
+-- TODO (akegalj): this property is very weak
+prop_deriveAccountPrivateKeyNotHardened
+    :: InfiniteList Word8
+    -> PassPhrase
+    -> Word32
+    -> Property
+prop_deriveAccountPrivateKeyNotHardened (InfiniteList seed _) passPhrase@(PassPhrase passBytes) accountIx =
+    not (isHardened accountIx) ==> property (isJust accPrvKey)
+  where
+    masterEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
+    accPrvKey =
+        deriveAccountPrivateKey
+            masterEncPrvKey
+            passPhrase
+            accountIx
+
 spec :: Spec
 spec = describe "Ed25519Bip44" $ do
-    it "Derivation fails if address index is too big" $
-        property prop_cannotDeriveAddressPublicKeyForBigIx
+    describe "Deriving address public key" $ do
+        it "fails if address index is too big" $
+            property prop_cannotDeriveAddressPublicKeyForBigIx
+    describe "Deriving account private key" $ do
+        it "fails if account index is non-hardened" $
+            expectFailure prop_deriveAccountPrivateKeyNotHardened
