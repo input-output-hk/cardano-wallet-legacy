@@ -97,11 +97,11 @@ derivePublicKey = encToPublic
 -- | Derives account private key from the given master private key,
 -- using derivation scheme 2 (please see 'cardano-crypto' package).
 deriveAccountPrivateKey
-    :: EncryptedSecretKey       -- Master Private Key
-    -> PassPhrase               -- Passphrase used to encrypt Master Private Key
+    :: PassPhrase               -- Passphrase used to encrypt Master Private Key
+    -> EncryptedSecretKey       -- Master Private Key
     -> Word32                   -- Hardened Account Key Index
     -> Maybe EncryptedSecretKey -- Account Private Key
-deriveAccountPrivateKey masterEncPrvKey@(EncryptedSecretKey masterXPrv passHash) passPhrase accountIx = do
+deriveAccountPrivateKey passPhrase masterEncPrvKey@(EncryptedSecretKey masterXPrv passHash) accountIx = do
     -- enforce valid PassPhrase check
     checkPassMatches passPhrase masterEncPrvKey
     -- account index should be hardened

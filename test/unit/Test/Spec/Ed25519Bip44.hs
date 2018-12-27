@@ -51,8 +51,8 @@ prop_deriveAccountPrivateKeyNotHardened (InfiniteList seed _) passPhrase@(PassPh
     masterEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
     accPrvKey =
         deriveAccountPrivateKey
-            masterEncPrvKey
             passPhrase
+            masterEncPrvKey
             accountIx
 
 spec :: Spec
