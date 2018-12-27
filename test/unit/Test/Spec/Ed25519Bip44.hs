@@ -36,7 +36,7 @@ prop_cannotDeriveAddressPublicKeyForBigIx accountPublicKey change addressIx = pr
     addrPubKey = deriveAddressPublicKey accountPublicKey change addressIx
     -- This is maximum value for soft derivation (only soft derivation
     -- is allowed to derive public key from public key).
-    maxIx = 0x8000000
+    maxIx = 0x80000000
 
 -- | Deriving address public key should be equal to deriving address
 -- private key and extracting public key from it (works only for non-hardened child keys).
