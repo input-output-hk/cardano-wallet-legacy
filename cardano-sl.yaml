@@ -30,10 +30,10 @@ packages:
   commit: d094be301195fcd8ab864d793f114970426a4478
 
 - git: https://github.com/input-output-hk/cardano-report-server.git
-  commit: 9b96874d0f234554a5779d98762cc0a6773a532a
+  commit: 93f2246c54436e7f98cc363b4e0f8f1cb5e78717
 
-- git: https://github.com/angerman/cardano-crypto
-  commit: 1e436fe8b69e7c8b399937db394d99229fcd775c
+- git: https://github.com/input-output-hk/cardano-crypto
+  commit: 59eb60b3a227c615736db9bb1609fd5c20109098
 
 - git: https://github.com/andrewthad/haskell-ip
   commit: 9bb453139aa82cc973125091800422a523e1eb8f
