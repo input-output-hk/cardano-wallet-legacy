@@ -54,9 +54,9 @@ defaultIntegrationEnv = Map.fromList
     , ("WALLET_DOC_ADDRESS", "127.0.0.1:8190")
     , ("WALLET_DB_PATH", "./state-integration/wallet-db/edge")
     , ("WALLET_REBUILD_DB", "True")
-    , ("NODE_TLS_CLIENT_CERT", "./state-integration/relay/client.crt")
-    , ("NODE_TLS_KEY", "./state-integration/relay/client.key")
-    , ("NODE_TLS_CA_CERT", "./state-integration/relay/ca.crt")
+    , ("NODE_TLS_CLIENT_CERT", "./state-integration/tls/relay/client.crt")
+    , ("NODE_TLS_KEY", "./state-integration/tls/relay/client.key")
+    , ("NODE_TLS_CA_CERT", "./state-integration/tls/relay/ca.crt")
     ]
 
 -- | Start an integration cluster. Quite identical to the original "start cluster".
@@ -83,7 +83,7 @@ startCluster nodes = do
                 void (init genesis >> init topology >> init logger)
                 yield Nothing >> startNode node nodeEnv
             NodeRelay -> do
-                void (init topology >> init logger)
+                void (init topology >> init logger >> init tls)
                 yield Nothing >> startNode node nodeEnv
             NodeEdge -> do
                 manager <- init topology >> init logger >> init tls
