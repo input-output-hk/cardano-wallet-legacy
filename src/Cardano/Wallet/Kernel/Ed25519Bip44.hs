@@ -25,16 +25,11 @@ module Cardano.Wallet.Kernel.Ed25519Bip44
 import           Universum
 
 import           Pos.Crypto (EncryptedSecretKey (..), PassPhrase (..),
-                     PublicKey (..), checkPassMatches, encToPublic)
+                     PublicKey (..), checkPassMatches, encToPublic, isHardened)
 
 import           Cardano.Crypto.Wallet (DerivationScheme (DerivationScheme2),
                      deriveXPrv, deriveXPub)
 import           Test.QuickCheck (Arbitrary (..), elements)
-
--- | Each extended key has 2^31 normal child keys, and 2^31 hardened child keys.
--- Each of these child keys has an index. The normal child keys use indices 0 through 2^31-1. The hardened child keys use indices 2^31 through 2^32-1.
-isHardened :: Word32 -> Bool
-isHardened = (>= 0x8000000)
 
 -- | Purpose is a constant set to 44' (or 0x8000002C) following the BIP43 recommendation.
 -- It indicates that the subtree of this node is used according to this specification.
