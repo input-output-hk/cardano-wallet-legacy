@@ -80,7 +80,7 @@ startCluster nodes = do
         let (genesis, topology, logger, tls) = artifacts
         case nodeType of
             NodeCore -> do
-                void (init genesis >> init topology >> init logger)
+                void (init genesis >> init topology >> init logger >> init tls)
                 yield Nothing >> startNode node nodeEnv
             NodeRelay -> do
                 void (init topology >> init logger >> init tls)
