@@ -55,22 +55,19 @@ import           Cardano.Wallet.Kernel.Util.Core
 -- the block that are relevant to the wallet.
 data PrefilteredBlock = PrefilteredBlock {
       -- | Relevant inputs
-      pfbInputs        :: !(Set TxIn)
-
-      -- | Relevant foreign inputs
-    , pfbForeignInputs :: !(Set TxIn)
+      pfbInputs  :: !(Set TxIn)
 
       -- | Relevant outputs
-    , pfbOutputs       :: !Utxo
+    , pfbOutputs :: !Utxo
 
       -- | all output addresses present in the Utxo
-    , pfbAddrs         :: ![HdAddress]
+    , pfbAddrs   :: ![HdAddress]
 
       -- | Prefiltered block metadata
-    , pfbMeta          :: !LocalBlockMeta
+    , pfbMeta    :: !LocalBlockMeta
 
       -- | Block context
-    , pfbContext       :: !BlockContext
+    , pfbContext :: !BlockContext
     }
 
 deriveSafeCopy 1 'base ''PrefilteredBlock
@@ -83,7 +80,6 @@ deriveSafeCopy 1 'base ''PrefilteredBlock
 emptyPrefilteredBlock :: BlockContext -> PrefilteredBlock
 emptyPrefilteredBlock context = PrefilteredBlock {
       pfbInputs         = Set.empty
-    , pfbForeignInputs  = Set.empty
     , pfbOutputs        = Map.empty
     , pfbAddrs          = []
     , pfbMeta           = mempty
@@ -159,57 +155,14 @@ prefilterTx wKey tx = ((prefInps',prefOuts'),metas)
 --
 -- NOTE: we can rely on a Monoidal fold here to combine the maps
 -- 'Map HdAccountId a' since the accounts will be unique accross wallet keys.
--- The function decomposes a resolved block into input and output transactions and meta for given wallets
--- In case of input transactions the two kinds are differentiated:
--- (a) the input transactions belonging to some wallet
--- (b) the foreign transactions.
--- The foreign transactions are identified by picking the input transactions from the resolved one
--- that happen to be in foreign pending set.
 prefilterTxForWallets
     :: [(HdRootId, EncryptedSecretKey)]
-    -> Map TxIn HdAccountId
     -> ResolvedTx
-    -> ((Map HdAccountId (Set (TxIn, TxId), Set (TxIn, TxId))
+    -> ((Map HdAccountId (Set (TxIn, TxId))
         , Map HdAccountId UtxoSummaryRaw)
        , [TxMeta])
-prefilterTxForWallets wKeys foreignPendingByTransaction tx =
-    ((extend inputsE foreignInputsE, outputs),meta)
-  where
-    ((inputs,outputs),meta) = mconcat $ map ((flip prefilterTx) tx) wKeys
-
-    txId :: TxId
-    txId = fst $ tx ^. rtxMeta . fromDb
-
-    --NOTE: to find the foreign inputs in the transaction, we need to look at _all_ the inputs, since they will not be present in the prefiltered inputs
-    allInputs :: Set (TxIn, TxId)
-    allInputs = Set.fromList $ map ((, txId) . fst) $ toList (tx ^. rtxInputs  . fromDb)
-
-    foreignInputs :: Map HdAccountId (Set (TxIn, TxId))
-    foreignInputs = Map.map (Set.map (, txId)) $ reindexByAccount $
-                        Map.filterWithKey
-                            (\txin _ -> Set.member (txin, txId) allInputs)
-                            foreignPendingByTransaction
-
-    inputsE, foreignInputsE :: Map HdAccountId (Set (TxIn, TxId), Set (TxIn, TxId))
-    inputsE = Map.map (, Set.empty) inputs
-    foreignInputsE =  Map.map (Set.empty,) foreignInputs
-
-    extend
-        :: Map HdAccountId (Set (TxIn, TxId), Set (TxIn, TxId))
-        -> Map HdAccountId (Set (TxIn, TxId), Set (TxIn, TxId))
-        -> Map HdAccountId (Set (TxIn, TxId), Set (TxIn, TxId))
-    extend inputs_ foreignInputs_ =
-        Map.unionWith (\inp fInp -> (fst inp, snd fInp)) inputs_ foreignInputs_
-
-    reindexByAccount
-        :: Map TxIn HdAccountId
-        -> Map HdAccountId (Set TxIn)
-    reindexByAccount byTxIn =
-        Map.fromListWith Set.union $ Map.elems $ Map.mapWithKey f byTxIn
-      where
-          f :: TxIn -> HdAccountId -> (HdAccountId, Set TxIn)
-          f txin accId = (accId, Set.singleton txin)
-
+prefilterTxForWallets wKeys tx =
+    mconcat $ map ((flip prefilterTx) tx) wKeys
 
 -- | Prefilter inputs of a transaction
 prefilterInputs :: (HdRootId, EncryptedSecretKey)
@@ -317,43 +270,32 @@ prefilterBlock
     -> ResolvedBlock
     -> [(HdRootId, EncryptedSecretKey)]
     -> (Map HdAccountId PrefilteredBlock, [TxMeta])
-prefilterBlock foreignPendingByAccount block wKeys =
+prefilterBlock foreignInps block wKeys =
       (Map.fromList
-    $ map (mkPrefBlock (block ^. rbContext) inpAll outAll)
+    $ map (mkPrefBlock (block ^. rbContext) foreignInps inpAll outAll)
     $ Set.toList accountIds
-    , metas)
+    , concat metas)
   where
-    foreignPendingByTransaction :: Map TxIn HdAccountId
-    foreignPendingByTransaction = reindexByTransaction $ Map.map Pending.txIns foreignPendingByAccount
-
-    inps :: [Map HdAccountId (Set (TxIn, TxId), Set (TxIn, TxId))]
+    (ios, metas) = unzip $ map (prefilterTxForWallets wKeys) (block ^. rbTxs)
+    inps :: [Map HdAccountId (Set (TxIn, TxId))]
     outs :: [Map HdAccountId UtxoSummaryRaw]
-    (ios, conMetas) = unzip $ map (prefilterTxForWallets wKeys foreignPendingByTransaction) (block ^. rbTxs)
     (inps, outs) = unzip ios
-    metas = concat conMetas
-
-    inpAll :: Map HdAccountId (Set (TxIn, TxId), Set (TxIn, TxId))
+    inpAll :: Map HdAccountId (Set (TxIn, TxId))
+    inpAll = Map.unionsWith Set.union inps
     outAll :: Map HdAccountId UtxoSummaryRaw
-    inpAll = Map.unionsWith (\pair1 pair2 -> (Set.union (fst pair1) (fst pair2),Set.union (snd pair1) (fst pair2))) inps
     outAll = Map.unionsWith Map.union outs
 
     accountIds = Map.keysSet inpAll `Set.union` Map.keysSet outAll
 
-    reindexByTransaction :: Map HdAccountId (Set TxIn) -> Map TxIn HdAccountId
-    reindexByTransaction byAccount = Map.fromList $ Set.toList $ Set.unions $ Map.elems $ Map.mapWithKey f byAccount
-        where
-            f :: HdAccountId -> Set TxIn -> Set (TxIn, HdAccountId)
-            f accId = Set.map (, accId)
-
 
 mkPrefBlock :: BlockContext
-            -> Map HdAccountId (Set (TxIn, TxId), Set (TxIn, TxId))
+            -> Map HdAccountId Pending
+            -> Map HdAccountId (Set (TxIn, TxId))
             -> Map HdAccountId (Map TxIn (TxOutAux, AddressSummary))
             -> HdAccountId
             -> (HdAccountId, PrefilteredBlock)
-mkPrefBlock context inps outs accId = (accId, PrefilteredBlock {
-        pfbInputs         = walletInps'
-      , pfbForeignInputs  = foreignInps'
+mkPrefBlock context foreignInps inps outs accId = (accId, PrefilteredBlock {
+        pfbInputs         = inps'
       , pfbOutputs        = outs'
       , pfbAddrs          = addrs'
       , pfbMeta           = blockMeta'
@@ -363,24 +305,15 @@ mkPrefBlock context inps outs accId = (accId, PrefilteredBlock {
         fromAddrSummary :: AddressSummary -> HdAddress
         fromAddrSummary AddressSummary{..} = initHdAddress addrSummaryId addrSummaryAddr
 
-        byAccountId accId'' def dict = fromMaybe def $ Map.lookup accId'' dict
+        byAccountId k def = fromMaybe def . Map.lookup k
 
-        walletInps = Map.map fst $
-                     Map.filter (not . Set.null . fst) inps
-        foreignInps = Map.map snd $
-                      Map.filter (not . Set.null . snd) inps
-        walletInps'           = Set.map fst  $ byAccountId accId Set.empty walletInps
-        foreignInps'          = Set.map fst  $ byAccountId accId Set.empty foreignInps
-
-        allInps = (Map.map fst inps)
-        inpsWithtxId = byAccountId accId Set.empty allInps
         -- this Set.map may reduce the number of elements. But this is okey, since we
         -- don't care about repetitions on txIds.
-
+        inps' = Set.map fst (byAccountId accId Set.empty inps) <> (maybe mempty Pending.txIns $ Map.lookup accId foreignInps)
+        inpsWithtxId = byAccountId accId Set.empty inps
         txIdsFromInputs = Set.map snd inpsWithtxId
         (outs' , addrsFromOutputs) = fromUtxoSummary (byAccountId accId Map.empty outs)
-
-        addrs'    = nub $ map fromAddrSummary addrsFromOutputs
+        addrs' = nub $ map fromAddrSummary addrsFromOutputs
         blockMeta' = mkBlockMeta (context ^. bcSlotId . fromDb) addrsFromOutputs txIdsFromInputs
 
 mkBlockMeta :: SlotId -> [AddressSummary] -> Set TxId -> LocalBlockMeta
@@ -455,10 +388,8 @@ instance Buildable PrefilteredBlock where
   build PrefilteredBlock{..} = bprint
     ( "PrefilteredBlock "
     % "{ inputs:  " % listJson
-    % "{ foreignInputs:  " % listJson
     % ", outputs: " % mapJson
     % "}"
     )
     (Set.toList pfbInputs)
-    (Set.toList pfbForeignInputs)
     pfbOutputs
