@@ -425,6 +425,7 @@ test-suite unit
     , time
     , time-units
     , universum
+    , unordered-containers
     , vector
 
   type:
@@ -482,6 +483,9 @@ test-suite unit
       Wallet.Prefiltered
       Wallet.Rollback.Basic
       Wallet.Rollback.Full
+
+      -- can be factored into a library later
+      Servant.JsendCompliance
 
 
 test-suite nightly

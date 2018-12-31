@@ -7,7 +7,7 @@ import           Cardano.Wallet.API.Response (ValidJSON)
 type API =
     "update"
     :> ( "apply"
-        :> Post '[ValidJSON] NoContent
+        :> Post '[ValidJSON] JSendNoContent
     :<|> "postpone"
-        :> Post '[ValidJSON] NoContent
+        :> Post '[ValidJSON] JSendNoContent
     )

@@ -68,7 +68,8 @@ postponeUpdate :: Handler NoContent
 postponeUpdate = pure NoContent
 
 resetWalletState :: PassiveWalletLayer IO -> Handler NoContent
-resetWalletState w = liftIO (WalletLayer.resetWalletState w) >> return NoContent
+resetWalletState w =
+    liftIO (WalletLayer.resetWalletState w) >> return NoContent
 
 -- | Imports a 'Wallet' from a backup.
 importWallet :: PassiveWalletLayer IO -> WalletImport -> Handler (APIResponse Wallet)

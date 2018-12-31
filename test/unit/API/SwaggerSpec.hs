@@ -23,6 +23,7 @@ import qualified Cardano.Wallet.API.V1.Swagger as Swagger
 import           Pos.Chain.Update (ApplicationName (..), SoftwareVersion (..))
 import           Pos.Util.CompileInfo (CompileTimeInfo (CompileTimeInfo),
                      gitRev)
+import           Servant.JsendCompliance (checkJsendCompliance)
 
 -- for vendored code
 import           Data.Aeson (ToJSON (..))
@@ -71,6 +72,8 @@ spec = modifyMaxSuccess (const 10) $ do
             for_
                 (IOMap.keys (swagger ^. definitions))
                 (`shouldSatisfy` noReservedCharacters)
+    describe "JSend Compliance" $
+        checkJsendCompliance (Proxy @ValidJSON) (Proxy @(V1API))
 
 noReservedCharacters :: Text -> Bool
 noReservedCharacters =
