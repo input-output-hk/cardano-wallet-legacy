@@ -21,18 +21,35 @@ import           Test.Pos.Core.Arbitrary ()
 import           Test.QuickCheck (InfiniteList (..), Property, expectFailure,
                      property, (.&&.), (===), (==>))
 
--- | It proves that we cannot derive address public key
--- if address index is too big. We should be able to derive
--- Address public key only with non-hardened address index
-prop_cannotDeriveAddressPublicKeyForBigIx
+-- | Deriving address public key should fail if address index
+-- is hardened. We should be able to derive Address public key
+-- only with non-hardened address index
+--
+-- FIXME: this property will fail because quickcheck will "Give up" on
+-- trying to satisfy the precondition. By default quickcheck prefers smaller
+-- values, so generator won't pick enough large values. This should be
+-- fixed with custom generator (TODO)
+--
+-- quickcheck also defines Large wrapper but it fails as well :/
+prop_cannotDeriveAddressPublicKeyForHardenedIx
     :: PublicKey
     -> ChangeChain
     -> Word32
     -> Property
-prop_cannotDeriveAddressPublicKeyForBigIx accPubKey change addressIx = property $
-    if isHardened addressIx
-        then isNothing addrPubKey
-        else isJust addrPubKey
+prop_cannotDeriveAddressPublicKeyForHardenedIx accPubKey change addressIx =
+    isHardened addressIx ==> isNothing addrPubKey
+  where
+    addrPubKey = deriveAddressPublicKey accPubKey change addressIx
+
+-- | Deriving address public key should succeed if address index
+-- is non-hardened.
+prop_deriveAddressPublicKeyForNonHardenedIx
+    :: PublicKey
+    -> ChangeChain
+    -> Word32
+    -> Property
+prop_deriveAddressPublicKeyForNonHardenedIx accPubKey change addressIx =
+    not (isHardened addressIx) ==> isJust addrPubKey
   where
     addrPubKey = deriveAddressPublicKey accPubKey change addressIx
 
@@ -87,7 +104,7 @@ prop_deriveAddressPrivateKeyHardened
     -> Word32
     -> Property
 prop_deriveAddressPrivateKeyHardened (InfiniteList seed _) passPhrase@(PassPhrase passBytes) changeChain addressIx =
-    isHardened addressIx ==> property (isJust addrPrvKey)
+    isHardened addressIx ==> isJust addrPrvKey
   where
     accEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
     addrPrvKey =
@@ -109,7 +126,7 @@ prop_deriveAddressPrivateKeyWrongPassword passPhrase accEncPrvKey changeChain ad
     -- There is a really small possibility we will generate
     -- two equal passwords - so this precondition will rarely fail
     -- TODO (akegalj): check coverage with quickcheck @cover@
-    isNothing (checkPassMatches passPhrase accEncPrvKey) ==> property (isJust addrPrvKey)
+    isNothing (checkPassMatches passPhrase accEncPrvKey) ==> isJust addrPrvKey
   where
     addrPrvKey =
         deriveAddressPrivateKey
@@ -121,8 +138,10 @@ prop_deriveAddressPrivateKeyWrongPassword passPhrase accEncPrvKey changeChain ad
 spec :: Spec
 spec = describe "Ed25519Bip44" $ do
     describe "Deriving address public key" $ do
-        it "fails if address index is too big (hardened)" $
-            property prop_cannotDeriveAddressPublicKeyForBigIx
+        it "fails if address index is hardened" $
+            property prop_cannotDeriveAddressPublicKeyForHardenedIx
+        it "fails if address index is non-hardened" $
+            property prop_deriveAddressPublicKeyForNonHardenedIx
         it "equals to deriving address private key and extracting public part from it: N(CKDpriv((kpar, cpar), i)) === CKDpub(N(kpar, cpar), i)" $
             property prop_deriveAddressPublicFromAccountPrivateKey
     describe "Deriving address private key" $ do
