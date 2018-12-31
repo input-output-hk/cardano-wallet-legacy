@@ -49,21 +49,36 @@ data WalletDBOptions = WalletDBOptions {
 -- Named with the suffix `Params` to honour other types of
 -- parameters like `NodeParams` or `SscParams`.
 data WalletBackendParams = WalletBackendParams
-    { enableMonitoringApi :: !Bool
+    { enableMonitoringApi     :: !Bool
     -- ^ Whether or not to run the monitoring API.
-    , monitoringApiPort   :: !Word16
+    --
+    -- Note that this parameter is redundant, as we currently delegate to the
+    -- Node API and do not run a monitoring server anymore.
+    , monitoringApiPort       :: !Word16
     -- ^ The port the monitoring API should listen to.
-    , walletTLSParams     :: !(Maybe TlsParams)
+    --
+    -- Note that this parameter is redundant, as we currently delegate to the
+    -- Node API and do not run a monitoring server anymore.
+    , walletTLSParams         :: !(Maybe TlsParams)
     -- ^ The TLS parameters.
-    , walletAddress       :: !NetworkAddress
+    , walletAddress           :: !NetworkAddress
     -- ^ The wallet address.
-    , walletDocAddress    :: !(Maybe NetworkAddress)
+    , walletDocAddress        :: !(Maybe NetworkAddress)
     -- ^ The wallet documentation address.
-    , walletRunMode       :: !RunMode
+    , walletRunMode           :: !RunMode
     -- ^ The mode this node is running in.
-    , walletDbOptions     :: !WalletDBOptions
+    , walletDbOptions         :: !WalletDBOptions
     -- ^ DB-specific options.
-    , forceFullMigration  :: !Bool
+    , forceFullMigration      :: !Bool
+    , walletNodeAddress       :: !NetworkAddress
+    -- ^ The IP address and port for the node backend.
+    , walletNodeTlsClientCert :: FilePath
+    -- ^ A filepath to the Node's public certficate
+    , walletNodeTlsPrivKey    :: FilePath
+    -- ^ A filepath to the TLS private key for the Node API.
+    , walletNodeTlsCaCertPath :: FilePath
+    -- ^ A filepath to the TLS CA Certificate for communicating with the Node
+    -- API.
     } deriving Show
 
 -- | Start up parameters for the new wallet backend
@@ -145,17 +160,65 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
                                                 <*> runModeParser
                                                 <*> dbOptionsParser
                                                 <*> forceFullMigrationParser
+                                                <*> nodeAddressParser
+                                                <*> tlsClientCertPathParser
+                                                <*> tlsPrivKeyParser
+                                                <*> tlsCaCertPathParser
   where
     enableMonitoringApiParser :: Parser Bool
-    enableMonitoringApiParser = switch (long "monitoring-api" <>
-                                        help "Activate the node monitoring API."
-                                       )
+    enableMonitoringApiParser =
+        switch
+        ( long "monitoring-api"
+        <> help
+            ( "Activate the node monitoring API. This option doesn't do "
+            <> "anything anymore, as the monitoring API has been folded into "
+            <> "the API exposed by the node process."
+            )
+        )
 
     monitoringApiPortParser :: Parser Word16
-    monitoringApiPortParser = CLI.webPortOption 8080 "Port for the monitoring API."
+    monitoringApiPortParser = CLI.webPortOption 8080
+        $ "Port for the monitoring API. This option doesn't do anything "
+        <> "anymore, as the monitoring API has been folded into the API exposed"
+        <> "by the node process."
 
     addressParser :: Parser NetworkAddress
     addressParser = CLI.walletAddressOption $ Just (localhost, 8090)
+
+    -- this comes from the default for the node, defined in
+    -- cardano-sl:Pos.Client.CLI.NodeOptions
+    -- TODO: factor the default address out into a term that can be shared
+    nodeAddressParser :: Parser NetworkAddress
+    nodeAddressParser = CLI.walletAddressOption $ Just (localhost, 8080)
+
+    tlsClientCertPathParser :: Parser FilePath
+    tlsClientCertPathParser = strOption
+        $ long "node-tls-client-cert"
+        <> metavar "FILEPATH"
+        <> help
+            ( "Path to TLS client public certificate used to authenticate to "
+            <> "the Node API."
+            )
+
+
+    tlsPrivKeyParser :: Parser FilePath
+    tlsPrivKeyParser = strOption
+        $ long "node-tls-key"
+        <> metavar "FILEPATH"
+        <> help
+            ( "Path to TLS client private key used to authenticate to the "
+            <> "Node API."
+            )
+
+    tlsCaCertPathParser :: Parser FilePath
+    tlsCaCertPathParser = strOption
+        $ long "node-tls-ca-cert"
+        <> metavar  "FILEPATH"
+        <> help
+            ( "Path to TLS CA public certificate used to authenticate to the "
+            <> "Node API."
+            )
+
 
     docAddressParser :: Parser (Maybe NetworkAddress)
     docAddressParser = CLI.docAddressOption Nothing
