@@ -19,7 +19,7 @@ import qualified Data.ByteString as BS
 import           Test.Hspec (Spec, describe, it)
 import           Test.Pos.Core.Arbitrary ()
 import           Test.QuickCheck (InfiniteList (..), Property, expectFailure,
-                     property, (===), (==>))
+                     property, (.&&.), (===), (==>))
 
 -- | It proves that we cannot derive address public key
 -- if address index is too big. We should be able to derive
@@ -61,7 +61,7 @@ prop_deriveAddressPublicFromAccountPrivateKey (InfiniteList seed _) passPhrase@(
     -- FIXME (akegalj): instead of doing this create generator for non-hardened keys.
     -- This should in average discard 50% of examples and will thus be
     -- 50% slower.
-    not (isHardened addressIx) ==> (addrPubKey1 === addrPubKey2)
+    not (isHardened addressIx) ==> (isJust addrPubKey1 .&&. addrPubKey1 === addrPubKey2)
   where
     accEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
     -- N(CKDpriv((kpar, cpar), i))
