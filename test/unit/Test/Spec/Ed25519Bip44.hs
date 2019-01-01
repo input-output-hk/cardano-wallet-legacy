@@ -9,8 +9,7 @@ import           Universum
 
 import           Cardano.Crypto.Wallet (generate)
 import           Pos.Crypto (EncryptedSecretKey, PassPhrase (..), PublicKey,
-                     checkPassMatches, emptySalt, isHardened,
-                     mkEncSecretWithSaltUnsafe)
+                     checkPassMatches, emptySalt, mkEncSecretWithSaltUnsafe)
 
 import           Cardano.Wallet.Kernel.Ed25519Bip44 (ChangeChain,
                      deriveAddressPrivateKey, deriveAddressPublicKey,
@@ -21,8 +20,7 @@ import           Test.Hspec (Spec, describe, it)
 import           Test.Pos.Core.Arbitrary ()
 import           Test.QuickCheck (Arbitrary (..), InfiniteList (..), Property,
                      arbitraryBoundedIntegral, arbitrarySizedBoundedIntegral,
-                     expectFailure, property, shrinkIntegral, (.&&.), (===),
-                     (==>))
+                     property, shrinkIntegral, (.&&.), (===), (==>))
 
 -- A wrapper type for hardened keys generator
 newtype Hardened
@@ -56,32 +54,25 @@ instance Arbitrary NonHardened where
 -- | Deriving address public key should fail if address index
 -- is hardened. We should be able to derive Address public key
 -- only with non-hardened address index
---
--- FIXME: this property will fail because quickcheck will "Give up" on
--- trying to satisfy the precondition. By default quickcheck prefers smaller
--- values, so generator won't pick enough large values. This should be
--- fixed with custom generator (TODO)
---
--- quickcheck also defines Large wrapper but it fails as well :/
-prop_cannotDeriveAddressPublicKeyForHardenedIx
+prop_deriveAddressPublicKeyHardened
     :: PublicKey
     -> ChangeChain
-    -> Word32
+    -> Hardened
     -> Property
-prop_cannotDeriveAddressPublicKeyForHardenedIx accPubKey change addressIx =
-    isHardened addressIx ==> isNothing addrPubKey
+prop_deriveAddressPublicKeyHardened accPubKey change (Hardened addressIx) =
+    property $ isNothing addrPubKey
   where
     addrPubKey = deriveAddressPublicKey accPubKey change addressIx
 
 -- | Deriving address public key should succeed if address index
 -- is non-hardened.
-prop_deriveAddressPublicKeyForNonHardenedIx
+prop_deriveAddressPublicKeyNonHardened
     :: PublicKey
     -> ChangeChain
-    -> Word32
+    -> NonHardened
     -> Property
-prop_deriveAddressPublicKeyForNonHardenedIx accPubKey change addressIx =
-    not (isHardened addressIx) ==> isJust addrPubKey
+prop_deriveAddressPublicKeyNonHardened accPubKey change (NonHardened addressIx) =
+    property $ isJust addrPubKey
   where
     addrPubKey = deriveAddressPublicKey accPubKey change addressIx
 
@@ -103,14 +94,11 @@ prop_deriveAddressPublicFromAccountPrivateKey
     :: InfiniteList Word8
     -> PassPhrase
     -> ChangeChain
-    -> Word32
+    -> NonHardened
     -> Property
-prop_deriveAddressPublicFromAccountPrivateKey (InfiniteList seed _) passPhrase@(PassPhrase passBytes) changeChain addressIx =
+prop_deriveAddressPublicFromAccountPrivateKey (InfiniteList seed _) passPhrase@(PassPhrase passBytes) changeChain (NonHardened addressIx) =
     -- TODO (akegalj): check coverage with quickcheck @cover@
-    -- FIXME (akegalj): instead of doing this create generator for non-hardened keys.
-    -- This should in average discard 50% of examples and will thus be
-    -- 50% slower.
-    not (isHardened addressIx) ==> (isJust addrPubKey1 .&&. addrPubKey1 === addrPubKey2)
+    isJust addrPubKey1 .&&. addrPubKey1 === addrPubKey2
   where
     accEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
     -- N(CKDpriv((kpar, cpar), i))
@@ -128,15 +116,15 @@ prop_deriveAddressPublicFromAccountPrivateKey (InfiniteList seed _) passPhrase@(
             addressIx
 
 -- | Deriving address private key should always fail
--- if account index is hardened
+-- if address index is hardened
 prop_deriveAddressPrivateKeyHardened
     :: InfiniteList Word8
     -> PassPhrase
     -> ChangeChain
-    -> Word32
+    -> Hardened
     -> Property
-prop_deriveAddressPrivateKeyHardened (InfiniteList seed _) passPhrase@(PassPhrase passBytes) changeChain addressIx =
-    isHardened addressIx ==> isJust addrPrvKey
+prop_deriveAddressPrivateKeyHardened (InfiniteList seed _) passPhrase@(PassPhrase passBytes) changeChain (Hardened addressIx) =
+    property $ isNothing addrPrvKey
   where
     accEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
     addrPrvKey =
@@ -146,19 +134,53 @@ prop_deriveAddressPrivateKeyHardened (InfiniteList seed _) passPhrase@(PassPhras
             changeChain
             addressIx
 
--- | Deriving address private key should always fail
+-- | Deriving address private key should always succeed
+-- if address index is non-hardened
+prop_deriveAddressPrivateKeyNonHardened
+    :: InfiniteList Word8
+    -> PassPhrase
+    -> ChangeChain
+    -> NonHardened
+    -> Property
+prop_deriveAddressPrivateKeyNonHardened (InfiniteList seed _) passPhrase@(PassPhrase passBytes) changeChain (NonHardened addressIx) =
+    property $ isJust addrPrvKey
+  where
+    accEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
+    addrPrvKey =
+        deriveAddressPrivateKey
+            passPhrase
+            accEncPrvKey
+            changeChain
+            addressIx
+
+-- | Deriving address private key should always fail for non-hardened key index
 -- if password differs from account private key password
 prop_deriveAddressPrivateKeyWrongPassword
     :: PassPhrase
     -> EncryptedSecretKey
     -> ChangeChain
-    -> Word32
+    -> NonHardened
     -> Property
-prop_deriveAddressPrivateKeyWrongPassword passPhrase accEncPrvKey changeChain addressIx =
-    -- There is a really small possibility we will generate
-    -- two equal passwords - so this precondition will rarely fail
-    -- TODO (akegalj): check coverage with quickcheck @cover@
-    isNothing (checkPassMatches passPhrase accEncPrvKey) ==> isJust addrPrvKey
+prop_deriveAddressPrivateKeyWrongPassword passPhrase accEncPrvKey changeChain (NonHardened addressIx) =
+    isNothing (checkPassMatches passPhrase accEncPrvKey) ==> isNothing addrPrvKey
+  where
+    addrPrvKey =
+        deriveAddressPrivateKey
+            passPhrase
+            accEncPrvKey
+            changeChain
+            addressIx
+
+-- | Deriving address private key should always succeed for non-hardened key index
+-- if password equals to account private key password
+prop_deriveAddressPrivateKeyCorrectPassword
+    :: PassPhrase
+    -> EncryptedSecretKey
+    -> ChangeChain
+    -> NonHardened
+    -> Property
+prop_deriveAddressPrivateKeyCorrectPassword passPhrase accEncPrvKey changeChain (NonHardened addressIx) =
+    isJust (checkPassMatches passPhrase accEncPrvKey) ==> isJust addrPrvKey
   where
     addrPrvKey =
         deriveAddressPrivateKey
@@ -171,13 +193,17 @@ spec :: Spec
 spec = describe "Ed25519Bip44" $ do
     describe "Deriving address public key" $ do
         it "fails if address index is hardened" $
-            property prop_cannotDeriveAddressPublicKeyForHardenedIx
-        it "fails if address index is non-hardened" $
-            property prop_deriveAddressPublicKeyForNonHardenedIx
+            property prop_deriveAddressPublicKeyHardened
+        it "succeeds if address index is non-hardened" $
+            property prop_deriveAddressPublicKeyNonHardened
         it "equals to deriving address private key and extracting public part from it: N(CKDpriv((kpar, cpar), i)) === CKDpub(N(kpar, cpar), i)" $
             property prop_deriveAddressPublicFromAccountPrivateKey
     describe "Deriving address private key" $ do
-        it "fails if password differs" $
-            expectFailure prop_deriveAddressPrivateKeyWrongPassword
         it "fails if address index is hardened" $
-            expectFailure prop_deriveAddressPrivateKeyHardened
+            property prop_deriveAddressPrivateKeyHardened
+        it "succeeds if address index is non-hardened" $
+            property prop_deriveAddressPrivateKeyNonHardened
+        it "fails if passwords differ" $
+            property prop_deriveAddressPrivateKeyWrongPassword
+        it "succeeds if passwords are equal" $
+            property prop_deriveAddressPrivateKeyCorrectPassword
