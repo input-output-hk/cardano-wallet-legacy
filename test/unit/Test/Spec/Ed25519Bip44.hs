@@ -1,6 +1,7 @@
-{-# LANGUAGE DataKinds        #-}
-{-# LANGUAGE LambdaCase       #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE TypeApplications           #-}
 
 module Test.Spec.Ed25519Bip44 (spec) where
 
@@ -18,8 +19,39 @@ import           Cardano.Wallet.Kernel.Ed25519Bip44 (ChangeChain,
 import qualified Data.ByteString as BS
 import           Test.Hspec (Spec, describe, it)
 import           Test.Pos.Core.Arbitrary ()
-import           Test.QuickCheck (InfiniteList (..), Property, expectFailure,
-                     property, (.&&.), (===), (==>))
+import           Test.QuickCheck (Arbitrary (..), InfiniteList (..), Property,
+                     arbitraryBoundedIntegral, arbitrarySizedBoundedIntegral,
+                     expectFailure, property, shrinkIntegral, (.&&.), (===),
+                     (==>))
+
+-- A wrapper type for hardened keys generator
+newtype Hardened
+    = Hardened Word32
+    deriving (Show, Eq, Ord, Enum, Real, Integral, Num)
+
+-- A wrapper type for non-hardened keys generator
+newtype NonHardened
+    = NonHardened Word32
+    deriving (Show, Eq, Ord, Enum, Real, Integral, Num)
+
+instance Bounded Hardened where
+    minBound = Hardened 0x80000000 -- 2^31
+    maxBound = Hardened $ maxBound @Word32
+
+instance Bounded NonHardened where
+    minBound = NonHardened $ minBound @Word32
+    maxBound = NonHardened 0x7FFFFFFF -- 2^31 - 1
+
+-- TODO (akegalj): seems like Large from quickcheck which is using
+-- arbitrarySizedBoundedIntegral doesn't work correctly. That implementation
+-- doesn't repect minBound and produces numbers which are bellow minBound!
+instance Arbitrary Hardened where
+    arbitrary = arbitraryBoundedIntegral
+    shrink = filter (>= minBound) . shrinkIntegral
+
+instance Arbitrary NonHardened where
+    arbitrary = arbitrarySizedBoundedIntegral
+    shrink = shrinkIntegral
 
 -- | Deriving address public key should fail if address index
 -- is hardened. We should be able to derive Address public key
