@@ -5,16 +5,20 @@
     extended private key -> extended public key
     account extended public key -> address extended public key
     account extended private key -> address extended private key
+    master extended private key -> account extended private key
 
 -------------------------------------------------------------------------------}
 
 module Cardano.Wallet.Kernel.Ed25519Bip44
     ( ChangeChain(..)
+    , purposeIndex
+    , coinTypeIndex
 
     -- key derivation functions
     , deriveAddressPublicKey
     , deriveAddressPrivateKey
     , derivePublicKey
+    , deriveAccountPrivateKey
 
     -- helpers
     , isInternalChange
@@ -28,6 +32,27 @@ import           Pos.Crypto (EncryptedSecretKey (..), PassPhrase,
 import           Cardano.Crypto.Wallet (DerivationScheme (DerivationScheme2),
                      deriveXPrv, deriveXPub)
 import           Test.QuickCheck (Arbitrary (..), elements)
+
+-- | Purpose is a constant set to 44' (or 0x8000002C) following the BIP43 recommendation.
+-- It indicates that the subtree of this node is used according to this specification.
+--
+-- Hardened derivation is used at this level.
+purposeIndex :: Word32
+purposeIndex = 0x8000002C
+
+-- | One master node (seed) can be used for unlimited number of independent cryptocoins
+-- such as Bitcoin, Litecoin or Namecoin. However, sharing the same space for various
+-- cryptocoins has some disadvantages.
+--
+-- This level creates a separate subtree for every cryptocoin, avoiding reusing addresses
+-- across cryptocoins and improving privacy issues.
+--
+-- Coin type is a constant, set for each cryptocoin. For Cardano this constant is set
+-- to 1815' (or 0x80000717). 1815 is the birthyear of Ada Lovelace.
+--
+-- Hardened derivation is used at this level.
+coinTypeIndex :: Word32
+coinTypeIndex = 0x80000717
 
 -- | Change chain. External chain is used for addresses that are meant to be visible
 -- outside of the wallet (e.g. for receiving payments). Internal chain
@@ -90,3 +115,23 @@ deriveAddressPrivateKey passPhrase accEncPrvKey@(EncryptedSecretKey accXPrv pass
         -- lvl5 derivation in bip44 is derivation of address chain
         addressXPrv = deriveXPrv DerivationScheme2 passPhrase changeXPrv addressIx
     pure $ EncryptedSecretKey addressXPrv passHash
+
+-- | Derives account private key from the given master private key,
+-- using derivation scheme 2 (please see 'cardano-crypto' package).
+deriveAccountPrivateKey
+    :: PassPhrase               -- Passphrase used to encrypt Master Private Key
+    -> EncryptedSecretKey       -- Master Private Key
+    -> Word32                   -- Hardened Account Key Index
+    -> Maybe EncryptedSecretKey -- Account Private Key
+deriveAccountPrivateKey passPhrase masterEncPrvKey@(EncryptedSecretKey masterXPrv passHash) accountIx = do
+    -- enforce valid PassPhrase check
+    checkPassMatches passPhrase masterEncPrvKey
+    -- account index should be hardened
+    guard (isHardened accountIx)
+        -- lvl1 derivation in bip44 is hardened derivation of purpose' chain
+    let purposeXPrv = deriveXPrv DerivationScheme2 passPhrase masterXPrv purposeIndex
+        -- lvl2 derivation in bip44 is hardened derivation of coin_type' chain
+        coinTypeXPrv = deriveXPrv DerivationScheme2 passPhrase purposeXPrv coinTypeIndex
+        -- lvl3 derivation in bip44 is hardened derivation of account' chain
+        accountXPrv = deriveXPrv DerivationScheme2 passPhrase coinTypeXPrv accountIx
+    pure $ EncryptedSecretKey accountXPrv passHash

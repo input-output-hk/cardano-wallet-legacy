@@ -12,8 +12,8 @@ import           Pos.Crypto (EncryptedSecretKey, PassPhrase (..), PublicKey,
                      checkPassMatches, emptySalt, mkEncSecretWithSaltUnsafe)
 
 import           Cardano.Wallet.Kernel.Ed25519Bip44 (ChangeChain,
-                     deriveAddressPrivateKey, deriveAddressPublicKey,
-                     derivePublicKey)
+                     deriveAccountPrivateKey, deriveAddressPrivateKey,
+                     deriveAddressPublicKey, derivePublicKey)
 
 import qualified Data.ByteString as BS
 import           Test.Hspec (Spec, describe, it)
@@ -189,6 +189,40 @@ prop_deriveAddressPrivateKeyCorrectPassword passPhrase accEncPrvKey changeChain 
             changeChain
             addressIx
 
+-- | Deriving account private key should always fail
+-- if account index is non-hardened
+prop_deriveAccountPrivateKeyNonHardened
+    :: InfiniteList Word8
+    -> PassPhrase
+    -> NonHardened
+    -> Property
+prop_deriveAccountPrivateKeyNonHardened (InfiniteList seed _) passPhrase@(PassPhrase passBytes) (NonHardened accountIx) =
+    property $ isNothing accPrvKey
+  where
+    masterEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
+    accPrvKey =
+        deriveAccountPrivateKey
+            passPhrase
+            masterEncPrvKey
+            accountIx
+
+-- | Deriving account private key should always succeed
+-- if account index is hardened
+prop_deriveAccountPrivateKeyHardened
+    :: InfiniteList Word8
+    -> PassPhrase
+    -> Hardened
+    -> Property
+prop_deriveAccountPrivateKeyHardened (InfiniteList seed _) passPhrase@(PassPhrase passBytes) (Hardened accountIx) =
+    property $ isJust accPrvKey
+  where
+    masterEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
+    accPrvKey =
+        deriveAccountPrivateKey
+            passPhrase
+            masterEncPrvKey
+            accountIx
+
 spec :: Spec
 spec = describe "Ed25519Bip44" $ do
     describe "Deriving address public key" $ do
@@ -207,3 +241,8 @@ spec = describe "Ed25519Bip44" $ do
             property prop_deriveAddressPrivateKeyWrongPassword
         it "succeeds if passwords are equal" $
             property prop_deriveAddressPrivateKeyCorrectPassword
+    describe "Deriving account private key" $ do
+        it "fails if account index is non-hardened" $
+            property prop_deriveAccountPrivateKeyNonHardened
+        it "succeeds if account index is hardened" $
+            property prop_deriveAccountPrivateKeyHardened
