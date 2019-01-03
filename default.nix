@@ -1,3 +1,12 @@
+############################################################################
+# Cardano Wallet Nix build
+#
+# To build the wallet, run:
+#
+#    nix-build -A exes.cardano-node
+#
+############################################################################
+
 { system ? builtins.currentSystem
 , crossSystem ? null
 , config ? {}

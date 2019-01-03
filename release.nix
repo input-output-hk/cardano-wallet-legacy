@@ -1,3 +1,16 @@
+############################################################################
+# Hydra release jobset
+#
+# Example build for Linux:
+#
+#   nix-build release.nix -A exes.cardano-node.x86_64-linux
+#
+# Example build for Windows (cross-compiled from Linux):
+#
+#   nix-build release.nix -A cross.exes.cardano-node.x86_64-linux
+#
+############################################################################
+
 let
   iohkLib = import ./nix/iohk-common.nix { application = "cardano-sl"; };
   fixedNixpkgs = iohkLib.pkgs;
