@@ -4,6 +4,7 @@
 
     extended private key -> extended public key
     account extended public key -> address extended public key
+    account extended private key -> address extended private key
     master extended private key -> account extended private key
 
 -------------------------------------------------------------------------------}
@@ -15,6 +16,7 @@ module Cardano.Wallet.Kernel.Ed25519Bip44
 
     -- key derivation functions
     , deriveAddressPublicKey
+    , deriveAddressPrivateKey
     , derivePublicKey
     , deriveAccountPrivateKey
 
@@ -24,7 +26,7 @@ module Cardano.Wallet.Kernel.Ed25519Bip44
 
 import           Universum
 
-import           Pos.Crypto (EncryptedSecretKey (..), PassPhrase (..),
+import           Pos.Crypto (EncryptedSecretKey (..), PassPhrase,
                      PublicKey (..), checkPassMatches, encToPublic, isHardened)
 
 import           Cardano.Crypto.Wallet (DerivationScheme (DerivationScheme2),
@@ -74,6 +76,11 @@ changeToIndex :: ChangeChain -> Word32
 changeToIndex ExternalChain = 0
 changeToIndex InternalChain = 1
 
+-- | Generate extend private key from extended private key
+-- (EncryptedSecretKey is a wrapper around private key)
+derivePublicKey :: EncryptedSecretKey -> PublicKey
+derivePublicKey = encToPublic
+
 -- | Derives address public key from the given account public key,
 -- using derivation scheme 2 (please see 'cardano-crypto' package).
 deriveAddressPublicKey
@@ -82,17 +89,32 @@ deriveAddressPublicKey
     -> Word32          -- Non-hardened Address Key Index
     -> Maybe PublicKey -- Address Public Key
 deriveAddressPublicKey (PublicKey accXPub) changeChain addressIx = do
-    -- address index should be non-hardened
+    -- address index should be non hardened
     guard (not $ isHardened addressIx)
-    -- lvl4 derivation in bip44 is non-hardened derivation of change chain
+    -- lvl4 derivation in bip44 is derivation of change chain
     changeXPub <- deriveXPub DerivationScheme2 accXPub (changeToIndex changeChain)
-    -- lvl5 derivation in bip44 is non-hardened derivation of change address chain
+    -- lvl5 derivation in bip44 is derivation of address chain
     PublicKey <$> deriveXPub DerivationScheme2 changeXPub addressIx
 
--- | Generate extend private key from extended private key
--- (EncryptedSecretKey is a wrapper around private key)
-derivePublicKey :: EncryptedSecretKey -> PublicKey
-derivePublicKey = encToPublic
+-- | Derives address private key from the given account private key,
+-- using derivation scheme 2 (please see 'cardano-crypto' package).
+-- TODO: EncryptedSecretKey will be renamed to EncryptedPrivateKey in #164
+deriveAddressPrivateKey
+    :: PassPhrase               -- Passphrase used to encrypt Account Private Key
+    -> EncryptedSecretKey       -- Account Private Key
+    -> ChangeChain              -- Change chain
+    -> Word32                   -- Non-hardened Address Key Index
+    -> Maybe EncryptedSecretKey -- Address Private Key
+deriveAddressPrivateKey passPhrase accEncPrvKey@(EncryptedSecretKey accXPrv passHash) changeChain addressIx = do
+    -- enforce valid PassPhrase check
+    checkPassMatches passPhrase accEncPrvKey
+    -- address index should be non hardened
+    guard (not $ isHardened addressIx)
+        -- lvl4 derivation in bip44 is derivation of change chain
+    let changeXPrv = deriveXPrv DerivationScheme2 passPhrase accXPrv (changeToIndex changeChain)
+        -- lvl5 derivation in bip44 is derivation of address chain
+        addressXPrv = deriveXPrv DerivationScheme2 passPhrase changeXPrv addressIx
+    pure $ EncryptedSecretKey addressXPrv passHash
 
 -- | Derives account private key from the given master private key,
 -- using derivation scheme 2 (please see 'cardano-crypto' package).
