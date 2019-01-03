@@ -197,7 +197,7 @@ applyBlock (SecurityParameter k) pb = do
         (utxo', balance') = updateUtxo      pb (utxo, balance)
         (pending', rem1)  = updatePending   (pfbInputs pb) (current ^. checkpointPending)
         blockMeta'        = (current ^. checkpointBlockMeta) <> (localBlockMeta $ pfbMeta pb)
-        (foreign', rem2)  = updatePending   (pfbForeignInputs pb) (current ^. checkpointForeign)
+        (foreign', rem2)  = updatePending   (pfbInputs pb) (current ^. checkpointForeign)
     if (pfbContext pb) `blockContextSucceeds` (current ^. checkpointContext . lazy) then do
       put $ Checkpoints . takeNewest k . NewestFirst $ Checkpoint {
           _checkpointUtxo        = InDb utxo'
@@ -230,7 +230,7 @@ applyBlockPartial pb = do
         (utxo', balance') = updateUtxo           pb (utxo, balance)
         (pending', rem1)  = updatePending        (pfbInputs pb) (current ^. pcheckpointPending)
         blockMeta'        = (current ^. pcheckpointBlockMeta) <> pfbMeta pb
-        (foreign', rem2)  = updatePending        (pfbForeignInputs pb) (current ^. pcheckpointForeign)
+        (foreign', rem2)  = updatePending        (pfbInputs pb) (current ^. pcheckpointForeign)
     if (pfbContext pb) `blockContextSucceeds` (current ^. cpContext . lazy) then do
       put $ Checkpoints $ NewestFirst $ PartialCheckpoint {
           _pcheckpointUtxo        = InDb utxo'
@@ -341,10 +341,9 @@ updateUtxo PrefilteredBlock{..} (utxo, balance) =
     --
     -- * pfbOutputs corresponds to what the spec calls utxo^+ / txouts_b
     -- * pfbInputs  corresponds to what the spec calls txins_b
-    extendedInputs = Set.union pfbInputs pfbForeignInputs
     utxoUnion = Map.union utxo pfbOutputs
-    utxoMin   = utxoUnion `Core.utxoRestrictToInputs` extendedInputs
-    utxo'     = utxoUnion `Core.utxoRemoveInputs` extendedInputs
+    utxoMin   = utxoUnion `Core.utxoRestrictToInputs` pfbInputs
+    utxo'     = utxoUnion `Core.utxoRemoveInputs` pfbInputs
     balance'  = Core.unsafeIntegerToCoin $
                     Core.coinToInteger balance
                   + Core.utxoBalance pfbOutputs
