@@ -50,13 +50,11 @@ import           Cardano.Wallet.API.Request.Sort (SortOperations (..))
 import           Cardano.Wallet.API.Response (APIResponse, SliceOf (..))
 import           Cardano.Wallet.API.V1.Types (Account, AccountBalance,
                      AccountIndex, AccountUpdate, EosWallet, EosWalletId,
-                     ForceNtpCheck, NewAccount, NewAddress, NewEosWallet,
-                     NewWallet, NodeInfo, NodeSettings, PasswordUpdate,
-                     Payment, Redemption, SignedTransaction, SpendingPassword,
-                     Transaction, UnsignedTransaction, WalAddress, Wallet,
-                     WalletAddress, WalletId, WalletImport,
-                     WalletSoftwareVersion, WalletTimestamp, WalletTxId,
-                     WalletUpdate)
+                     NewAccount, NewAddress, NewEosWallet, NewWallet,
+                     PasswordUpdate, Payment, Redemption, SignedTransaction,
+                     SpendingPassword, Transaction, UnsignedTransaction,
+                     WalAddress, Wallet, WalletAddress, WalletId, WalletImport,
+                     WalletTimestamp, WalletTxId, WalletUpdate)
 import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import qualified Cardano.Wallet.Kernel.Addresses as Kernel
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
@@ -482,13 +480,7 @@ data PassiveWalletLayer m = PassiveWalletLayer
     , applyBlocks          :: OldestFirst NE Blund -> m ()
     , rollbackBlocks       :: NewestFirst NE Blund -> m ()
 
-    -- node settings
-    , getNodeSettings      :: m NodeSettings
-
     -- internal
-    , nextUpdate           :: m (Maybe WalletSoftwareVersion)
-    , applyUpdate          :: m ()
-    , postponeUpdate       :: m ()
     , resetWalletState     :: m ()
     , importWallet         :: WalletImport -> m (Either ImportWalletError Wallet)
 
@@ -548,12 +540,6 @@ data ActiveWalletLayer m = ActiveWalletLayer {
 
       -- | Redeem ada
     , redeemAda :: Redemption -> m (Either RedeemAdaError (Tx, TxMeta))
-
-      -- | Node info
-      --
-      -- This lives in the active wallet layer as the node info endpoint returns
-      -- status information about the diffusion layer
-    , getNodeInfo :: ForceNtpCheck -> m NodeInfo
     }
 
 ------------------------------------------------------------

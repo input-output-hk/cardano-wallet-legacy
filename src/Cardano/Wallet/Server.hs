@@ -35,7 +35,7 @@ walletServer nc w _ =
     :<|> internalHandler
     :<|> wipHandler
   where
-    v1Handler       = V1.handlers w
+    v1Handler       = V1.handlers nc w
     internalHandler = Internal.handlers nc (walletPassiveLayer w)
     wipHandler      = WIP.handlers w
 

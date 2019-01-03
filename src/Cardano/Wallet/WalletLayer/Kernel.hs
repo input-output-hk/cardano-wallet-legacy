@@ -42,9 +42,7 @@ import           Cardano.Wallet.WalletLayer (ActiveWalletLayer (..),
 import qualified Cardano.Wallet.WalletLayer.Kernel.Accounts as Accounts
 import qualified Cardano.Wallet.WalletLayer.Kernel.Active as Active
 import qualified Cardano.Wallet.WalletLayer.Kernel.Addresses as Addresses
-import qualified Cardano.Wallet.WalletLayer.Kernel.Info as Info
 import qualified Cardano.Wallet.WalletLayer.Kernel.Internal as Internal
-import qualified Cardano.Wallet.WalletLayer.Kernel.Settings as Settings
 import qualified Cardano.Wallet.WalletLayer.Kernel.Transactions as Transactions
 import qualified Cardano.Wallet.WalletLayer.Kernel.Wallets as Wallets
 
@@ -123,9 +121,6 @@ bracketPassiveWallet pm mode logFunction keystore node fInjects f = do
         , deleteAccount        = Accounts.deleteAccount       w
         , createAddress        = Addresses.createAddress      w
         , addUpdate            = Internal.addUpdate           w
-        , nextUpdate           = Internal.nextUpdate          w
-        , applyUpdate          = Internal.applyUpdate         w
-        , postponeUpdate       = Internal.postponeUpdate      w
         , waitForUpdate        = Internal.waitForUpdate       w
         , resetWalletState     = Internal.resetWalletState    w
         , importWallet         = Internal.importWallet        w
@@ -144,7 +139,6 @@ bracketPassiveWallet pm mode logFunction keystore node fInjects f = do
         , validateAddress      = \txt           -> ro $ Addresses.validateAddress txt
         , getTransactions      = Transactions.getTransactions w
         , getTxFromMeta        = Transactions.toTransaction w
-        , getNodeSettings      = Settings.getNodeSettings w
         }
       where
         -- Read-only operations
@@ -178,5 +172,4 @@ bracketActiveWallet walletPassiveLayer passiveWallet walletDiffusion runActiveLa
         , createUnsignedTx   = Active.createUnsignedTx w
         , submitSignedTx     = Active.submitSignedTx   w
         , redeemAda          = Active.redeemAda        w
-        , getNodeInfo        = Info.getNodeInfo        w
         }
