@@ -11,16 +11,18 @@ import qualified Cardano.Wallet.API.V1.Handlers.Settings as Settings
 import qualified Cardano.Wallet.API.V1.Handlers.Transactions as Transactions
 import qualified Cardano.Wallet.API.V1.Handlers.Wallets as Wallets
 
+import           Cardano.Wallet.NodeProxy (NodeHttpClient)
 import           Cardano.Wallet.WalletLayer (ActiveWalletLayer,
                      walletPassiveLayer)
 
 
-handlers :: ActiveWalletLayer IO -> Server V1.API
-handlers w =  Addresses.handlers    passiveWallet
-         :<|> Wallets.handlers      passiveWallet
-         :<|> Accounts.handlers     passiveWallet
-         :<|> Transactions.handlers w
-         :<|> Settings.handlers     passiveWallet
-         :<|> Info.handlers         w
+handlers :: NodeHttpClient -> ActiveWalletLayer IO -> Server V1.API
+handlers nodeClient w =
+    Addresses.handlers         passiveWallet
+    :<|> Wallets.handlers      passiveWallet
+    :<|> Accounts.handlers     passiveWallet
+    :<|> Transactions.handlers w
+    :<|> Settings.handlers     nodeClient
+    :<|> Info.handlers         nodeClient
   where
     passiveWallet = walletPassiveLayer w

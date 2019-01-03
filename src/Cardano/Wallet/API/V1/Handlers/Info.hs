@@ -4,18 +4,23 @@ import           Universum
 
 import           Servant
 
+import qualified Cardano.Node.Client as NodeClient
 import           Cardano.Wallet.API.Response (APIResponse, single)
 import qualified Cardano.Wallet.API.V1.Info as Info
 import           Cardano.Wallet.API.V1.Types (ForceNtpCheck, NodeInfo)
-import           Cardano.Wallet.WalletLayer (ActiveWalletLayer)
-import qualified Cardano.Wallet.WalletLayer as WalletLayer
+import           Cardano.Wallet.NodeProxy (NodeHttpClient, handleNodeError)
 
-handlers :: ActiveWalletLayer IO -> ServerT Info.API Handler
+handlers :: NodeHttpClient -> ServerT Info.API Handler
 handlers = getNodeInfo
 
 getNodeInfo
-    :: ActiveWalletLayer IO
+    :: NodeHttpClient
     -> ForceNtpCheck
     -> Handler (APIResponse NodeInfo)
-getNodeInfo w forceNtp =
-    liftIO $ single <$> WalletLayer.getNodeInfo w forceNtp
+getNodeInfo nc forceNtp = do
+    eni <- liftIO . runExceptT $ NodeClient.getNodeInfo nc forceNtp
+    case eni of
+        Left err  ->
+            handleNodeError err
+        Right nodeInfo ->
+            single <$> pure nodeInfo
