@@ -4,8 +4,7 @@
 module Cardano.Wallet.Client.CLI where
 
 import           Criterion.Measurement (secs)
-import           Data.Aeson (ToJSON (..))
-import           Data.Aeson (encodeFile)
+import           Data.Aeson (ToJSON (..), encodeFile)
 import           Data.Aeson.Encode.Pretty (encodePretty)
 import qualified Data.Attoparsec.Text as A
 import           Data.Bifunctor (first)

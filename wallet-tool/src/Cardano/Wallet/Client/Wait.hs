@@ -12,7 +12,6 @@ module Cardano.Wallet.Client.Wait
 import           Control.Concurrent (threadDelay)
 import           Control.Concurrent.Async (AsyncCancelled (..),
                      waitEitherCatchCancel, withAsync)
-import           Control.Concurrent.STM.TVar (modifyTVar', newTVar, readTVar)
 import           Control.Retry
 import           Criterion.Measurement (getTime, initializeTime)
 import           Data.Aeson (ToJSON (..), Value (..), object, (.=))
@@ -103,7 +102,7 @@ waitForSomething req check WaitOptions{..} wc = do
       withAsync (retrying policy (check' rv getElapsed) action) $ \poll -> cancelOnExit poll $
         waitEitherCatchCancel sleep poll
 
-  rs <- atomically $ readTVar rv
+  rs <- readTVarIO rv
 
   -- Unwrap layers of error handling and convert to Maybe SyncError
   let e = case res of
