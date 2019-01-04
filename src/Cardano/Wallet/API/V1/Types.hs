@@ -101,7 +101,7 @@ module Cardano.Wallet.API.V1.Types (
   , mkLocalTimeDifference
   , EstimatedCompletionTime
   , mkEstimatedCompletionTime
-  , SyncThroughput
+  , SyncThroughput(..)
   , mkSyncThroughput
   , SyncState (..)
   , SyncProgress (..)
