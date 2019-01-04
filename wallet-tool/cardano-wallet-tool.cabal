@@ -25,52 +25,35 @@ library
 
   build-depends:       base
                      , aeson
-                     , aeson-options
                      , aeson-pretty
                      , async
                      , attoparsec
-                     , bifunctors
                      , bytestring
                      , cardano-sl
                      , cardano-sl-client
-                     , cardano-sl-crypto
                      , cardano-sl-core
                      , cardano-sl-mnemonic
-                     , cardano-sl-util
                      , cardano-sl-x509
                      , cardano-wallet
                      , connection
-                     , containers
                      , criterion
-                     , cryptonite
                      , data-default
-                     , directory
                      , dlist
-                     , exceptions
                      , formatting
                      , filepath
-                     , http-api-data
                      , http-client
                      , http-client-tls
-                     , http-types
-                     , lens
-                     , mtl
                      , optparse-applicative
                      , parsec
                      , retry
                      , safe-exceptions
-                     , servant
                      , servant-client
                      , servant-client-core
                      , stm
                      , text
                      , time
-                     , time-units
                      , tls
-                     , transformers
                      , universum
-                     , unordered-containers
-                     , vector
                      , x509
                      , x509-store
                      , pem
@@ -182,32 +165,10 @@ test-suite wallet-tool-specs
                       TemplateHaskell
 
   build-depends:      base
-                    , aeson
-                    , bytestring
-                    , cardano-crypto
                     , cardano-sl
-                    , cardano-sl-client
-                    , cardano-sl-client
-                    , cardano-sl-chain-test
-                    , cardano-sl-core
-                    , cardano-sl-core-test
-                    , cardano-sl-crypto
-                    , cardano-sl-chain
-                    , cardano-sl-util
-                    , cardano-sl-util-test
                     , cardano-wallet-tool
                     , cardano-wallet
-                    , data-default
-                    , directory
-                    , formatting
-                    , hedgehog
                     , hspec
-                    , lens
-                    , QuickCheck
-                    , quickcheck-instances
-                    , safecopy
-                    , safe-exceptions
-                    , servant
                     , servant-client
                     , text
                     , universum
