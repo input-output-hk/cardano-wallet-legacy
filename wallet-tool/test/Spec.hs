@@ -1,6 +1,6 @@
 module Main where
 
-import Universum
+import           Universum
 
 import           Test.Hspec
 

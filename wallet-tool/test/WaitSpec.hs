@@ -1,15 +1,15 @@
 module WaitSpec (spec) where
 
-import Universum
-import Test.Hspec
-import Servant.Client (BaseUrl (..), Scheme (Https))
+import           Servant.Client (BaseUrl (..), Scheme (Https))
+import           Test.Hspec
+import           Universum
 
-import Pos.Util.Servant (single)
+import           Pos.Util.Servant (single)
 
-import Cardano.Wallet.API.V1.Types (WalletError(..))
-import Cardano.Wallet.Client.Easy
-import Cardano.Wallet.Client.Wait
-import Cardano.Wallet.ProcessUtil (interruptSelf)
+import           Cardano.Wallet.API.V1.Types (WalletError (..))
+import           Cardano.Wallet.Client.Easy
+import           Cardano.Wallet.Client.Wait
+import           Cardano.Wallet.ProcessUtil (interruptSelf)
 
 
 spec :: Spec
@@ -92,4 +92,4 @@ exampleAction finished = const (pure (finished, "test", 5))
 
 isSyncErrorException :: Maybe SyncError -> Bool
 isSyncErrorException (Just (SyncErrorException _)) = True
-isSyncErrorException _ = False
+isSyncErrorException _                             = False
