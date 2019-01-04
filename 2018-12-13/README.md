@@ -86,7 +86,7 @@ None.
 
 |                    | Start Date | Estimated End Date |
 | -----              | -----      | -----              |
-| ![][release/2.0.0] | 2018-10-30 | 2018-12-14         |
+| ![][release/1.4.0] | 2018-10-30 | 2018-12-14         |
 
 
 
@@ -141,7 +141,7 @@ None.
 
 ## Bugs 
 
-### ![][release/2.0.0] [#141](https://github.com/input-output-hk/cardano-wallet/issues/141) Metadata store becomes inconsistent after wallet or account is deleted
+### ![][release/1.4.0] [#141](https://github.com/input-output-hk/cardano-wallet/issues/141) Metadata store becomes inconsistent after wallet or account is deleted
 
 > **Context**  
 > We store some information related to transactions in the metadata store
@@ -162,7 +162,7 @@ None.
 > corresponding tests would be easier to maintain and prove right (or an
 > alternative solution)
 
-### ![][release/2.0.0] [#137](https://github.com/input-output-hk/cardano-wallet/issues/137) `--wallet-rebuild-db` doesn't actually rebuild the sqlite database.
+### ![][release/1.4.0] [#137](https://github.com/input-output-hk/cardano-wallet/issues/137) `--wallet-rebuild-db` doesn't actually rebuild the sqlite database.
 
 > **Context**  
 >
@@ -196,4 +196,4 @@ None.
 [Decoupling]: https://img.shields.io/badge/-decoupling-%233498db.svg?style=flat-square
 [BIP-44]: https://img.shields.io/badge/-BIP--44-%239b59b6.svg?style=flat-square
 [CI]: https://img.shields.io/badge/-continuous%20integration-%232ecc71.svg?style=flat-square
-[Release/2.0.0]: https://img.shields.io/badge/-release%202.0.0-%2e74c3c.svg?style=flat-square
+[Release/1.4.0]: https://img.shields.io/badge/-release%202.0.0-%2e74c3c.svg?style=flat-square

@@ -59,7 +59,7 @@ None.
 
 |                    | Start Date | Estimated End Date | Done  | In Progress | New Bugs | Fixed Bugs                                       |
 | -----              | -----      | -----              | ----- | -----       | -----    | -----                                            |
-| ![][Release/2.0.0] | 2018-10-30 | 2018-11-23         | -     | -           | -        | [#72](https://github.com/input-output-hk/cardano-wallet/issues/72), [#82](https://github.com/input-output-hk/cardano-wallet/issues/82), [#92](https://github.com/input-output-hk/cardano-wallet/issues/92), [#93](https://github.com/input-output-hk/cardano-wallet/issues/93), [#94](https://github.com/input-output-hk/cardano-wallet/issues/94), [#95](https://github.com/input-output-hk/cardano-wallet/issues/95), [#96](https://github.com/input-output-hk/cardano-wallet/issues/96), [#97](https://github.com/input-output-hk/cardano-wallet/issues/97), [#98](https://github.com/input-output-hk/cardano-wallet/issues/98), [#99](https://github.com/input-output-hk/cardano-wallet/issues/99) |
+| ![][Release/1.4.0] | 2018-10-30 | 2018-11-23         | -     | -           | -        | [#72](https://github.com/input-output-hk/cardano-wallet/issues/72), [#82](https://github.com/input-output-hk/cardano-wallet/issues/82), [#92](https://github.com/input-output-hk/cardano-wallet/issues/92), [#93](https://github.com/input-output-hk/cardano-wallet/issues/93), [#94](https://github.com/input-output-hk/cardano-wallet/issues/94), [#95](https://github.com/input-output-hk/cardano-wallet/issues/95), [#96](https://github.com/input-output-hk/cardano-wallet/issues/96), [#97](https://github.com/input-output-hk/cardano-wallet/issues/97), [#98](https://github.com/input-output-hk/cardano-wallet/issues/98), [#99](https://github.com/input-output-hk/cardano-wallet/issues/99) |
 
 
 # Week Restrospective
@@ -126,7 +126,7 @@ None.
 ## Bugs 
 
 
-### ![][Release/2.0.0] [#72](https://github.com/input-output-hk/cardano-wallet/issues/72) Erroneous Documentation Description
+### ![][Release/1.4.0] [#72](https://github.com/input-output-hk/cardano-wallet/issues/72) Erroneous Documentation Description
 
 > **Context**  
 > The description of the `GET /api/v1/addresses/{address}` endpoint was erroneous.
@@ -153,7 +153,7 @@ None.
 > we now can so there's no need for a nightly build anymore.
 
 
-### ![][Release/2.0.0] [#82](https://github.com/input-output-hk/cardano-wallet/issues/82) Non JSEnd Response for Internal Endpoint '/api/internal/next-update'
+### ![][Release/1.4.0] [#82](https://github.com/input-output-hk/cardano-wallet/issues/82) Non JSEnd Response for Internal Endpoint '/api/internal/next-update'
 
 > **Context**  
 > The API returns responses that are jsend-compliant for all endpoints; e.g.:
@@ -177,7 +177,7 @@ None.
 > that every response from the API is JSEnd compliant.
 
 
-### ![][Release/2.0.0] [#96](https://github.com/input-output-hk/cardano-wallet/issues/96) `hasSpendingPassword` is Wrongly Reported After DB Migration
+### ![][Release/1.4.0] [#96](https://github.com/input-output-hk/cardano-wallet/issues/96) `hasSpendingPassword` is Wrongly Reported After DB Migration
 
 > **Context**  
 > When one creates a wallet without a password on the 1.3.1 build and then
@@ -202,7 +202,7 @@ None.
 > This also removes a whole class of bugs like this one.
 
 
-### ![][Release/2.0.0] [#97](https://github.com/input-output-hk/cardano-wallet/issues/97) Prefiltering Ignores `txId` From Inputs When Create Block Metadata
+### ![][Release/1.4.0] [#97](https://github.com/input-output-hk/cardano-wallet/issues/97) Prefiltering Ignores `txId` From Inputs When Create Block Metadata
 
 > **Context**  
 > Prefiltering seems to totally ignore txIds from Inputs while creating
@@ -217,7 +217,7 @@ None.
 > We've added a regression integration test covering this particular case later
 > on.
 
-### ![][Release/2.0.0] [#98](https://github.com/input-output-hk/cardano-wallet/issues/98) Multithreading at SQlite is not the Greatest
+### ![][Release/1.4.0] [#98](https://github.com/input-output-hk/cardano-wallet/issues/98) Multithreading at SQlite is not the Greatest
 
 > **Context**  
 > The intermediate libraries we use make things slightly worse. We already suffer
@@ -250,7 +250,7 @@ None.
 > mechanism on top of SQLite.
 
 
-### ![][Release/2.0.0] [#99](https://github.com/input-output-hk/cardano-wallet/issues/99) Fee Calculation Doesn't Account For Extra Inputs or Outputs 
+### ![][Release/1.4.0] [#99](https://github.com/input-output-hk/cardano-wallet/issues/99) Fee Calculation Doesn't Account For Extra Inputs or Outputs 
 
 > **Context**  
 > After the coin selection algorithm has ran, we adjust this selection and try to
@@ -299,4 +299,4 @@ None.
 [Decoupling]: https://img.shields.io/badge/-decoupling-%233498db.svg?style=flat-square
 [BIP-44]: https://img.shields.io/badge/-BIP--44-%239b59b6.svg?style=flat-square
 [CI]: https://img.shields.io/badge/-continuous%20integration-%232ecc71.svg?style=flat-square
-[Release/2.0.0]: https://img.shields.io/badge/-release%202.0.0-%2e74c3c.svg?style=flat-square
+[Release/1.4.0]: https://img.shields.io/badge/-release%202.0.0-%2e74c3c.svg?style=flat-square

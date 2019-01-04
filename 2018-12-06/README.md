@@ -116,4 +116,4 @@
 [Decoupling]: https://img.shields.io/badge/-decoupling-%233498db.svg?style=flat-square
 [BIP-44]: https://img.shields.io/badge/-BIP--44-%239b59b6.svg?style=flat-square
 [CI]: https://img.shields.io/badge/-continuous%20integration-%232ecc71.svg?style=flat-square
-[Release/2.0.0]: https://img.shields.io/badge/-release%202.0.0-%2e74c3c.svg?style=flat-square
+[Release/1.4.0]: https://img.shields.io/badge/-release%202.0.0-%2e74c3c.svg?style=flat-square

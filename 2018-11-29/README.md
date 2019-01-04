@@ -65,7 +65,7 @@ The team was greatly diminished this week (3/8 members)
 
 |                    | Start Date | Estimated End Date | Done  | In Progress | New Bugs | Fixed Bugs |
 | -----              | -----      | -----              | ----- | -----       | -----    | -----      |
-| ![][Release/2.0.0] | 2018-10-30 | 2018-11-30         | -     | -           | -        | [#115](https://github.com/input-output-hk/cardano-wallet/issues/115)       |
+| ![][Release/1.4.0] | 2018-10-30 | 2018-11-30         | -     | -           | -        | [#115](https://github.com/input-output-hk/cardano-wallet/issues/115)       |
 
 
 # Week Restrospective
@@ -98,7 +98,7 @@ The team was greatly diminished this week (3/8 members)
 ## Bugs 
 
 
-### ![][Release/2.0.0] [#115](https://github.com/input-output-hk/cardano-wallet/issues/115) Restoration issue hen addresses are discovered prior to accounts. 
+### ![][Release/1.4.0] [#115](https://github.com/input-output-hk/cardano-wallet/issues/115) Restoration issue hen addresses are discovered prior to accounts. 
 
 > **Context**  
 > The code performing the restoration in the old data-layer had a bug where
@@ -118,4 +118,4 @@ The team was greatly diminished this week (3/8 members)
 [Decoupling]: https://img.shields.io/badge/-decoupling-%233498db.svg?style=flat-square
 [BIP-44]: https://img.shields.io/badge/-BIP--44-%239b59b6.svg?style=flat-square
 [CI]: https://img.shields.io/badge/-continuous%20integration-%232ecc71.svg?style=flat-square
-[Release/2.0.0]: https://img.shields.io/badge/-release%202.0.0-%2e74c3c.svg?style=flat-square
+[Release/1.4.0]: https://img.shields.io/badge/-release%202.0.0-%2e74c3c.svg?style=flat-square
