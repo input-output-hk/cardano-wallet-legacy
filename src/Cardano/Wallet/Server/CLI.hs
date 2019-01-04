@@ -117,7 +117,7 @@ getWalletNodeOptions = execParser programInfo
                  <> footerDoc CLI.usageExample
 
     versionOption = infoOption
-        ("cardano-node-" <> showVersion version <>
+        ("cardano-wallet-server-" <> showVersion version <>
          ", git revision " <> toString (ctiGitRevision compileInfo))
         (long "version" <> help "Show version.")
 
