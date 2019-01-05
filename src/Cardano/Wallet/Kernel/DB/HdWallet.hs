@@ -185,15 +185,17 @@ assuredBlockDepth AssuranceLevelStrict = 15
 
 -- | Does this wallet have a spending password
 data HasSpendingPassword =
-    -- | No spending password set
-    NoSpendingPassword
+    -- | No spending password set. We need a timestamp here to record
+    -- when the password was removed (i.e. password was replaced by
+    -- an empty string). By default we store wallet creation time here.
+    NoSpendingPassword !(InDb Core.Timestamp)
 
     -- | If there is a spending password, we record when it was last updated.
   | HasSpendingPassword !(InDb Core.Timestamp)
   deriving (Show, Eq)
 
 instance Arbitrary HasSpendingPassword where
-    arbitrary = oneof [ pure NoSpendingPassword
+    arbitrary = oneof [ NoSpendingPassword . InDb <$> arbitrary
                       , HasSpendingPassword . InDb <$> arbitrary
                       ]
 
@@ -901,7 +903,8 @@ instance Buildable AssuranceLevel where
     build AssuranceLevelStrict = "strict"
 
 instance Buildable HasSpendingPassword where
-    build NoSpendingPassword = "no"
+    build (NoSpendingPassword (InDb lastRemove)) =
+        bprint ("updated " % build) lastRemove
     build (HasSpendingPassword (InDb lastUpdate)) =
         bprint ("updated " % build) lastUpdate
 

@@ -26,7 +26,7 @@ import           Pos.Chain.Txp (TxOut (..), TxOutAux (..))
 import qualified Pos.Chain.Txp as Core
 import           Pos.Core as Core
 import           Pos.Core (Coin (..), IsBootstrapEraAddr (..),
-                     deriveLvl2KeyPair, mkCoin)
+                     deriveLvl2KeyPair, getCurrentTimestamp, mkCoin)
 import           Pos.Core.NetworkMagic (NetworkMagic (..), makeNetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, ProtocolMagic,
                      ShouldCheckPassphrase (..), emptyPassphrase,
@@ -100,9 +100,10 @@ prepareFixtures nm initialBalance = do
     fixt <- forM [0x11, 0x22] $ \b -> do
         let (_, esk) = safeDeterministicKeyGen (B.pack $ replicate 32 b) mempty
         let newRootId = eskToHdRootId nm esk
+        now <- getCurrentTimestamp
         newRoot <- initHdRoot <$> pure newRootId
                             <*> pure (WalletName "A wallet")
-                            <*> pure NoSpendingPassword
+                            <*> pure (NoSpendingPassword $ InDb now)
                             <*> pure AssuranceLevelNormal
                             <*> (InDb <$> pick arbitrary)
         newAccountId <- HdAccountId newRootId <$> deriveIndex (pick . choose) HdAccountIx HardDerivation

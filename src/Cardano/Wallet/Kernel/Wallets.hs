@@ -328,7 +328,7 @@ createWalletHdRnd pw hasSpendingPassword defaultCardanoAddress name assuranceLev
         hdSpendingPassword :: InDb Timestamp -> HD.HasSpendingPassword
         hdSpendingPassword created =
             if hasSpendingPassword then HD.HasSpendingPassword created
-                                   else HD.NoSpendingPassword
+                                   else HD.NoSpendingPassword created
 
 -- | Creates a default 'HdAddress' at a fixed derivation path. This is
 -- useful for tests, but otherwise you may want to use 'defaultHdAddressWith'.
@@ -473,7 +473,7 @@ updatePassword pw hdRootId oldPassword newPassword = do
                                -- here and update 'hasSpendingPassword' on 'HdRoot' accordingly.
                                let hasSpendingPassword =
                                        if newPassword == emptyPassphrase
-                                       then HD.NoSpendingPassword
+                                       then HD.NoSpendingPassword lastUpdateNow
                                        else HD.HasSpendingPassword lastUpdateNow
 
                                res <- update' (pw ^. wallets)

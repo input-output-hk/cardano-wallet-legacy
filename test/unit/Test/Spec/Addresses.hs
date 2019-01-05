@@ -17,7 +17,7 @@ import           Test.QuickCheck (arbitrary, choose, elements, withMaxSuccess,
                      (===))
 import           Test.QuickCheck.Monadic (PropertyM, monadicIO, pick)
 
-import           Pos.Core (Address, addrRoot)
+import           Pos.Core (Address, addrRoot, getCurrentTimestamp)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, ProtocolMagic, emptyPassphrase,
                      firstHardened, safeDeterministicKeyGen)
@@ -75,9 +75,10 @@ prepareFixtures :: NetworkMagic -> Fixture.GenPassiveWalletFixture Fixture
 prepareFixtures nm = do
     let (_, esk) = safeDeterministicKeyGen (B.pack $ replicate 32 0x42) mempty
     let newRootId = eskToHdRootId nm esk
+    now <- getCurrentTimestamp
     newRoot <- initHdRoot <$> pure newRootId
                           <*> pure (WalletName "A wallet")
-                          <*> pure NoSpendingPassword
+                          <*> pure (NoSpendingPassword $ InDb now)
                           <*> pure AssuranceLevelNormal
                           <*> (InDb <$> pick arbitrary)
     newAccountId <- HdAccountId newRootId <$> deriveIndex (pick . choose) HdAccountIx HardDerivation

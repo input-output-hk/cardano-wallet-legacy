@@ -21,7 +21,6 @@ import           Data.Default (def)
 import           Pos.Chain.Txp (Utxo)
 import           Pos.Core (mkCoin)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
-import           Pos.Core.Slotting (Timestamp)
 import           Pos.Crypto.Signing
 
 import qualified Cardano.Mnemonic as Mnemonic
@@ -43,7 +42,6 @@ import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import           Cardano.Wallet.Kernel.Restore (blundToResolvedBlock,
                      restoreWallet)
-import           Cardano.Wallet.Kernel.Util.Core (getCurrentTimestamp)
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
 import           Cardano.Wallet.WalletLayer (CreateEosWalletError (..),
                      CreateWallet (..), CreateWalletError (..),
@@ -58,53 +56,48 @@ createWallet :: MonadIO m
              -> m (Either CreateWalletError V1.Wallet)
 createWallet wallet newWalletRequest = liftIO $ do
     let nm = makeNetworkMagic $ wallet ^. walletProtocolMagic
-    now  <- liftIO getCurrentTimestamp
     case newWalletRequest of
         CreateWallet newWallet@V1.NewWallet{..} ->
             case newwalOperation of
-                V1.RestoreWallet -> restore nm newWallet now
-                V1.CreateWallet  -> create newWallet now
+                V1.RestoreWallet -> restore nm newWallet
+                V1.CreateWallet  -> create newWallet
         ImportWalletFromESK esk mbSpendingPassword ->
             restoreFromESK nm
                            esk
                            (spendingPassword mbSpendingPassword)
-                           now
                            "Imported Wallet"
                            HD.AssuranceLevelNormal
   where
-    create :: V1.NewWallet -> Timestamp -> IO (Either CreateWalletError V1.Wallet)
-    create newWallet@V1.NewWallet{..} now = runExceptT $ do
+    create :: V1.NewWallet -> IO (Either CreateWalletError V1.Wallet)
+    create newWallet@V1.NewWallet{..} = runExceptT $ do
       root <- withExceptT CreateWalletError $ ExceptT $
                 Kernel.createHdWallet wallet
                                       (mnemonic newWallet)
                                       (spendingPassword newwalSpendingPassword)
                                       (fromAssuranceLevel newwalAssuranceLevel)
                                       (HD.WalletName newwalName)
-      return (mkRoot newwalName newwalAssuranceLevel now root)
+      return (mkRoot newwalName newwalAssuranceLevel root)
 
     restore :: NetworkMagic
             -> V1.NewWallet
-            -> Timestamp
             -> IO (Either CreateWalletError V1.Wallet)
-    restore nm newWallet@V1.NewWallet{..} now = do
+    restore nm newWallet@V1.NewWallet{..} = do
         let esk    = snd $ safeDeterministicKeyGen
                              (Mnemonic.mnemonicToSeed (mnemonic newWallet))
                              (spendingPassword newwalSpendingPassword)
         restoreFromESK nm
                        esk
                        (spendingPassword newwalSpendingPassword)
-                       now
                        newwalName
                        (fromAssuranceLevel newwalAssuranceLevel)
 
     restoreFromESK :: NetworkMagic
                    -> EncryptedSecretKey
                    -> PassPhrase
-                   -> Timestamp
                    -> Text
                    -> HD.AssuranceLevel
                    -> IO (Either CreateWalletError V1.Wallet)
-    restoreFromESK nm esk pwd now walletName hdAssuranceLevel = runExceptT $ do
+    restoreFromESK nm esk pwd walletName hdAssuranceLevel = runExceptT $ do
         let rootId = HD.eskToHdRootId nm esk
 
         -- Insert the 'EncryptedSecretKey' into the 'Keystore'
@@ -130,11 +123,11 @@ createWallet wallet newWalletRequest = liftIO $ do
                       esk
 
                 -- Return the wallet information, with an updated balance.
-                let root' = mkRoot walletName (toAssuranceLevel hdAssuranceLevel) now root
+                let root' = mkRoot walletName (toAssuranceLevel hdAssuranceLevel) root
                 updateSyncState wallet rootId (root' { V1.walBalance = V1.WalletCoin coins })
 
-    mkRoot :: Text -> V1.AssuranceLevel -> Timestamp -> HD.HdRoot -> V1.Wallet
-    mkRoot v1WalletName v1AssuranceLevel now hdRoot = V1.Wallet {
+    mkRoot :: Text -> V1.AssuranceLevel -> HD.HdRoot -> V1.Wallet
+    mkRoot v1WalletName v1AssuranceLevel hdRoot = V1.Wallet {
           walId                         = walletId
         , walName                       = v1WalletName
         , walBalance                    = V1.WalletCoin (mkCoin 0)
@@ -146,11 +139,10 @@ createWallet wallet newWalletRequest = liftIO $ do
         , walType                       = V1.WalletRegular
         }
       where
-        (hasSpendingPassword, mbLastUpdate) =
+        (hasSpendingPassword, lastUpdate) =
             case hdRoot ^. HD.hdRootHasPassword of
-                 HD.NoSpendingPassword     -> (False, Nothing)
-                 HD.HasSpendingPassword lu -> (True, Just (lu ^. fromDb))
-        lastUpdate = fromMaybe now mbLastUpdate
+                 HD.NoSpendingPassword lr  -> (False, lr ^. fromDb)
+                 HD.HasSpendingPassword lu -> (True, lu ^. fromDb)
         createdAt  = hdRoot ^. HD.hdRootCreatedAt . fromDb
         walletId   = toRootId $ hdRoot ^. HD.hdRootId
 
