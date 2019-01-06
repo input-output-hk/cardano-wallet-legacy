@@ -56,7 +56,7 @@ import           Cardano.Wallet.Kernel.DB.TxMeta
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import           Cardano.Wallet.Kernel.Internal
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
-import qualified Cardano.Wallet.Kernel.PrefilterTx as Kernel
+import qualified Cardano.Wallet.Kernel.Prefiltering as Kernel
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import qualified Cardano.Wallet.Kernel.Transactions as Kernel
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel

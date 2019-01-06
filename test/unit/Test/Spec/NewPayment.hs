@@ -53,7 +53,7 @@ import           Cardano.Wallet.Kernel.Internal (ActiveWallet, PassiveWallet,
                      wallets)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
-import qualified Cardano.Wallet.Kernel.PrefilterTx as Kernel
+import qualified Cardano.Wallet.Kernel.Prefiltering as Kernel
 import qualified Cardano.Wallet.Kernel.Transactions as Kernel
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
 import           Cardano.Wallet.WalletLayer (ActiveWalletLayer)

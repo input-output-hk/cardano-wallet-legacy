@@ -227,7 +227,7 @@ library
       Cardano.Wallet.Kernel.Mode
       Cardano.Wallet.Kernel.NodeStateAdaptor
       Cardano.Wallet.Kernel.Pending
-      Cardano.Wallet.Kernel.PrefilterTx
+      Cardano.Wallet.Kernel.Prefiltering
       Cardano.Wallet.Kernel.Read
       Cardano.Wallet.Kernel.Restore
       Cardano.Wallet.Kernel.Submission

@@ -42,7 +42,7 @@ import qualified Cardano.Wallet.Kernel.Internal as Internal
 import           Cardano.Wallet.Kernel.Invariants as Kernel
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import qualified Cardano.Wallet.Kernel.Pending as Kernel
-import           Cardano.Wallet.Kernel.PrefilterTx (prefilterUtxo)
+import           Cardano.Wallet.Kernel.Prefiltering (prefilterUtxo)
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import           Cardano.Wallet.Kernel.Transactions (toMeta)
 
