@@ -174,15 +174,14 @@ toWallet db hdRoot = V1.Wallet {
     , walType                       = V1.WalletRegular
     }
   where
-    (hasSpendingPassword, mbLastUpdate) =
+    (hasSpendingPassword, lastUpdate) =
         case hdRoot ^. HD.hdRootHasPassword of
-             HD.NoSpendingPassword     -> (False, Nothing)
-             HD.HasSpendingPassword lu -> (True, Just (lu ^. fromDb))
+             HD.NoSpendingPassword lr  -> (False, lr ^. fromDb)
+             HD.HasSpendingPassword lu -> (True, lu ^. fromDb)
     -- In case the wallet has no spending password, its last update
     -- matches this wallet creation time.
     rootId           = hdRoot ^. HD.hdRootId
     createdAt        = hdRoot ^. HD.hdRootCreatedAt . fromDb
-    lastUpdate       = fromMaybe createdAt mbLastUpdate
     walletId         = sformat build . _fromDb . HD.getHdRootId $ rootId
     v1AssuranceLevel = toAssuranceLevel $ hdRoot ^. HD.hdRootAssurance
 

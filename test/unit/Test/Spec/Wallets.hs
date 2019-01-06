@@ -359,7 +359,7 @@ spec = describe "Wallets" $ do
                                                      newPwd
                         let passphraseIsEmpty = newPwd == emptyPassphrase
                         let satisfied = \case
-                                        HD.NoSpendingPassword    -> passphraseIsEmpty
+                                        HD.NoSpendingPassword _  -> passphraseIsEmpty
                                         HD.HasSpendingPassword _ -> not passphraseIsEmpty
                         case res of
                              Left e -> fail (show e)
