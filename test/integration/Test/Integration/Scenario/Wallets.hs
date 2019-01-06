@@ -6,790 +6,47 @@ import           Universum
 
 import           Cardano.Wallet.Client.Http (ClientError, Wallet)
 import qualified Cardano.Wallet.Client.Http as Client
+import           Test.Hspec (describe)
 import           Test.Integration.Framework.DSL
 
 spec :: Scenarios Context
 spec = do
-
-    scenario "WALLETS_CREATE_01 - One can restore previously deleted wallet" $ do
-      fixture <- setup $ defaultSetup
-        & initialCoins .~ [1000111]
-
-      -- 1. Delete wallet
-      successfulRequest $ Client.deleteWallet
-        $- (fixture ^. wallet . walletId)
-
-      -- 1. Restore wallet
-      restoration <- request $ Client.postWallet $- NewWallet
-        (fixture ^. backupPhrase)
-        noSpendingPassword -- defaultSpendingPassword does not work
-        StrictAssurance
-        kanjiPolishWalletName
-        RestoreWallet
-      verify restoration
-        [ expectWalletEventuallyRestored
-        , expectFieldEqual walletName kanjiPolishWalletName
-        , expectFieldEqual assuranceLevel StrictAssurance
-        , expectFieldEqual hasSpendingPassword False
-        , expectFieldEqual amount 1000111
-        ]
-
-    scenario "WALLETS_CREATE_02a - Restore wallet with No spending password" $ do
-      -- 1. Setup new wallet
-      fixture <- setup $ defaultSetup
-
-      -- 2. Delete wallet
-      successfulRequest $ Client.deleteWallet
-        $- (fixture ^. wallet . walletId)
-
-      -- 3. Restore wallet with noSpendingPassword
-      restoreResp <- request $ Client.postWallet $- NewWallet
-        (fixture ^. backupPhrase)
-        noSpendingPassword
-        StrictAssurance
-        kanjiPolishWalletName
-        RestoreWallet
-      verify restoreResp
-        [ expectWalletEventuallyRestored
-        , expectFieldEqual walletName kanjiPolishWalletName
-        , expectFieldEqual assuranceLevel StrictAssurance
-        , expectFieldEqual hasSpendingPassword False
-        ]
-
-      -- 4. Get wallet details
-      getResp <- request $ Client.getWallet
-        $- (fixture ^. wallet . walletId)
-      verify getResp
-        [
-          expectFieldEqual walletName kanjiPolishWalletName
-        , expectFieldEqual assuranceLevel StrictAssurance
-        , expectFieldEqual hasSpendingPassword False
-        ]
-
-    scenario "WALLETS_CREATE_02b - Create wallet with No spending password" $ do
-      -- 1. Create yet new wallet with noSpendingPassword
-      bkpPhrase <- mkBackupPhrase testBackupPhrase2
-      let newWalletName = "πœę©ß←↓→óþąśðæŋ’ə…łżźć„”ńµ"
-      createResp <- successfulRequest $ Client.postWallet $- NewWallet
-        bkpPhrase
-        noSpendingPassword
-        NormalAssurance
-        newWalletName
-        CreateWallet
-      verify (Right createResp)
-        [
-          expectFieldEqual walletName newWalletName
-        , expectFieldEqual assuranceLevel NormalAssurance
-        , expectFieldEqual hasSpendingPassword False
-        ]
-
-      -- 2. Verify noSpendingPassword on new wallet
-      getAgainResp <- request $ Client.getWallet
-        $- (createResp ^. walletId)
-      verify getAgainResp
-        [
-          expectFieldEqual walletName newWalletName
-        , expectFieldEqual assuranceLevel NormalAssurance
-        , expectFieldEqual hasSpendingPassword False
-        ]
-
-    scenario "WALLETS_CREATE_02c - Create wallet with spending password" $ do
-
-      createResp <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "normal",
-        "name": "My HODL Wallet",
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-      verify (createResp :: Either ClientError Wallet)
-        [
-          expectFieldEqual hasSpendingPassword True
-        , expectFieldEqual walletName "My HODL Wallet"
-        , expectFieldEqual assuranceLevel NormalAssurance
-        ]
-
-    scenario "WALLETS_CREATE_02d - Restore wallet with spending password" $ do
-
-      restoResp <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{testBackupPhrase2},
-        "assuranceLevel": "strict",
-        "name": "My HODL Wallet 2",
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (restoResp :: Either ClientError Wallet)
-        [
-          expectWalletEventuallyRestored
-        , expectFieldEqual hasSpendingPassword True
-        , expectFieldEqual walletName "My HODL Wallet 2"
-        , expectFieldEqual assuranceLevel StrictAssurance
-        ]
-
-    scenario "WALLETS_CREATE_02e - Create wallet if spendingPassword is null" $ do
-
-      response3 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "normal",
-        "name": "MyFirstWallet",
-        "spendingPassword": null
-      }|]
-      verify (response3 :: Either ClientError Wallet)
-        [
-          expectFieldEqual walletName "MyFirstWallet"
-        , expectFieldEqual assuranceLevel NormalAssurance
-        , expectFieldEqual hasSpendingPassword False
-        ]
-
-
-    scenario "WALLETS_CREATE_02f - Restore wallet if spendingPassword is null" $ do
-
-      response3 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "strict",
-        "name": "MyFirstWallet",
-        "spendingPassword": null
-      }|]
-      verify (response3 :: Either ClientError Wallet)
-        [
-          expectFieldEqual walletName "MyFirstWallet"
-        , expectFieldEqual assuranceLevel StrictAssurance
-        , expectFieldEqual hasSpendingPassword False
-        ]
-
-    scenario "WALLETS_CREATE_03a - Cannot create wallet if spendingPassword is hex|base16 string with length less than 64" $ do
-
-      response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "normal",
-        "name": "MyFirstWallet",
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c6"
-      }|]
-
-      verify (response :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.spendingPassword: Expected spending password to be of either length 0 or 32, not 26"
-        ]
-
-    scenario "WALLETS_CREATE_03b - Cannot restore wallet if spendingPassword is hex|base16 string with length less than 64" $ do
-
-      response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "normal",
-        "name": "MyFirstWallet",
-        "spendingPassword": "541"
-      }|]
-
-      verify (response :: Either ClientError Wallet)
-        [ expectJSONError "suffix is not in base-16 format: 1"
-        ]
-
-    scenario "WALLETS_CREATE_03c - Cannot create wallet if spendingPassword is hex|base16 string with length MORE than 64" $ do
-
-      response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "normal",
-        "name": "MyFirstWallet",
-        "spendingPassword": "c0b75cebcd14403d7abba4227cea5b99b1b09148623cd927fa7bb40c6cca5583c"
-      }|]
-
-      verify (response :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.spendingPassword: suffix is not in base-16 format: c"
-        ]
-
-    scenario "WALLETS_CREATE_03d - Cannot restore wallet if spendingPassword is hex|base16 string with length MORE than 64" $ do
-
-      response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "normal",
-        "name": "MyFirstWallet",
-        "spendingPassword": "c0b75cebcd14403d7abba4227cea5b99b1b09148623cd927fa7bb40c6cca5583c"
-      }|]
-
-      verify (response :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.spendingPassword: suffix is not in base-16 format: c"
-        ]
-
-    scenario "WALLETS_CREATE_03e - Cannot create wallet if spendingPassword is number" $ do
-
-      response2 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "strict",
-        "name": "MyFirstWallet",
-        "spendingPassword": 541
-      }|]
-
-      verify (response2 :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.spendingPassword: expected parseJSON failed for PassPhrase, encountered Number"
-        ]
-
-    scenario "WALLETS_CREATE_03f - Cannot create wallet if spendingPassword is array" $ do
-
-      response2 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "strict",
-        "name": "MyFirstWallet",
-        "spendingPassword": []
-      }|]
-
-      verify (response2 :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.spendingPassword: expected parseJSON failed for PassPhrase, encountered Array"
-        ]
-
-    scenario "WALLETS_CREATE_03g - Cannot create wallet if spendingPassword is empty string" $ do
-
-      response3 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "strict",
-        "name": "MyFirstWallet",
-        "spendingPassword": " "
-      }|]
-
-      verify (response3 :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.spendingPassword: suffix is not in base-16 format"
-        ]
-
-    scenario "WALLETS_CREATE_03h - Cannot restore wallet if spendingPassword is number" $ do
-
-      response2 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "strict",
-        "name": "MyFirstWallet",
-        "spendingPassword": 541
-      }|]
-
-      verify (response2 :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.spendingPassword: expected parseJSON failed for PassPhrase, encountered Number"
-        ]
-
-    scenario "WALLETS_CREATE_03i - Cannot restore wallet if spendingPassword is array" $ do
-
-      response2 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "strict",
-        "name": "MyFirstWallet",
-        "spendingPassword": []
-      }|]
-
-      verify (response2 :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.spendingPassword: expected parseJSON failed for PassPhrase, encountered Array"
-        ]
-
-    scenario "WALLETS_CREATE_03j - Cannot restore wallet if spendingPassword is empty string" $ do
-
-      response3 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "strict",
-        "name": "MyFirstWallet",
-        "spendingPassword": " "
-      }|]
-
-      verify (response3 :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.spendingPassword: suffix is not in base-16 format"
-        ]
-
-    scenario "WALLETS_CREATE_03j - Cannot create wallet if spendingPassword is a string" $ do
-
-      response3 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "strict",
-        "name": "MyFirstWallet",
-        "spendingPassword": "patate"
-      }|]
-
-      verify (response3 :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.spendingPassword: suffix is not in base-16 format"
-        ]
-
-    scenario "WALLETS_CREATE_03k - Cannot restore wallet if spendingPassword is a string" $ do
-
-      response3 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "strict",
-        "name": "MyFirstWallet",
-        "spendingPassword": "patate"
-      }|]
-
-      verify (response3 :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.spendingPassword: suffix is not in base-16 format"
-        ]
-
-    scenario "WALLETS_CREATE_04 - Cannot perform operation other than 'create' or 'restore'" $ do
-
-      response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": #{russianWalletName},
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "normal",
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.operation: When parsing Cardano.Wallet.API.V1.Types.WalletOperation expected a String with the tag of a constructor but got"
-        ]
-
-      response2 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "normal",
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response2 :: Either ClientError Wallet)
-          [ expectJSONError "Error in $.operation: When parsing Cardano.Wallet.API.V1.Types.WalletOperation expected a String with the tag of a constructor but got"
-          ]
-
-    scenario "WALLETS_CREATE_05a - can't create wallet if backupPhrase is already known" $ do
-      fixture <- setup $ defaultSetup
-
-      response <- request $ Client.postWallet $- NewWallet
-        (fixture ^. backupPhrase)
-        noSpendingPassword
-        defaultAssuranceLevel
-        defaultWalletName
-        CreateWallet
-
-      verify response
-        [ expectWalletError (WalletAlreadyExists (fixture ^. wallet . walletId))
-        ]
-
-    scenario "WALLETS_CREATE_05b - can't restore wallet if backupPhrase is already known" $ do
-      fixture <- setup $ defaultSetup
-        & mnemonicWords .~ testBackupPhrase
-
-      response <- request $ Client.postWallet $- NewWallet
-        (fixture ^. backupPhrase)
-        noSpendingPassword
-        defaultAssuranceLevel
-        defaultWalletName
-        RestoreWallet
-
-      verify response
-        [ expectWalletError (WalletAlreadyExists (fixture ^. wallet . walletId))
-        ]
-
-    scenario "WALLETS_CREATE_06, WALLETS_CREATE_12a - wallet is available after it's been created - long wallet name" $ do
-      fixture <- setup $ defaultSetup
-        & walletName .~ longWalletName
-        & assuranceLevel .~ StrictAssurance
-
-      response <- request $ Client.getWallet
-        $- (fixture ^. wallet . walletId)
-
-      verify response
-        [
-          expectFieldEqual walletName longWalletName
-        , expectFieldEqual assuranceLevel StrictAssurance
-        ]
-
-    scenario "WALLETS_CREATE_06, WALLETS_CREATE_12b - wallet is available after it's been created - empty wallet name" $ do
-      fixture <- setup $ defaultSetup
-        & walletName .~ ""
-        & assuranceLevel .~ NormalAssurance
-
-      response <- request $ Client.getWallet
-        $- (fixture ^. wallet . walletId)
-
-      verify response
-        [ expectFieldEqual walletName ""
-        , expectFieldEqual assuranceLevel NormalAssurance
-        ]
-
-    scenario "WALLETS_CREATE_07a - Cannot create wallet using LESS than 12 mnemonics valid BIP-39" $ do
-
-      response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{mnemonicsWith9Words},
-        "assuranceLevel": "strict",
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response :: Either ClientError Wallet)
-        [ expectJSONError "Invalid number of mnemonic words: got 9 words, expected 12 words"
-        ]
-
-    scenario "WALLETS_CREATE_07b - Cannot restore wallet using LESS than 12 mnemonics valid BIP-39" $ do
-
-      response2 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{mnemonicsWith9Words},
-        "assuranceLevel": "strict",
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response2 :: Either ClientError Wallet)
-        [ expectJSONError "Invalid number of mnemonic words: got 9 words, expected 12 words"
-        ]
-
-    scenario "WALLETS_CREATE_07c - Cannot create wallet using empty mnemonics list" $ do
-
-      response3 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": [],
-        "assuranceLevel": "normal",
-        "name": "my hodl wallet",
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response3 :: Either ClientError Wallet)
-        [ expectJSONError "Invalid number of mnemonic words: got 0 words, expected 12 words"
-        ]
-
-    scenario "WALLETS_CREATE_07d - Cannot restore wallet using empty mnemonics list" $ do
-
-      response3 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": [],
-        "assuranceLevel": "normal",
-        "name": "my hodl wallet",
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response3 :: Either ClientError Wallet)
-        [ expectJSONError "Invalid number of mnemonic words: got 0 words, expected 12 words"
-        ]
-
-    scenario "WALLETS_CREATE_07e - Cannot create wallet using MORE than 12 mnemonics valid BIP-39" $ do
-
-      response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{mnemonicsWith15Words},
-        "assuranceLevel": "strict",
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response :: Either ClientError Wallet)
-        [ expectJSONError "Invalid number of mnemonic words: got 15 words, expected 12 words"
-        ]
-
-    scenario "WALLETS_CREATE_07f - Cannot restore wallet using MORE than 12 mnemonics valid BIP-39" $ do
-
-      response2 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{mnemonicsWith15Words},
-        "assuranceLevel": "strict",
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response2 :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.backupPhrase: MnemonicError: Invalid number of mnemonic words: got 15 words, expected 12 words"
-        ]
-
-    scenario "WALLETS_CREATE_08a - Cannot create wallet using valid non-English mnemonics" $ do
-
-      response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{kanjiMnemonics},
-        "assuranceLevel": "normal",
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.backupPhrase: MnemonicError: Invalid dictionary word:"
-        ]
-
-    scenario "WALLETS_CREATE_08b - Cannot restore wallet using valid non-English mnemonics" $ do
-
-      response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{kanjiMnemonics},
-        "assuranceLevel": "normal",
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.backupPhrase: MnemonicError: Invalid dictionary word:"
-        ]
-
-    scenario "WALLETS_CREATE_08c - Cannot create wallet using invalid mnemonics" $ do
-
-      response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{invalidMnemonics},
-        "assuranceLevel": "normal",
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.backupPhrase: MnemonicError: Invalid entropy checksum: got Checksum 11, expected Checksum 5"
-        ]
-
-    scenario "WALLETS_CREATE_08d - Cannot restore wallet using invalid mnemonics" $ do
-
-      response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{invalidMnemonics},
-        "assuranceLevel": "normal",
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.backupPhrase: MnemonicError: Invalid entropy checksum: got Checksum 11, expected Checksum 5"
-        ]
-
-    scenario "WALLETS_CREATE_09a - Cannot create wallet with mnemonics from the API doc" $ do
-
-      response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{apiDocsBackupPhrase},
-        "assuranceLevel": "strict",
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.backupPhrase: Forbidden Mnemonic: an example Mnemonic has been submitted. Please generate a fresh and private Mnemonic from a trusted source"
-        ]
-
-    scenario "WALLETS_CREATE_09b - Cannot restore wallet with mnemonics from the API doc" $ do
-
-      response2 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{apiDocsBackupPhrase},
-        "assuranceLevel": "normal",
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response2 :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.backupPhrase: Forbidden Mnemonic: an example Mnemonic has been submitted. Please generate a fresh and private Mnemonic from a trusted source"
-        ]
-
-    scenario "WALLETS_CREATE_10a - Cannot create wallet with assurance level other than 'strict' or 'normal'" $ do
-
-      response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": #{russianWalletName},
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.assuranceLevel: When parsing Cardano.Wallet.API.V1.Types.AssuranceLevel expected a String with the tag of a constructor but got"
-        ]
-
-      response2 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "",
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response2 :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.assuranceLevel: When parsing Cardano.Wallet.API.V1.Types.AssuranceLevel expected a String with the tag of a constructor but got"
-        ]
-
-    scenario "WALLETS_CREATE_10b - Cannot restore wallet with assurance level other than 'strict' or 'normal'" $ do
-
-      response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": #{russianWalletName},
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.assuranceLevel: When parsing Cardano.Wallet.API.V1.Types.AssuranceLevel expected a String with the tag of a constructor but got"
-        ]
-
-      response2 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "",
-        "name": #{russianWalletName},
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response2 :: Either ClientError Wallet)
-        [ expectJSONError "Error in $.assuranceLevel: When parsing Cardano.Wallet.API.V1.Types.AssuranceLevel expected a String with the tag of a constructor but got"
-        ]
-
-    scenario "WALLETS_CREATE_11a - Cannot perform POST to api/v1/wallets without all required parameters (operation)" $ do
-
-      response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "normal",
-        "name": "my hodl wallet",
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response :: Either ClientError Wallet)
-        [ expectJSONError "When parsing the record newWallet of type Cardano.Wallet.API.V1.Types.NewWallet the key operation was not present."
-        ]
-
-    scenario "WALLETS_CREATE_11b - Cannot perform create without all required parameters (backupPhrase)" $ do
-
-      response2 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "assuranceLevel": "normal",
-        "name": "my hodl wallet",
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response2 :: Either ClientError Wallet)
-        [ expectJSONError "When parsing the record newWallet of type Cardano.Wallet.API.V1.Types.NewWallet the key backupPhrase was not present."
-        ]
-
-    scenario "WALLETS_CREATE_11c - Cannot perform restore without all required parameters (backupPhrase)" $ do
-
-      response2 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "assuranceLevel": "normal",
-        "name": "my hodl wallet",
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-      verify (response2 :: Either ClientError Wallet)
-        [ expectJSONError "When parsing the record newWallet of type Cardano.Wallet.API.V1.Types.NewWallet the key backupPhrase was not present."
-        ]
-
-    scenario "WALLETS_CREATE_11d - Cannot perform create without all required parameters (assuranceLevel)" $ do
-
-      response3 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{testBackupPhrase},
-        "name": "my hodl wallet",
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-
-      verify (response3 :: Either ClientError Wallet)
-        [ expectJSONError "When parsing the record newWallet of type Cardano.Wallet.API.V1.Types.NewWallet the key assuranceLevel was not present."
-        ]
-
-    scenario "WALLETS_CREATE_11e - Cannot perform restore without all required parameters (assuranceLevel)" $ do
-
-      response3 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{testBackupPhrase},
-        "name": "my hodl wallet",
-        "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
-      }|]
-
-
-      verify (response3 :: Either ClientError Wallet)
-        [ expectJSONError "When parsing the record newWallet of type Cardano.Wallet.API.V1.Types.NewWallet the key assuranceLevel was not present."
-        ]
-
-    scenario "WALLETS_CREATE_11f - Cannot perform create without all required parameters (name)" $ do
-
-      response4 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "create",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "normal"
-      }|]
-
-      verify (response4 :: Either ClientError Wallet)
-        [ expectJSONError "When parsing the record newWallet of type Cardano.Wallet.API.V1.Types.NewWallet the key name was not present."
-        ]
-
-    scenario "WALLETS_CREATE_11g - Cannot perform restore without all required parameters (name)" $ do
-
-      response4 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "operation": "restore",
-        "backupPhrase": #{testBackupPhrase},
-        "assuranceLevel": "normal"
-      }|]
-
-      verify (response4 :: Either ClientError Wallet)
-        [ expectJSONError "When parsing the record newWallet of type Cardano.Wallet.API.V1.Types.NewWallet the key name was not present."
-        ]
-
-    scenario "WALLETS_CREATE_11h - Cannot perform POST to api/v1/wallets with invalid parameters" $ do
-
-      response5 <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
-        "Invalid1": "param",
-        "Invalid2": "param",
-        "Invalid3": "param"
-      }|]
-
-      verify (response5 :: Either ClientError Wallet)
-        [ expectJSONError "key backupPhrase was not present"
-        ]
-
     scenario "WALLETS_DELETE_01 - deleted wallet is not available" $ do
-      fixture <- setup $ defaultSetup
-        & walletName .~ "漢ę ó ł ąś ł żźćń字"
-        & mnemonicWords .~ testBackupPhrase
+        fixture <- setup $ defaultSetup
+            & walletName .~ "漢ę ó ł ąś ł żźćń字"
+            & mnemonicWords .~ testBackupPhrase
 
-      successfulRequest $ Client.deleteWallet
-        $- (fixture ^. wallet . walletId)
+        successfulRequest $ Client.deleteWallet
+            $- (fixture ^. wallet . walletId)
 
-      response02 <- request $ Client.getWallet
-        $- (fixture ^. wallet . walletId)
+        response02 <- request $ Client.getWallet
+            $- (fixture ^. wallet . walletId)
 
-      verify response02
-        [ expectWalletError (WalletNotFound)
-        ]
+        verify response02
+            [ expectWalletError (WalletNotFound)
+            ]
 
     scenario "WALLETS_LIST_01 - One can list all wallets without providing any parameters" $ do
-      -- 1. Create 3 wallets
-      fixture01 <- setup $ defaultSetup
-        & walletName .~ "1"
-        & assuranceLevel .~ NormalAssurance
+        fixtures <- forM (zip [1..3] [NormalAssurance, NormalAssurance, StrictAssurance]) $ \(name, level) -> do
+            setup $ defaultSetup
+                & walletName .~ show (name :: Int)
+                & assuranceLevel .~ level
 
-      fixture02 <- setup $ defaultSetup
-        & walletName .~ "2"
-        & assuranceLevel .~ NormalAssurance
+        forM_ fixtures $ \fixture -> do
+            response <- request $ Client.getWallet
+                $- (fixture ^. wallet . walletId)
+            verify response
+                [ expectFieldEqual walletName (fixture ^. wallet . walletName)
+                , expectFieldEqual assuranceLevel (fixture ^. wallet .  assuranceLevel)
+                ]
 
-      fixture03 <- setup $ defaultSetup
-        & walletName .~ "3"
-        & assuranceLevel .~ StrictAssurance
-
-      getResp01 <- request $ Client.getWallet
-        $- (fixture01 ^. wallet . walletId)
-      verify getResp01
-        [ expectFieldEqual walletName "1"
-        , expectFieldEqual assuranceLevel NormalAssurance
-        ]
-
-      getResp02 <- request $ Client.getWallet
-        $- (fixture02 ^. wallet . walletId)
-      verify getResp02
-        [ expectFieldEqual walletName "2"
-        , expectFieldEqual assuranceLevel NormalAssurance
-        ]
-
-      getResp03 <- request $ Client.getWallet
-         $- (fixture03 ^. wallet . walletId)
-      verify getResp03
-         [ expectFieldEqual walletName "3"
-         , expectFieldEqual assuranceLevel StrictAssurance
-         ]
-
-      getWalletsResp <- request $ Client.getWallets
-      verify getWalletsResp
-        [ expectSuccess
-        -- additional checks need to be added
-        -- expect returned list of wallets has size 3
-        -- expect there is a wallet on the list with certain field value
-        ]
+        getWalletsResp <- request $ Client.getWallets
+        verify getWalletsResp
+            [ expectSuccess
+            -- additional checks need to be added
+            -- expect returned list of wallets has size 3
+            -- expect there is a wallet on the list with certain field value
+            ]
 
 
     scenario "WALLETS_UPDATE_01 - updating a wallet persists the update" $ do
@@ -830,16 +87,294 @@ spec = do
             ]
 
 
+    -- Below are scenarios that are somewhat 'symmetric' for both 'create' and 'restore' operations.
+    forM_ [CreateWallet, RestoreWallet] $ \operation -> describe (show operation) $ do
+        scenario "WALLETS_CREATE_01 - One can create/restore previously deleted wallet" $ do
+            fixture <- setup $ defaultSetup
+                & initialCoins .~ [1000111]
+
+            successfulRequest $ Client.deleteWallet
+                $- (fixture ^. wallet . walletId)
+
+            response <- request $ Client.postWallet $- NewWallet
+                (fixture ^. backupPhrase)
+                noSpendingPassword
+                StrictAssurance
+                kanjiPolishWalletName
+                operation
+
+            verify response
+                [ expectWalletEventuallyRestored
+                , expectFieldEqual walletName kanjiPolishWalletName
+                , expectFieldEqual assuranceLevel StrictAssurance
+                , expectFieldEqual hasSpendingPassword False
+                , expectFieldEqual amount $ case operation of
+                    RestoreWallet -> 1000111
+                    CreateWallet  -> 0
+                ]
+
+
+        scenario "WALLETS_CREATE_02 - One can create/restore wallet without spending password" $ do
+            fixture <- setup $ defaultSetup
+
+            successfulRequest $ Client.deleteWallet
+                $- (fixture ^. wallet . walletId)
+
+            restoreResp <- request $ Client.postWallet $- NewWallet
+                (fixture ^. backupPhrase)
+                noSpendingPassword
+                StrictAssurance
+                kanjiPolishWalletName
+                operation
+
+            verify restoreResp
+                [ expectWalletEventuallyRestored
+                , expectFieldEqual walletName kanjiPolishWalletName
+                , expectFieldEqual assuranceLevel StrictAssurance
+                , expectFieldEqual hasSpendingPassword False
+                ]
+
+
+        scenario "WALLETS_CREATE_03 - One can create/restore wallet with spending password" $ do
+            fixture <- setup $ defaultSetup
+                & rawPassword .~ "patate"
+
+            successfulRequest $ Client.deleteWallet
+                $- (fixture ^. wallet . walletId)
+
+            response <- request $ Client.postWallet $- NewWallet
+                (fixture ^. backupPhrase)
+                (Just $ fixture ^. spendingPassword)
+                NormalAssurance
+                "My HODL Wallet"
+                operation
+
+            verify (response :: Either ClientError Wallet)
+                [ expectFieldEqual hasSpendingPassword True
+                , expectFieldEqual walletName "My HODL Wallet"
+                , expectFieldEqual assuranceLevel NormalAssurance
+                ]
+
+
+        describe "WALLETS_CREATE_04 - One cannot create/restore wallet if spending password is not hex-encoded string" $ do
+            let matrix =
+                    [ ( "spending password is less than 32 bytes / 64 characters"
+                      , [json| "5416b2988745725998907addf4613c9b0764f04959030e1b81c6" |]
+                      , [ expectJSONError "Error in $.spendingPassword: Expected spending password to be of either length 0 or 32, not 26" ]
+                      )
+                    , ( "spending password is more than 32 bytes / 64 characters"
+                      , [json| "c0b75cebcd14403d7abba4227cea5b99b1b09148623cd927fa7bb40c6cca5583c" |]
+                      , [ expectJSONError "Error in $.spendingPassword: suffix is not in base-16 format: c" ]
+                      )
+                    , ( "spending password is a number"
+                      , [json| 541 |]
+                      , [ expectJSONError "Error in $.spendingPassword: expected parseJSON failed for PassPhrase, encountered Number" ]
+                      )
+                    , ( "spending password is an empty string"
+                      , [json| " " |]
+                      , [ expectJSONError "Error in $.spendingPassword: suffix is not in base-16 format" ]
+                      )
+                    , ( "spending password is an array"
+                      , [json| [] |]
+                      , [ expectJSONError "Error in $.spendingPassword: expected parseJSON failed for PassPhrase, encountered Array" ]
+                      )
+                    , ( "spending password is an arbitrary utf-8 string"
+                      , [json| "patate" |]
+                      , [ expectJSONError "Error in $.spendingPassword: suffix is not in base-16 format" ]
+                      ) -- ^ is an arbitrary string (not hex-encoded)
+                    ]
+            forM_ matrix $ \(title, password, expectations) -> scenario title $ do
+                response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
+                    "operation": #{operation},
+                    "backupPhrase": #{testBackupPhrase},
+                    "assuranceLevel": "normal",
+                    "name": "MyFirstWallet",
+                    "spendingPassword": #{password}
+                }|]
+                verify (response :: Either ClientError Wallet) expectations
+
+
+        scenario "WALLETS_CREATE_05 - One cannot create/restore wallet that already exists" $ do
+            fixture <- setup $ defaultSetup
+
+            response <- request $ Client.postWallet $- NewWallet
+                (fixture ^. backupPhrase)
+                noSpendingPassword
+                defaultAssuranceLevel
+                defaultWalletName
+                CreateWallet
+
+            verify response
+                [ expectWalletError (WalletAlreadyExists (fixture ^. wallet . walletId))
+                ]
+
+
+        describe "WALLETS_CREATE_06 - One cannot create/restore wallet using less or more than 12 mnemonics which are valid BIP-39" $ do
+            let matrix =
+                    [ ( "less than 12 words"
+                      , [json| #{mnemonicsWith9Words} |]
+                      , [ expectJSONError "Invalid number of mnemonic words: got 9 words, expected 12 words" ]
+                      )
+                    , ( "more than 12 words"
+                      , [json| #{mnemonicsWith15Words} |]
+                      , [ expectJSONError "Invalid number of mnemonic words: got 15 words, expected 12 words" ]
+                      )
+                    , ("empty mnemonic"
+                      , [json| [] |]
+                      , [ expectJSONError "Invalid number of mnemonic words: got 0 words, expected 12 words" ]
+                      )
+                    ]
+            forM_ matrix $ \(title, mnemonic, expectations) -> scenario title $ do
+                response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
+                    "operation": #{operation},
+                    "backupPhrase": #{mnemonic},
+                    "assuranceLevel": "strict",
+                    "name": #{russianWalletName},
+                    "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
+                }|]
+                verify (response :: Either ClientError Wallet) expectations
+
+
+        describe "WALLETS_CREATE_07 - One cannot create/restore wallet with invalid BIP-39 mnemonics" $ do
+            let matrix =
+                    [ ( "Kanji mnemonics / non-English mnemonics"
+                      , [json| #{kanjiMnemonics} |]
+                      , [ expectJSONError "Error in $.backupPhrase: MnemonicError: Invalid dictionary word:" ]
+                      )
+                    , ( "Invalid mnemonics"
+                      , [json| #{invalidMnemonics} |]
+                      , [ expectJSONError "Error in $.backupPhrase: MnemonicError: Invalid entropy checksum: got Checksum 11, expected Checksum 5" ]
+                      )
+                    ]
+            forM_ matrix $ \(title, mnemonic, expectations) -> scenario title $ do
+                response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
+                    "operation": #{operation},
+                    "backupPhrase": #{mnemonic},
+                    "assuranceLevel": "normal",
+                    "name": #{russianWalletName},
+                    "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
+                }|]
+                verify (response :: Either ClientError Wallet) expectations
+
+
+        scenario "WALLET_CREATE_08 - One cannot create/restore wallet with mnemonics from the API doc" $ do
+            response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
+                "operation": #{operation},
+                "backupPhrase": #{apiDocsBackupPhrase},
+                "assuranceLevel": "strict",
+                "name": #{russianWalletName},
+                "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
+            }|]
+            verify (response :: Either ClientError Wallet)
+                [ expectJSONError "Error in $.backupPhrase: Forbidden Mnemonic: an example Mnemonic has been submitted. Please generate a fresh and private Mnemonic from a trusted source"
+                ]
+
+
+        describe "WALLETS_CREATE_09 - One cannot create/restore wallet with assurance level other than 'strict' or 'normal'" $ do
+            let matrix =
+                    [ ( "Arbitrary String"
+                      , russianWalletName
+                      , [ expectJSONError "Error in $.assuranceLevel: When parsing Cardano.Wallet.API.V1.Types.AssuranceLevel expected a String with the tag of a constructor but got" ]
+                      )
+                    , ( "Empty String"
+                      , ""
+                      , [ expectJSONError "Error in $.assuranceLevel: When parsing Cardano.Wallet.API.V1.Types.AssuranceLevel expected a String with the tag of a constructor but got" ]
+                      )
+                    ]
+            forM_ matrix $ \(title, level, expectations) -> scenario title $ do
+                response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
+                    "operation": #{operation},
+                    "backupPhrase": #{testBackupPhrase},
+                    "assuranceLevel": #{level},
+                    "name": #{russianWalletName},
+                    "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
+                }|]
+                verify (response :: Either ClientError Wallet) expectations
+
+
+        describe "WALLETS_CREATE_10 - One cannot create/restore without all required parameters (operation)" $ do
+            let matrix =
+                    [ ( "Missing operation"
+                      , [json|{
+                            "backupPhrase": #{testBackupPhrase},
+                            "assuranceLevel": "normal",
+                            "name": "my hodl wallet",
+                            "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
+                        }|]
+                      , [ expectJSONError "When parsing the record newWallet of type Cardano.Wallet.API.V1.Types.NewWallet the key operation was not present." ]
+                      )
+                    , ( "Missing backupPhrase"
+                      , [json|{
+                            "operation": #{operation},
+                            "assuranceLevel": "normal",
+                            "name": "my hodl wallet",
+                            "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
+                        }|]
+                      , [ expectJSONError "When parsing the record newWallet of type Cardano.Wallet.API.V1.Types.NewWallet the key backupPhrase was not present." ]
+                      )
+                    , ( "Missing assuranceLevel"
+                      , [json|{
+                            "operation": #{operation},
+                            "backupPhrase": #{testBackupPhrase},
+                            "name": "my hodl wallet",
+                            "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
+                        }|]
+                      , [ expectJSONError "When parsing the record newWallet of type Cardano.Wallet.API.V1.Types.NewWallet the key assuranceLevel was not present." ]
+                      )
+                    , ( "Missing name"
+                      , [json|{
+                            "operation": #{operation},
+                            "backupPhrase": #{testBackupPhrase},
+                            "assuranceLevel": "normal",
+                            "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
+                        }|]
+                      , [ expectJSONError "When parsing the record newWallet of type Cardano.Wallet.API.V1.Types.NewWallet the key name was not present." ]
+                      )
+                    ]
+            forM_ matrix $ \(title, body, expectations) -> scenario title $ do
+                response <- unsafeRequest ("POST", "api/v1/wallets") $ Just body
+                verify (response :: Either ClientError Wallet) expectations
+
+
+        describe "WALLETS_CREATE_11 - One can create/restore wallet with name of any length" $ do
+            let matrix =
+                    [ ("long wallet name", longWalletName)
+                    , ("empty name", "")
+                    ]
+            forM_ matrix $ \(title, name) -> scenario title $ do
+                fixture <- setup $ defaultSetup
+                    & walletName .~ name
+                response <- request $ Client.getWallet
+                    $- (fixture ^. wallet . walletId)
+                verify response
+                    [ expectFieldEqual walletName name
+                    ]
+
+    describe "WALLETS_CREATE_12 - Cannot perform operation other than 'create' or 'restore'" $ do
+        let matrix =
+                [ ( "Invalid operation name"
+                  , [json| #{russianWalletName} |]
+                  , [ expectJSONError "Error in $.operation: When parsing Cardano.Wallet.API.V1.Types.WalletOperation expected a String with the tag of a constructor but got" ]
+                  )
+                , ( "Empty operation name"
+                  , [json| "" |]
+                  , [ expectJSONError "Error in $.operation: When parsing Cardano.Wallet.API.V1.Types.WalletOperation expected a String with the tag of a constructor but got" ]
+                  )
+                ]
+        forM_ matrix $ \(title, operation, expectations) -> scenario title $ do
+            response <- unsafeRequest ("POST", "api/v1/wallets") $ Just $ [json|{
+                "operation": #{operation},
+                "backupPhrase": #{testBackupPhrase},
+                "assuranceLevel": "normal",
+                "name": #{russianWalletName},
+                "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
+            }|]
+            verify (response :: Either ClientError Wallet) expectations
   where
     testBackupPhrase :: [Text]
     testBackupPhrase =
         ["clap", "panda", "slim", "laundry", "more", "vintage", "cash", "shaft"
         , "token", "history", "misery", "problem"]
-
-    testBackupPhrase2 :: [Text]
-    testBackupPhrase2 =
-        ["minute", "young", "render", "bench", "butter", "captain", "runway"
-        , "summer", "naive", "rally", "viable", "master"]
 
     apiDocsBackupPhrase :: [Text]
     apiDocsBackupPhrase =

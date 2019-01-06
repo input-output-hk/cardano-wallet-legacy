@@ -591,14 +591,16 @@ test-suite integration
     , cardano-sl-util
     , cardano-wallet
     , containers
-    , generic-lens
+    , cryptonite
     , filepath
+    , generic-lens
     , hspec
     , hspec-core
     , hspec-expectations-lifted
     , http-api-data
     , http-client
     , http-types
+    , memory
     , optparse-applicative
     , servant-client-core
     , template-haskell

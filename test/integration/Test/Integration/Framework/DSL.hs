@@ -69,6 +69,8 @@ module Test.Integration.Framework.DSL
     , backupPhrase
     , initialCoins
     , mnemonicWords
+    , spendingPassword
+    , rawPassword
     , wallet
     , wallets
     , walletId
@@ -82,11 +84,15 @@ import           Universum hiding (getArgs, second)
 
 import           Control.Concurrent (threadDelay)
 import           Control.Concurrent.Async (race)
+import           Crypto.Hash (hash)
+import           Crypto.Hash.Algorithms (Blake2b_256)
 import           Data.Aeson.QQ (aesonQQ)
+import qualified Data.ByteArray as ByteArray
 import           Data.Generics.Internal.VL.Lens (lens)
 import           Data.Generics.Product.Typed (HasType, typed)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import           Language.Haskell.TH.Quote (QuasiQuoter)
 import           Test.Hspec.Core.Spec (SpecM, it, xit)
 import           Test.Hspec.Expectations.Lifted
@@ -160,6 +166,13 @@ data DestinationChoice
     | LockedDestination
     deriving (Show, Generic)
 
+newtype RawPassword = RawPassword { getRawPassword :: Text }
+    deriving stock (Show, Generic)
+    deriving newtype (Monoid, Semigroup)
+
+instance IsString RawPassword where
+    fromString = RawPassword . T.pack
+
 
 --
 -- STEPS
@@ -174,6 +187,8 @@ data Setup = Setup
         :: AssuranceLevel
     , _mnemonicWords
         :: [Text]
+    , _rawPassword
+        :: RawPassword
     } deriving (Show, Generic)
 
 data Fixture = Fixture
@@ -183,6 +198,8 @@ data Fixture = Fixture
         :: NonEmpty Address
     , _backupPhrase
         :: BackupPhrase
+    , _spendingPassword
+        :: SpendingPassword
     } deriving (Show, Generic)
 
 -- | Setup a wallet with the given parameters.
@@ -193,9 +210,10 @@ setup args = withNextFaucet $ \faucet -> do
     phrase <- if null (args ^. mnemonicWords)
         then liftIO $ generate arbitrary
         else mkBackupPhrase (args ^. mnemonicWords)
+    let password = mkPassword (args ^. rawPassword)
     wal <- setupWallet args phrase faucet
     addrs  <- forM (RandomDestination :| []) setupDestination
-    return $ Fixture wal addrs phrase
+    return $ Fixture wal addrs phrase password
 
 -- | Apply 'a' to all actions in sequence
 verify :: (Monad m) => a -> [a -> m ()] -> m ()
@@ -235,6 +253,7 @@ defaultSetup = Setup
     , _walletName     = defaultWalletName
     , _assuranceLevel = defaultAssuranceLevel
     , _mnemonicWords  = []
+    , _rawPassword    = mempty
     }
 
 defaultSource
@@ -304,6 +323,12 @@ mnemonicWords = typed
 
 hasSpendingPassword :: HasType Bool s => Lens' s Bool
 hasSpendingPassword = typed
+
+rawPassword :: HasType RawPassword s => Lens' s RawPassword
+rawPassword = typed
+
+spendingPassword :: HasType SpendingPassword s => Lens' s SpendingPassword
+spendingPassword = typed
 
 wallet :: HasType Wallet s => Lens' s Wallet
 wallet = typed
@@ -579,6 +604,18 @@ mkBackupPhrase ws = either onError onSuccess (mkMnemonic ws)
             <> show err
     onSuccess =
         return . BackupPhrase
+
+-- | Create a Base16-encoded spending password from raw text
+mkPassword
+    :: RawPassword
+    -> SpendingPassword
+mkPassword (RawPassword txt)
+    | null txt  = mempty
+    | otherwise = txt
+        & T.encodeUtf8
+        & hash @ByteString @Blake2b_256
+        & ByteArray.convert
+        & WalletPassPhrase
 
 -- | Execute the given setup action with using the next faucet wallet. It fails
 -- hard if there's no more faucet wallet available.
