@@ -577,6 +577,7 @@ test-suite integration
   build-depends:
       base
     , QuickCheck
+    , servant-client
     , aeson
     , aeson-qq
     , async
@@ -621,3 +622,4 @@ test-suite integration
       Test.Integration.Scenario.Addresses
       Test.Integration.Scenario.Transactions
       Test.Integration.Scenario.Wallets
+      Test.Integration.Scenario.Node

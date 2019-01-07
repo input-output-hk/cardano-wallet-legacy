@@ -14,9 +14,9 @@ import           Test.Integration.Framework.Cluster (startCluster, waitForNode)
 import           Test.Integration.Framework.DSL (Context (..))
 import qualified Test.Integration.Scenario.Accounts as Accounts
 import qualified Test.Integration.Scenario.Addresses as Addresses
+import qualified Test.Integration.Scenario.Node as Node
 import qualified Test.Integration.Scenario.Transactions as Transactions
 import qualified Test.Integration.Scenario.Wallets as Wallets
-
 
 main :: IO ()
 main = do
@@ -39,6 +39,7 @@ main = do
     -- Run tests
     hspec $ do
         describe "API Documentation" $ Documentation.spec dClient
+        describe "Node Endpoints" $ Node.spec wClient
 
         beforeAll (newMVar $ Context keys wClient (wAddr, manager)) $ do
             describe "Accounts" Accounts.spec
