@@ -15,7 +15,7 @@ let
   iohkLib = import ./nix/iohk-common.nix { application = "cardano-sl"; };
   fixedNixpkgs = iohkLib.pkgs;
 
-in { supportedSystems ? [ "x86_64-linux" "x86_64-darwin" ]
+in { supportedSystems ? [ "x86_64-linux" ]
   , scrubJobs ? true
   , cardano-wallet ? { outPath = ./.; rev = "abcdef"; }
   , nixpkgsArgs ? {
