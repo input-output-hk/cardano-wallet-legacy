@@ -29,7 +29,7 @@ import           Servant.JsendCompliance (checkJsendCompliance)
 import           Data.Aeson (ToJSON (..))
 import           Servant.Swagger.Internal.Test (props)
 import           Servant.Swagger.Internal.TypeLevel (BodyTypes, Every, TMap)
-import           Test.QuickCheck (Arbitrary, arbitrary, property)
+import           Test.QuickCheck (Arbitrary, arbitrary, property, (===))
 
 -- Syntethic instances and orphans to be able to use `validateEveryToJSON`.
 -- In the future, hopefully, we will never need these.
@@ -87,5 +87,5 @@ validateEveryToJSON'
     -> Spec
 validateEveryToJSON' _ = props
   (Proxy :: Proxy [ToJSON, ToSchema])
-  (property . null . validateToJSON)
+  (property . (=== []) . validateToJSON)
   (Proxy :: Proxy (BodyTypes ValidJSON api))
