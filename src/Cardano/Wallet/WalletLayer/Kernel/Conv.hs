@@ -48,8 +48,7 @@ import           Cardano.Wallet.API.Types.UnitOfMeasure
 import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
                      (InputGrouping (..))
-import           Cardano.Wallet.Kernel.DB.BlockMeta (addressMetaIsChange,
-                     addressMetaIsUsed)
+import           Cardano.Wallet.Kernel.DB.BlockMeta (addressMetaIsUsed)
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
 import           Cardano.Wallet.Kernel.DB.Spec (cpAddressMeta)
@@ -194,7 +193,6 @@ toAddress :: HD.HdAccount -> HD.HdAddress -> V1.WalletAddress
 toAddress acc hdAddress =
     V1.WalletAddress (V1.WalAddress cardanoAddress)
                      (addressMeta ^. addressMetaIsUsed)
-                     (addressMeta ^. addressMetaIsChange)
                      addressOwnership
   where
     cardanoAddress   = hdAddress ^. HD.hdAddressAddress . fromDb

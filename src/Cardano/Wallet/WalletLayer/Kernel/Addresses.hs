@@ -48,9 +48,9 @@ createAddress wallet
     passPhrase = maybe mempty coerce mbSpendingPassword
 
     -- | Creates a new 'WalletAddress'. As this is a brand new, fresh Address,
-    -- it's fine to have 'False' for both 'isUsed' and 'isChange'.
+    -- it's fine to have 'False' for 'isUsed'
     mkAddress :: Address -> WalletAddress
-    mkAddress addr = WalletAddress (V1.WalAddress addr) False False V1.AddressIsOurs
+    mkAddress addr = WalletAddress (V1.WalAddress addr) False V1.AddressIsOurs
 
 
 
@@ -182,6 +182,5 @@ validateAddress rawText db = runExcept $ do
         return V1.WalletAddress {
             addrId            = V1.WalAddress cardanoAddress
           , addrUsed          = False
-          , addrChangeAddress = False
           , addrOwnership     = V1.AddressAmbiguousOwnership
           }

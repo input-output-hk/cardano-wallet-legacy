@@ -186,7 +186,7 @@ blockMetaScenarioB genVals@GenesisValues{..} =
     _blockMetaSlotId' = Map.singleton (hash t0) slot1
     --    * we expect the address to be recognised as a 'change' address in the metadata
     _blockMetaAddressMeta'
-        = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = True})
+        = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True })
 
 -- | Scenario C
 -- Two confirmed payments from P0 to P1, using `change` addresses P0 and P0b respectively
@@ -215,8 +215,8 @@ blockMetaScenarioC genVals@GenesisValues{..} =
     --    * we expect both addresses to be recognised as 'change' addresses in the metadata
     --      (since each address occur in exactly one confirmed transaction, and all the other requirements are met)
     _blockMetaAddressMeta'
-        = Map.fromList [  (p0,  (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = True}))
-                        , (p0b, (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = True}))]
+        = Map.fromList [  (p0,  (AddressMeta {_addressMetaIsUsed = True}))
+                        , (p0b, (AddressMeta {_addressMetaIsUsed = True}))]
 
 -- | Scenario D
 -- ScenarioC + Rollback
@@ -247,7 +247,7 @@ blockMetaScenarioD genVals@GenesisValues{..} =
     _blockMetaSlotId' = Map.singleton (hash t0) slot1
     --    * we expect the first address to still be recognised as a 'change' address in the metadata
     _blockMetaAddressMeta'
-        = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = True})
+        = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True})
 
 -- | Scenario E
 -- Two confirmed payments from P0 to P1, both using the same `change` address for P0
@@ -277,7 +277,7 @@ blockMetaScenarioE genVals@GenesisValues{..} =
     --    * we expect the address to no longer be recognised as a 'change' address in the metadata
     --      (because a `change` address must occur in exactly one confirmed transaction)
     _blockMetaAddressMeta'
-        = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = False})
+        = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True})
 
 -- | Scenario F
 -- ScenarioE + Rollback
@@ -309,7 +309,7 @@ blockMetaScenarioF genVals@GenesisValues{..} =
     --    * we expect the address to again be recognised as a 'change' address in the metadata
     --      (the rollback leads to the `change` address occuring in exactly one confirmed transaction again, as in ScenarioE)
     _blockMetaAddressMeta'
-        = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = True})
+        = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True})
 
 -- | Scenario G
 -- A payment from P1 to P0's single address.
@@ -336,7 +336,7 @@ blockMetaScenarioG genVals@GenesisValues{..} =
     _blockMetaSlotId' = Map.singleton (hash t0) slot1
     -- For `t0` the inputs are not all "ours" and hence `isChange` is False
     _blockMetaAddressMeta'
-        = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = False})
+        = Map.singleton p0 (AddressMeta {_addressMetaIsUsed = True})
 
 -- | Scenario G
 -- A confirmed payment from P0 to a single other P0 address
@@ -365,6 +365,6 @@ blockMetaScenarioH genVals@GenesisValues{..} =
     --    * we expect none of the addresses to be recognised as 'change'
     --      (since all the transaction outputs are to addresses that are _all_ "ours")
     _blockMetaAddressMeta'
-        = Map.fromList [  (p0,  (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = False}))
-                        , (p0b, (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = False}))
-                        , (p0c, (AddressMeta {_addressMetaIsUsed = True, _addressMetaIsChange = False}))]
+        = Map.fromList [  (p0,  (AddressMeta {_addressMetaIsUsed = True}))
+                        , (p0b, (AddressMeta {_addressMetaIsUsed = True}))
+                        , (p0c, (AddressMeta {_addressMetaIsUsed = True}))]

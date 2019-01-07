@@ -69,7 +69,6 @@ module Cardano.Wallet.API.V1.Types (
   , AddressLevel
   , addressLevelToWord32
   , word32ToAddressLevel
-  , IsChangeAddress (..)
   -- * Payments
   , Payment (..)
   , PaymentSource (..)
@@ -1058,10 +1057,9 @@ instance Buildable WAddressMeta where
 
 -- | Summary about single address.
 data WalletAddress = WalletAddress
-    { addrId            :: !WalAddress
-    , addrUsed          :: !Bool
-    , addrChangeAddress :: !Bool
-    , addrOwnership     :: !AddressOwnership
+    { addrId        :: !WalAddress
+    , addrUsed      :: !Bool
+    , addrOwnership :: !AddressOwnership
     } deriving (Show, Eq, Generic, Ord)
 
 deriveJSON Aeson.defaultOptions ''WalletAddress
@@ -1071,13 +1069,11 @@ instance ToSchema WalletAddress where
         genericSchemaDroppingPrefix "addr" (\(--^) props -> props
             & ("id"            --^ "Actual address.")
             & ("used"          --^ "True if this address has been used.")
-            & ("changeAddress" --^ "True if this address stores change from a previous transaction.")
             & ("ownership"     --^ "'isOurs' if this address is recognised as ours, 'ambiguousOwnership' if the node doesn't have information to make a unambiguous statement.")
         )
 
 instance Arbitrary WalletAddress where
     arbitrary = WalletAddress <$> arbitrary
-                              <*> arbitrary
                               <*> arbitrary
                               <*> arbitrary
 
@@ -1306,11 +1302,9 @@ instance BuildableSafeGen WalletAddress where
     buildSafeGen sl WalletAddress{..} = bprint ("{"
         %" id="%buildSafe sl
         %" used="%build
-        %" changeAddress="%build
         %" }")
         addrId
         addrUsed
-        addrChangeAddress
 
 instance Buildable [WalletAddress] where
     build = bprint listJson
@@ -1400,8 +1394,6 @@ instance ToJSON AddressLevel where
 
 instance FromJSON AddressLevel where
     parseJSON = fmap word32ToAddressLevel . parseJSON
-
-newtype IsChangeAddress = IsChangeAddress Bool deriving (Show, Eq)
 
 -- | A type incapsulating a password update request.
 data PasswordUpdate = PasswordUpdate {
