@@ -32,3 +32,7 @@ secret.key
 secret.key.lock
 wallet-db-acid/
 wallet-db-sqlite.sqlite3
+
+### Nix ###
+
+/result*

@@ -1,0 +1,5 @@
+steps:
+  - label: 'stack2nix'
+    command: 'nix/check-stack2nix.sh'
+    agents:
+      system: x86_64-linux
