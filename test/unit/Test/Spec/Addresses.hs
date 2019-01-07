@@ -552,7 +552,7 @@ spec = describe "Addresses" $ do
                              Left err -> fail $ "Got different error than expected: " <> show err
                              Right _ -> fail "I was expecting a failure, but it didn't happen."
 
-            prop "returns not used/not change for an address which is not ours" $ withMaxSuccess 5 $ do
+            prop "returns not used for an address which is not ours" $ withMaxSuccess 5 $ do
                 monadicIO $ do
                     (randomAddr :: Address) <- pick arbitrary
                     pm                      <- pick arbitrary
@@ -560,7 +560,6 @@ spec = describe "Addresses" $ do
                         expected = V1.WalletAddress {
                             addrId            = V1.WalAddress randomAddr
                           , addrUsed          = False
-                          , addrChangeAddress = False
                           , addrOwnership     = V1.AddressAmbiguousOwnership
                           }
                     withAddressFixtures pm 1 $ \_ layer _ _ -> do

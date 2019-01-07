@@ -12,7 +12,6 @@ module Cardano.Wallet.Kernel.DB.BlockMeta (
     -- * Local block metadata
   , LocalBlockMeta(..)
     -- ** Lenses
-  , addressMetaIsChange
   , addressMetaIsUsed
   , blockMetaAddressMeta
   , blockMetaSlotId
@@ -42,19 +41,13 @@ import           Cardano.Wallet.Kernel.DB.InDb
 data AddressMeta = AddressMeta {
       -- | Whether or not an Address has been 'used'
       _addressMetaIsUsed   :: Bool
-      -- | Whether or not this is a 'change' Address
-    , _addressMetaIsChange :: Bool
     } deriving Eq
 
 instance Semigroup AddressMeta where
-  a <> b = mergeAddrMeta a b
-    where
-      mergeAddrMeta :: AddressMeta -> AddressMeta -> AddressMeta
-      mergeAddrMeta (AddressMeta used change) (AddressMeta used' change')
-          = AddressMeta (used || used') (change `xor` change')
+    (AddressMeta used) <> (AddressMeta used') = AddressMeta (used || used')
 
 instance Monoid AddressMeta where
-  mempty  = AddressMeta False False
+  mempty  = AddressMeta False
   mappend = (<>)
 
 makeLenses ''AddressMeta
@@ -117,11 +110,9 @@ instance Buildable AddressMeta where
     build AddressMeta{..} = bprint
         ( "AddressMeta"
         % "{ isUsed:   " % build
-        % ", isChange: " % build
         % "}"
         )
         _addressMetaIsUsed
-        _addressMetaIsChange
 
 instance Buildable BlockMeta where
     build BlockMeta{..} = bprint

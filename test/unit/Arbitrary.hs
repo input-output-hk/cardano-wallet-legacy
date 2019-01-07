@@ -70,7 +70,7 @@ instance Arbitrary LocalBlockMeta where
         pure $ LocalBlockMeta bm
 
 instance Arbitrary AddressMeta where
-    arbitrary = AddressMeta <$> arbitrary <*> arbitrary
+    arbitrary = AddressMeta <$> arbitrary
 
 instance Arbitrary Pending where
     arbitrary = do

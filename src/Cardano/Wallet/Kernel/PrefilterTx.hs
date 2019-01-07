@@ -334,30 +334,15 @@ mkBlockMeta slotId addrs_ txIds = LocalBlockMeta BlockMeta{..}
 --   hence that there are at least one or more summaries passed to this function
 --   for a given address.
 mkAddressMeta :: NE.NonEmpty AddressSummary -> AddressMeta
-mkAddressMeta addrs
-    = AddressMeta isUsed isChange
+mkAddressMeta _
+    = AddressMeta isUsed
     where
-        occurs = NE.length addrs
-
         -- An address is considered "used" if
         -- (1) it is "our" address: we are only dealing with prefiltered transactions
         --     here and can at this stage assume that the address is indeed "ours".
         -- (2) the transaction is confirmed: we are dealing here with transactions that
         --     appear in a block and can assume that they are confirmed.
         isUsed = True
-
-        -- An address is considered "change" if
-        -- (1) it is "our" address: as with `isUsed` above, we can assume the address is "ours"
-        -- (2) the address occurs in exactly one transaction in this block
-        -- (3) for the (single) transaction in which this address appears, the
-        --     outputs must not all be to "our" addresses (the transaction must have
-        --     an output to at least one address that is not "ours")
-        -- (4) all the inputs of the transaction in which this address appears
-        --     must be "ours"
-        isChange = (occurs == 1)                    -- (2)
-                    && addrSummaryOnlyOurInps       -- (3)
-                    && not addrSummaryOnlyOurOuts   -- (4)
-            where AddressSummary{..} = NE.head addrs
 
 -- | Index the list of address summaries by Address.
 --   NOTE: Since there will be at least one AddressSummary per Address,

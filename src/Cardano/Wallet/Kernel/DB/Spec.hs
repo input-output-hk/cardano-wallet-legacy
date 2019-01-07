@@ -201,7 +201,6 @@ utxoToAddressMeta utxo =
     where
       usedMeta = AddressMeta {
           _addressMetaIsUsed = True
-        , _addressMetaIsChange = False
       }
 
 -- | A full check point with a non-Nothing context can be " downcast " to a
