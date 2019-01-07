@@ -7,7 +7,7 @@ There is also a CLI for use in test scripts.
 
 ### How to use
 
-Start a wallet using `stack exec cardano-node -- ....`
+Start a wallet using `stack exec cardano-wallet-server -- ....`
 
 In another terminal, fire up `ghci`.
 
