@@ -1,4 +1,4 @@
-name:                cardano-wallet-tool
+name:                cardano-wallet-client
 version:             2.0.0
 synopsis:            A CLI to making API calls on the wallet
 description:         Please see README.md
@@ -81,7 +81,7 @@ library
                       MonadFailDesugaring
                       TupleSections
 
-executable cardano-wallet-tool
+executable cardano-wallet-client
   hs-source-dirs:      exe
   main-is:             Main.hs
   ghc-options:         -threaded -rtsopts
@@ -89,7 +89,7 @@ executable cardano-wallet-tool
                        -O2
 
   build-depends:       base
-                     , cardano-wallet-tool
+                     , cardano-wallet-client
                      , optparse-applicative
                      , universum
 
@@ -166,7 +166,7 @@ test-suite wallet-tool-specs
 
   build-depends:      base
                     , cardano-sl
-                    , cardano-wallet-tool
+                    , cardano-wallet-client
                     , cardano-wallet
                     , hspec
                     , servant-client

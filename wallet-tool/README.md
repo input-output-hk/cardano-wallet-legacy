@@ -11,7 +11,7 @@ Start a wallet using `stack exec cardano-node -- ....`
 
 In another terminal, fire up `ghci`.
 
-    stack ghci cardano-wallet-tool:lib
+    stack ghci cardano-wallet-client:lib
     λ> import Cardano.Wallet.Client.Easy
     λ> cfg = normalConnectConfig "./state-wallet-testnet" 8090
     λ> wc <- walletClientFromConfig cfg
@@ -21,11 +21,11 @@ In another terminal, fire up `ghci`.
 
 For a list of options, run:
 
-    cardano-wallet-tool --help
+    cardano-wallet-client --help
 
 An example usage would be:
 
-    cardano-wallet-tool --state-dir ./state-wallet-testnet localhost:8090 wait-for-sync
+    cardano-wallet-client --state-dir ./state-wallet-testnet localhost:8090 wait-for-sync
 
 
 ### Future work
