@@ -1,7 +1,6 @@
 resolver: ./cardano-sl.yaml
 packages:
 - .
-- wallet-tool
 
 extra-deps:
 - git: https://github.com/input-output-hk/cardano-sl

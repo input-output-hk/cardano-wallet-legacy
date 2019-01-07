@@ -4,7 +4,8 @@ import           Options.Applicative
 import           System.Exit (ExitCode)
 import           Universum
 
-import           Cardano.Wallet.Client.CLI
+import           Cardano.Wallet.Client.CLI.Options
+import           Cardano.Wallet.Client.CLI.Run
 import           Cardano.Wallet.Client.Easy
 
 main :: IO ()

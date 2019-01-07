@@ -39,12 +39,6 @@ import           Servant.Client (BaseUrl (..), Scheme (Https))
 import           System.FilePath (FilePath, (</>))
 import           Universum
 
--- import           Cardano.Wallet.API.V1.Types (ForceNtpCheck (..), NodeInfo (..),
---                      SyncPercentage, SyncProgress (..), SyncThroughput (..),
---                      mkSyncPercentage, SyncState (..), Wallet (..))
--- import           Cardano.Wallet.Client (APIResponse (..), ClientError (..),
---                      NewWallet, Resp, ServantError (..), WalletClient (..),
---                      WalletId, getWallets)
 import           Cardano.Wallet.API.V1.Types
 import           Cardano.Wallet.Client
 import           Cardano.Wallet.Client.Http (mkHttpClient)

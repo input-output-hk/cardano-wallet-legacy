@@ -1,4 +1,4 @@
-module WaitSpec (spec) where
+module Test.Spec.Client.Wait (spec) where
 
 import           Servant.Client (BaseUrl (..), Scheme (Https))
 import           Test.Hspec
@@ -9,7 +9,7 @@ import           Pos.Util.Servant (single)
 import           Cardano.Wallet.API.V1.Types (WalletError (..))
 import           Cardano.Wallet.Client.Easy
 import           Cardano.Wallet.Client.Wait
-import           Cardano.Wallet.ProcessUtil (interruptSelf)
+import           Cardano.Wallet.Client.CLI.ProcessUtil (interruptSelf)
 
 
 spec :: Spec

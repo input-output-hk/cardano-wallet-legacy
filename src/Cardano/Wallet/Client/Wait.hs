@@ -25,7 +25,7 @@ import           Universum
 import           Cardano.Wallet.API.Response (APIResponse (..))
 import           Cardano.Wallet.Client (ClientError (..), Resp,
                      WalletClient (..))
-import           Cardano.Wallet.ProcessUtil
+import           Cardano.Wallet.Client.CLI.ProcessUtil
 
 
 data WaitOptions = WaitOptions

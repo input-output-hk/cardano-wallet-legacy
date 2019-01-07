@@ -1,25 +1,19 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE LambdaCase                #-}
 
-module Cardano.Wallet.Client.CLI where
+module Cardano.Wallet.Client.CLI.Options where
 
-import           Criterion.Measurement (secs)
-import           Data.Aeson (ToJSON (..), encodeFile)
-import           Data.Aeson.Encode.Pretty (encodePretty)
+import           Data.Aeson (ToJSON)
 import qualified Data.Attoparsec.Text as A
 import           Data.Bifunctor (first)
 import qualified Data.ByteString.Char8 as B8
-import qualified Data.ByteString.Lazy.Char8 as L8
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
-import           Formatting (sformat, shown, string, (%))
 import           Options.Applicative
 import qualified Pos.Client.Txp.Util as Core
 import qualified Pos.Core as Core
 import           Pos.Core.NetworkAddress (addrParserNoWildcard)
 import           Servant.Client (BaseUrl (..), Scheme (Https))
-import           System.Exit (ExitCode (..))
 import qualified Text.Parsec as Parsec
 import           Universum
 
@@ -36,7 +30,7 @@ import           Cardano.Wallet.API.V1.Types (Account (..), AccountIndex,
 import           Cardano.Wallet.Client (getAccounts, getAddressIndex,
                      getTransactionIndex, getWallets)
 import           Cardano.Wallet.Client.Easy
-import           Cardano.Wallet.ProcessUtil (ProcessID)
+import           Cardano.Wallet.Client.CLI.ProcessUtil (ProcessID)
 
 ----------------------------------------------------------------------------
 -- CLI Types
@@ -196,7 +190,7 @@ paymentP = Payment
     paymentSourceP = PaymentSource <$> walletIdP <*> accountIndexP
     paymentDestinationP = PaymentDistribution <$> walAddressP <*> amountP
     groupingPolicyP = flag' Core.OptimizeForHighThroughput (long "group-for-high-throughput" <> help "Do not attempt to group transaction inputs")
-                      <|> flag' Core.OptimizeForSecurity  (long "group-for-security" <> help "fixme: (the default setting)")
+                      <|> flag' Core.OptimizeForSecurity  (long "group-for-security" <> help "The default strategy to use for selecting transaction inputs)")
                       <|> pure Core.OptimizeForSecurity
 
 listTransactionsP :: Monad m => Parser (WalletCall m [Transaction])
@@ -255,49 +249,3 @@ amountReader = eitherReader (intToCoin <=< parse . T.pack)
     ada = fmap toLL A.decimal <* (A.skipSpace *> A.asciiCI "ada")
     toLL = (1000000 *)
     intToCoin = first T.unpack . Core.integerToCoin
-
-----------------------------------------------------------------------------
--- Program
-
-runAction :: Action IO -> WalletClient IO -> IO ExitCode
-runAction act wc = case act of
-  WaitForSync mpid out -> waitForSync (waitOptionsPID mpid) wc >>= handleWaitResult out
-  WaitForRestore mpid out -> waitForRestore (waitOptionsPID mpid) wc >>= handleWaitResult out
-  WalletEndpoint req -> req wc >>= printStatus
-  WalletEndpointVoid req -> req wc >>= printStatusVoid
-
-printStatus :: ToJSON a => Either ClientError a -> IO ExitCode
-printStatus = printStatus' . fmap Just
-
-printStatusVoid :: Either ClientError () -> IO ExitCode
-printStatusVoid = printStatus' . fmap (const (Nothing :: Maybe ()))
-
-printStatus' :: ToJSON a => Either ClientError (Maybe a) -> IO ExitCode
-printStatus' resp = case resp of
-  Right Nothing -> pure ExitSuccess
-  Right (Just a) -> L8.putStrLn (encodePretty a) >> pure ExitSuccess
-  Left cerr -> (T.hPutStrLn stderr $ sformat ("client error: "%shown) cerr) >> pure (ExitFailure 100)
-
--- | Convert the sync result into a goodbye message, print it, write
--- the output file, and return an appropriate program exit status.
-handleWaitResult :: ToJSON r => Maybe FilePath -> SyncResult r -> IO ExitCode
-handleWaitResult mout res@(SyncResult err start dur _) = do
-  putStrLn (msg err)
-  putStrLn $ sformat ("Started: "%shown) start
-  putStrLn $ sformat ("Elapsed time: "%string) (secs dur)
-  whenJust mout (writeJSON res)
-  pure (code err)
-  where
-    msg :: Maybe SyncError -> Text
-    msg = maybe "Finished" show
-
-    code Nothing                         = ExitSuccess
-    code (Just (SyncErrorClient _))      = ExitFailure 1
-    code (Just (SyncErrorProcessDied _)) = ExitFailure 2
-    code (Just (SyncErrorTimedOut _))    = ExitFailure 3
-    code (Just (SyncErrorException _))   = ExitFailure 4
-    code (Just (SyncErrorInterrupted))   = ExitSuccess
-
-    writeJSON sr f = do
-      putStrLn $ sformat ("Writing output to "%shown) f
-      encodeFile f sr

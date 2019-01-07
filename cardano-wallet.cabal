@@ -48,6 +48,7 @@ library
     , aeson-options
     , aeson-pretty
     , async
+    , attoparsec
     , base58-bytestring
     , beam-core
     , beam-migrate
@@ -66,6 +67,7 @@ library
     , cardano-sl-db
     , cardano-sl-infra
     , cardano-sl-mnemonic
+    , cardano-sl-x509
     , cardano-sl-networking
     , cardano-sl-node
     , cardano-sl-node-ipc
@@ -74,11 +76,14 @@ library
     , cereal
     , clock
     , conduit
+    , connection
     , containers
+    , criterion
     , cryptonite
     , data-default
     , data-default-class
     , directory
+    , dlist
     , exceptions
     , filepath
     , foldl
@@ -87,6 +92,7 @@ library
     , generics-sop
     , http-api-data
     , http-client
+    , http-client-tls
     , http-types
     , ixset-typed
     , lens
@@ -95,6 +101,8 @@ library
     , mwc-random
     , neat-interpolation
     , optparse-applicative
+    , parsec
+    , pem
     , QuickCheck
     , reflection
     , resourcet
@@ -121,6 +129,7 @@ library
     , text
     , time
     , time-units
+    , tls
     , transformers
     , universum
     , unliftio-core
@@ -130,7 +139,12 @@ library
     , wai
     , wai-middleware-throttle
     , warp
+    , x509
+    , x509-store
     , zlib
+
+  if !os(windows)
+    build-depends:     unix
 
   hs-source-dirs:
       src
@@ -174,7 +188,13 @@ library
       Cardano.Wallet.API.V1.Wallets
       Cardano.Wallet.Action
       Cardano.Wallet.Client
+      Cardano.Wallet.Client.CLI.Options
+      Cardano.Wallet.Client.CLI.ProcessUtil
+      Cardano.Wallet.Client.CLI.Run
+      Cardano.Wallet.Client.Easy
       Cardano.Wallet.Client.Http
+      Cardano.Wallet.Client.HttpsSettings
+      Cardano.Wallet.Client.Wait
       Cardano.Wallet.Kernel
       Cardano.Wallet.Kernel.Accounts
       Cardano.Wallet.Kernel.Actions
@@ -448,6 +468,7 @@ test-suite unit
       Test.Spec.AddressPoolGap
       Test.Spec.Addresses
       Test.Spec.BlockMetaScenarios
+      Test.Spec.Client.Wait
       Test.Spec.CoinSelection
       Test.Spec.CoinSelection.Generators
       Test.Spec.DeltaCompression
@@ -625,3 +646,56 @@ test-suite integration
       Test.Integration.Scenario.Transactions
       Test.Integration.Scenario.Wallets
       Test.Integration.Scenario.Node
+
+executable cardano-wallet-client
+  hs-source-dirs:      app/wallet-client
+  main-is:             Main.hs
+  ghc-options:         -threaded -rtsopts
+                       -Wall
+                       -O2
+
+  build-depends:       base
+                     , cardano-wallet
+                     , optparse-applicative
+                     , universum
+
+  default-language:    Haskell2010
+  default-extensions: TypeOperators
+                      DataKinds
+                      DefaultSignatures
+                      NoImplicitPrelude
+                      MultiParamTypeClasses
+                      OverloadedStrings
+                      ScopedTypeVariables
+                      FlexibleInstances
+                      FlexibleContexts
+                      TypeFamilies
+                      TypeApplications
+                      TypeOperators
+                      TemplateHaskell
+                      RecordWildCards
+                      ScopedTypeVariables
+                      UndecidableInstances
+                      MonadFailDesugaring
+                      TupleSections
+
+executable cardano-wallet-sync-plot
+  hs-source-dirs:      app/sync-plot
+  main-is:             Main.hs
+  ghc-options:         -threaded -rtsopts
+                       -Wall
+                       -O2
+
+  build-depends:       base
+                     , optparse-applicative
+                     , aeson
+                     , Chart
+                     , Chart-cairo
+                     , text
+                     , universum
+                     , vector
+
+  default-language:    Haskell2010
+  default-extensions: NoImplicitPrelude
+                      OverloadedStrings
+                      RecordWildCards

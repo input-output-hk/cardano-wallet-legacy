@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP #-}
 
-module Cardano.Wallet.ProcessUtil
+module Cardano.Wallet.Client.CLI.ProcessUtil
   ( checkProcessExists
   , ProcessID
   , cancelOnExit
