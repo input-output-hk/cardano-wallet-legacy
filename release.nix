@@ -3,11 +3,11 @@
 #
 # Example build for Linux:
 #
-#   nix-build release.nix -A exes.cardano-node.x86_64-linux
+#   nix-build release.nix -A exes.cardano-wallet-server.x86_64-linux
 #
 # Example build for Windows (cross-compiled from Linux):
 #
-#   nix-build release.nix -A cross.exes.cardano-node.x86_64-linux
+#   nix-build release.nix -A cross.exes.cardano-wallet-server.x86_64-linux
 #
 ############################################################################
 
@@ -31,13 +31,13 @@ with (import (fixedNixpkgs.path + "/pkgs/top-level/release-lib.nix") {
 
 let
   jobs = mapTestOn {
-    exes.cardano-node = supportedSystems;
-    tests.unit        = supportedSystems;
+    exes.cardano-wallet-server = supportedSystems;
+    tests.unit                 = supportedSystems;
   };
 
   crossJobs = mapTestOnCross lib.systems.examples.mingwW64 {
-    exes.cardano-node = [ "x86_64-linux" ];
-    tests.unit        = [ "x86_64-linux" ];
+    exes.cardano-wallet-server = [ "x86_64-linux" ];
+    tests.unit                 = [ "x86_64-linux" ];
   };
 
 in
