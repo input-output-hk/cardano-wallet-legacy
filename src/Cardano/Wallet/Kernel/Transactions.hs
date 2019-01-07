@@ -54,6 +54,9 @@ import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.Read as Getters
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types
+import           Cardano.Wallet.Kernel.Ed25519Bip44
+                     (ChangeChain (InternalChain), deriveAccountPrivateKey,
+                     deriveAddressPrivateKey, derivePublicKey)
 import           Cardano.Wallet.Kernel.Internal (ActiveWallet (..),
                      PassiveWallet (..), walletNode)
 import qualified Cardano.Wallet.Kernel.Internal as Internal
@@ -73,6 +76,7 @@ import           Pos.Chain.Txp as Core (TxAttributes, TxAux, TxIn, TxOut,
 import qualified Pos.Client.Txp.Util as CTxp
 import           Pos.Core (Address, Coin, TxFeePolicy (..), unsafeSubCoin)
 import qualified Pos.Core as Core
+import           Pos.Core.Attributes (Attributes (attrData))
 import           Pos.Core.NetworkMagic (NetworkMagic (..), makeNetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, PassPhrase, ProtocolMagic,
                      PublicKey, RedeemSecretKey, SafeSigner (..),
@@ -609,13 +613,43 @@ mkSigner nm spendingPassword (Just esk) snapshot addr =
                                        . HD.hdAddressIdParent
                                        . HD.hdAccountIdIx
                                        . to HD.getHdAccountIx
-                res = Core.deriveLvl2KeyPair nm
-                                             (Core.IsBootstrapEraAddr True)
-                                             (ShouldCheckPassphrase False)
-                                             spendingPassword
-                                             esk
-                                             accountIndex
-                                             addressIndex
+                mAddressPayload = hdAddr ^. HD.hdAddressAddress
+                                          . fromDb
+                                          . to Core.addrAttributes
+                                          . to attrData
+                                          . to Core.aaPkDerivationPath
+                res = case mAddressPayload of
+                    -- If there is some payload we expect this payload to be addressIx and accountIx
+                    -- used for old address scheme so we continue with using
+                    -- old HD address derivation scheme: simple bip32 with ed25519 v0
+                    Just _ -> Core.deriveLvl2KeyPair nm
+                                    (Core.IsBootstrapEraAddr True)
+                                    (ShouldCheckPassphrase False)
+                                    spendingPassword
+                                    esk
+                                    accountIndex
+                                    addressIndex
+                    -- If there is no payload we assume it is a new address scheme (which doesn't have payload)
+                    -- New HD address derivation scheme: bip44 with ed25519 v1
+                    Nothing ->
+                        let mAddressPrvKey =
+                                -- Derive account private key from root private key
+                                deriveAccountPrivateKey
+                                    spendingPassword
+                                    esk
+                                    accountIndex
+                                -- Derive address private key from account private key
+                                >>= \accEsk ->
+                                    deriveAddressPrivateKey
+                                        spendingPassword
+                                        accEsk
+                                        InternalChain
+                                        addressIndex
+                            -- Derive Address type from address private key
+                            deriveAddress =
+                                Core.makePubKeyAddressBoot nm . derivePublicKey
+                        in (deriveAddress &&& id) <$> mAddressPrvKey
+
             -- eks address fix - we need to use the esk as returned
             -- from Core.deriveLvl2KeyPair rather than rely on the
             -- one from encrypted secret key delivered to mkSigner
