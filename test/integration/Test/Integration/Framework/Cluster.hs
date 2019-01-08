@@ -72,23 +72,28 @@ startCluster nodes = do
         . Map.union defaultIntegrationEnv
         . Map.fromList
         . stripFilterPrefix prefix
+
     let stateDir   = env0 ! "STATE_DIR" -- Safe, we just defaulted it above
     let configFile = env0 ! "CONFIGURATION_FILE" -- Safe, we just defaulted it above
     let configKey  = env0 ! "CONFIGURATION_KEY" -- Safe, we just defaulted it above
+
     handles <- forM nodes $ \node@(_, nodeType) -> runAsync $ \yield -> do
         let (artifacts, nodeEnv) = prepareEnvironment node nodes stateDir env0
         let (genesis, topology, logger, tls) = artifacts
         case nodeType of
             NodeCore -> do
                 void (init genesis >> init topology >> init logger >> init tls)
-                yield Nothing >> startNode node nodeEnv
+                yield (nodeEnv, Nothing) >> startNode node nodeEnv
             NodeRelay -> do
                 void (init topology >> init logger >> init tls)
-                yield Nothing >> startNode node nodeEnv
+                yield (nodeEnv, Nothing) >> startNode node nodeEnv
             NodeEdge -> do
                 manager <- init topology >> init logger >> init tls
-                yield (Just (nodeEnv, manager)) >> startWallet node nodeEnv
-    let (env, manager) = Prelude.head $ catMaybes (map snd handles)
+                yield (nodeEnv, Just manager) >> startWallet node nodeEnv
+
+    (env, manager) <- fmap (Prelude.head . catMaybes) $ forM handles $ \(_, (env, manager)) -> do
+        printCartouche env >> return ((env,) <$> manager)
+
     let configOpts = ConfigurationOptions
             { cfoFilePath    = configFile
             , cfoKey         = toText configKey
@@ -180,3 +185,15 @@ getGenesisKeys stateDir configOpts = do
             $ withConfigurations Nothing Nothing False opts
             $ \config _ _ _ -> configGeneratedSecretsThrow config
         )
+
+
+-- | Some debugging output upon starting a cluster
+printCartouche :: Env -> IO ()
+printCartouche env = do
+    let colSize = 35
+    putTextLn $ toText (env ! "NODE_ID") <> T.replicate (colSize - length (env !  "NODE_ID")) "-"
+    when (Map.member "LISTEN" env) $ putTextLn $  "|.....listen:        " <> toText (env ! "LISTEN")
+    putTextLn $ "|.....api address:   " <> toText (env ! "NODE_API_ADDRESS")
+    putTextLn $ "|.....doc address:   " <> toText (env ! "NODE_DOC_ADDRESS")
+    putTextLn $ "|.....system start:  " <> toText (env ! "SYSTEM_START")
+    putTextLn $ T.replicate colSize "-" <> "\n"
