@@ -7,15 +7,17 @@ import           Universum
 
 import           Data.Time.Units (Minute)
 import           Data.Version (showVersion)
-import           Options.Applicative (Parser, auto, execParser, footerDoc,
-                     fullDesc, header, help, helper, info, infoOption, long,
-                     metavar, option, progDesc, strOption, switch, value)
+import           Options.Applicative (Mod, OptionFields, Parser, auto,
+                     execParser, footerDoc, fullDesc, header, help, helper,
+                     info, infoOption, long, metavar, option, progDesc,
+                     showDefault, strOption, switch, value)
 import           Paths_cardano_sl (version)
 import           Pos.Client.CLI (CommonNodeArgs (..))
 import qualified Pos.Client.CLI as CLI
-import           Pos.Core.NetworkAddress (NetworkAddress, localhost)
+import           Pos.Core.NetworkAddress (NetworkAddress, addrParser, localhost)
 import           Pos.Util.CompileInfo (CompileTimeInfo (..), HasCompileInfo,
                      compileInfo)
+import           Pos.Util.OptParse (fromParsec)
 import           Pos.Web (TlsParams (..))
 
 
@@ -155,7 +157,7 @@ walletBackendParamsParser :: Parser WalletBackendParams
 walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
                                                 <*> monitoringApiPortParser
                                                 <*> tlsParamsParser
-                                                <*> addressParser
+                                                <*> walletAddressParser
                                                 <*> docAddressParser
                                                 <*> runModeParser
                                                 <*> dbOptionsParser
@@ -182,14 +184,17 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
         <> "anymore, as the monitoring API has been folded into the API exposed"
         <> "by the node process."
 
-    addressParser :: Parser NetworkAddress
-    addressParser = CLI.walletAddressOption $ Just (localhost, 8090)
+    walletAddressParser :: Parser NetworkAddress
+    walletAddressParser = networkAddrOption
+        $  long "wallet-address"
+        <> help "IP and port for backend wallet API."
+        <> value (localhost, 8090)
 
-    -- this comes from the default for the node, defined in
-    -- cardano-sl:Pos.Client.CLI.NodeOptions
-    -- TODO: factor the default address out into a term that can be shared
     nodeAddressParser :: Parser NetworkAddress
-    nodeAddressParser = CLI.walletAddressOption $ Just (localhost, 8080)
+    nodeAddressParser = networkAddrOption
+        $  long "wallet-node-api-address"
+        <> help "IP and port for underlying wallet's node monitoring API."
+        <> value (localhost, 8080)
 
     tlsClientCertPathParser :: Parser FilePath
     tlsClientCertPathParser = strOption
@@ -199,7 +204,6 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
             ( "Path to TLS client public certificate used to authenticate to "
             <> "the Node API."
             )
-
 
     tlsPrivKeyParser :: Parser FilePath
     tlsPrivKeyParser = strOption
@@ -219,9 +223,10 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
             <> "Node API."
             )
 
-
     docAddressParser :: Parser (Maybe NetworkAddress)
-    docAddressParser = CLI.docAddressOption Nothing
+    docAddressParser = optional $ networkAddrOption
+        $  long "wallet-doc-address"
+        <> help "IP and port for backend wallet API documentation."
 
     runModeParser :: Parser RunMode
     runModeParser = (\debugMode -> if debugMode then DebugMode else ProductionMode) <$>
@@ -321,3 +326,15 @@ dbOptionsParser = WalletDBOptions <$> dbPathParser
                                  \(everything excluding wallets/accounts/addresses, \
                                  \metadata)"
                            )
+
+-- | Base parser for network addresses. Caller is expected to fill in
+-- the flag name, help message and default value if any.
+-- e.g.
+--
+--    networkAddrOption $ long "wallet-address" <> help "API Server Address"
+--
+networkAddrOption :: Mod OptionFields NetworkAddress -> Parser NetworkAddress
+networkAddrOption opts = option (fromParsec addrParser) $ mempty
+    <> metavar "IP:PORT"
+    <> showDefault
+    <> opts
