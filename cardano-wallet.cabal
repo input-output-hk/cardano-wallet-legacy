@@ -241,6 +241,7 @@ library
       Cardano.Wallet.Kernel.Util.StrictNonEmpty
       Cardano.Wallet.Kernel.Util.StrictStateT
       Cardano.Wallet.Kernel.Wallets
+      Cardano.Wallet.NodeProxy
       Cardano.Wallet.Server
       Cardano.Wallet.Server.CLI
       Cardano.Wallet.Server.Middlewares
@@ -256,9 +257,7 @@ library
       Cardano.Wallet.WalletLayer.Kernel.Active
       Cardano.Wallet.WalletLayer.Kernel.Addresses
       Cardano.Wallet.WalletLayer.Kernel.Conv
-      Cardano.Wallet.WalletLayer.Kernel.Info
       Cardano.Wallet.WalletLayer.Kernel.Internal
-      Cardano.Wallet.WalletLayer.Kernel.Settings
       Cardano.Wallet.WalletLayer.Kernel.Transactions
       Cardano.Wallet.WalletLayer.Kernel.Wallets
   other-modules:
@@ -592,14 +591,16 @@ test-suite integration
     , cardano-sl-util
     , cardano-wallet
     , containers
-    , generic-lens
+    , cryptonite
     , filepath
+    , generic-lens
     , hspec
     , hspec-core
     , hspec-expectations-lifted
     , http-api-data
     , http-client
     , http-types
+    , memory
     , optparse-applicative
     , servant-client-core
     , template-haskell
