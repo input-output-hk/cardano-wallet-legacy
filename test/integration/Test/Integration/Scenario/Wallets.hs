@@ -94,7 +94,7 @@ spec = do
 
         forM_ matrix $ \(title, wallets_number, page, per_page, expectations) ->
             let test = do
-                    _ <- forM_ ([1..wallets_number]) $ \name -> do
+                    forM_ ([1..wallets_number]) $ \name -> do
                         setup $ defaultSetup
                             & walletName .~ show (name :: Int)
 
@@ -105,8 +105,8 @@ spec = do
                         $- NoSorts
                     verify response expectations
             in case (title == "1 wallet; page=9223372036854775807 & per_page=50 => 0 wallets returned") of
-                True      -> xscenario title $ test
-                False     -> scenario title $ test
+                    True  -> xscenario title $ test
+                    False -> scenario title $ test
 
     describe "WALLETS_LIST_02 - One gets error when page and/or per_page have non-supported values" $ do
 
@@ -170,7 +170,7 @@ spec = do
 
     xscenario "WALLETS_LIST_04 - One can sort results by 'balance' and 'created_at'" $ do
 
-        _ <- forM_ (zip [1,2,3] [3,2,1]) $ \(name, coins) -> do
+        forM_ (zip [1,2,3] [3,2,1]) $ \(name, coins) -> do
             setup $ defaultSetup
                 & walletName .~ show (name :: Int)
                 & initialCoins .~ [coins]
