@@ -32,6 +32,7 @@
           (hsPkgs.aeson-options)
           (hsPkgs.aeson-pretty)
           (hsPkgs.async)
+          (hsPkgs.attoparsec)
           (hsPkgs.base58-bytestring)
           (hsPkgs.beam-core)
           (hsPkgs.beam-migrate)
@@ -50,6 +51,7 @@
           (hsPkgs.cardano-sl-db)
           (hsPkgs.cardano-sl-infra)
           (hsPkgs.cardano-sl-mnemonic)
+          (hsPkgs.cardano-sl-x509)
           (hsPkgs.cardano-sl-networking)
           (hsPkgs.cardano-sl-node)
           (hsPkgs.cardano-sl-node-ipc)
@@ -58,11 +60,14 @@
           (hsPkgs.cereal)
           (hsPkgs.clock)
           (hsPkgs.conduit)
+          (hsPkgs.connection)
           (hsPkgs.containers)
+          (hsPkgs.criterion)
           (hsPkgs.cryptonite)
           (hsPkgs.data-default)
           (hsPkgs.data-default-class)
           (hsPkgs.directory)
+          (hsPkgs.dlist)
           (hsPkgs.exceptions)
           (hsPkgs.filepath)
           (hsPkgs.foldl)
@@ -71,6 +76,7 @@
           (hsPkgs.generics-sop)
           (hsPkgs.http-api-data)
           (hsPkgs.http-client)
+          (hsPkgs.http-client-tls)
           (hsPkgs.http-types)
           (hsPkgs.ixset-typed)
           (hsPkgs.lens)
@@ -79,6 +85,7 @@
           (hsPkgs.mwc-random)
           (hsPkgs.neat-interpolation)
           (hsPkgs.optparse-applicative)
+          (hsPkgs.pem)
           (hsPkgs.QuickCheck)
           (hsPkgs.reflection)
           (hsPkgs.resourcet)
@@ -105,6 +112,7 @@
           (hsPkgs.text)
           (hsPkgs.time)
           (hsPkgs.time-units)
+          (hsPkgs.tls)
           (hsPkgs.transformers)
           (hsPkgs.universum)
           (hsPkgs.unliftio-core)
@@ -114,8 +122,12 @@
           (hsPkgs.wai)
           (hsPkgs.wai-middleware-throttle)
           (hsPkgs.warp)
+          (hsPkgs.x509)
+          (hsPkgs.x509-store)
           (hsPkgs.zlib)
-        ];
+        ] ++ (if system.isWindows
+          then [ (hsPkgs.Win32) ]
+          else [ (hsPkgs.unix) ]);
       };
       exes = {
         "cardano-wallet-server" = {
@@ -138,6 +150,27 @@
             (hsPkgs.optparse-applicative)
             (hsPkgs.swagger2)
             (hsPkgs.universum)
+          ];
+        };
+        "cardano-wallet-client" = {
+          depends = [
+            (hsPkgs.base)
+            (hsPkgs.cardano-wallet)
+            (hsPkgs.optparse-applicative)
+            (hsPkgs.universum)
+          ];
+        };
+        "cardano-wallet-sync-plot" = {
+          depends = [
+            (hsPkgs.base)
+            (hsPkgs.optparse-applicative)
+            (hsPkgs.aeson)
+            (hsPkgs.Chart)
+            (hsPkgs.Chart-cairo)
+            (hsPkgs.text)
+            (hsPkgs.time)
+            (hsPkgs.universum)
+            (hsPkgs.vector)
           ];
         };
       };
@@ -185,6 +218,7 @@
             (hsPkgs.safecopy)
             (hsPkgs.serokell-util)
             (hsPkgs.servant)
+            (hsPkgs.servant-client)
             (hsPkgs.servant-server)
             (hsPkgs.servant-swagger)
             (hsPkgs.string-conv)
@@ -219,6 +253,7 @@
           depends = [
             (hsPkgs.base)
             (hsPkgs.QuickCheck)
+            (hsPkgs.servant-client)
             (hsPkgs.aeson)
             (hsPkgs.aeson-qq)
             (hsPkgs.async)

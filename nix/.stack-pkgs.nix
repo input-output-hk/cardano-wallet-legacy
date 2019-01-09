@@ -4,6 +4,8 @@
       packages = {
         "generic-lens" = hackage.generic-lens."1.1.0.0".revisions.default;
         "Chart" = hackage.Chart."1.9".revisions.default;
+        "Chart-cairo" = hackage.Chart-cairo."1.9".revisions.default;
+        "Chart" = hackage.Chart."1.9".revisions.default;
         "Chart-diagrams" = hackage.Chart-diagrams."1.9".revisions.default;
         "SVGFonts" = hackage.SVGFonts."1.6.0.3".revisions.default;
         "aeson-options" = hackage.aeson-options."0.0.0".revisions.default;
@@ -51,7 +53,6 @@
         cardano-sl-util-test = ./.stack.nix/cardano-sl-util-test.nix;
         cardano-sl-utxo = ./.stack.nix/cardano-sl-utxo.nix;
         cardano-sl-x509 = ./.stack.nix/cardano-sl-x509.nix;
-        plutus-prototype = ./.stack.nix/plutus-prototype.nix;
         cardano-report-server = ./.stack.nix/cardano-report-server.nix;
         cardano-crypto = ./.stack.nix/cardano-crypto.nix;
         ip = ./.stack.nix/ip.nix;
@@ -72,6 +73,7 @@
         stylish-haskell = ./.stack.nix/stylish-haskell.nix;
         universum = ./.stack.nix/universum.nix;
         serokell-util = ./.stack.nix/serokell-util.nix;
+        inspector = ./.stack.nix/inspector.nix;
       };
     };
   resolver = "lts-12.17";
