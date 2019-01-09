@@ -16,6 +16,7 @@ module Cardano.Wallet.Kernel.DB.EosHdWallet (
     -- ** Lenses
   , eosHdWalletsRoots
   , eosHdWalletsAccounts
+  , eosHdWalletsAddresses
   , eosHdRootId
   , eosHdRootName
   , eosHdRootAssurance
@@ -78,12 +79,17 @@ data EosHdAccount = EosHdAccount {
 
 -- | All wallets and accounts in the EOS HD wallets
 data EosHdWallets = EosHdWallets {
-    _eosHdWalletsRoots    :: !(IxSet EosHdRoot)
-  , _eosHdWalletsAccounts :: !(IxSet EosHdAccount)
+    _eosHdWalletsRoots     :: !(IxSet EosHdRoot)
+  , _eosHdWalletsAccounts  :: !(IxSet EosHdAccount)
+  -- | Currently we use existing 'Hdaddress'-hierarchy
+  -- (see 'Cardano.Wallet.Kernel.DB.HdWallet' module) to
+  -- store addresses for EOS-wallet, because technically they
+  -- are the same addresses as for FOS-wallet.
+  , _eosHdWalletsAddresses :: !(IxSet (Indexed HdAddress))
   }
 
 initEosHdWallets :: EosHdWallets
-initEosHdWallets = EosHdWallets IxSet.empty IxSet.empty
+initEosHdWallets = EosHdWallets IxSet.empty IxSet.empty IxSet.empty
 
 {-------------------------------------------------------------------------------
   Template Haskell splices

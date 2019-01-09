@@ -199,6 +199,7 @@ library
       Cardano.Wallet.Kernel.DB.Compression
       Cardano.Wallet.Kernel.DB.EosHdWallet
       Cardano.Wallet.Kernel.DB.EosHdWallet.Create
+      Cardano.Wallet.Kernel.DB.EosHdWallet.Read
       Cardano.Wallet.Kernel.DB.HdWallet
       Cardano.Wallet.Kernel.DB.HdWallet.Create
       Cardano.Wallet.Kernel.DB.HdWallet.Delete
