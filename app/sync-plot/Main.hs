@@ -9,14 +9,18 @@ import           Data.Char (toLower)
 import           Data.List (isSuffixOf)
 import qualified Data.Text as T
 import           Data.Time.Clock (UTCTime)
-import           Data.Time.Format (formatTime, defaultTimeLocale)
+import           Data.Time.Format (defaultTimeLocale, formatTime)
 import           Data.Vector ((!))
 import qualified Data.Vector as V
-import           Options.Applicative (Parser, execParser, info, helper, fullDesc, progDesc, subparser, commandGroup, command, flag, strOption, argument, help, metavar, str, value, short, long)
+import           Options.Applicative (Parser, argument, command, commandGroup,
+                     execParser, flag, fullDesc, help, helper, info, long,
+                     metavar, progDesc, short, str, strOption, subparser,
+                     value)
 import           System.Exit (die)
-import           Universum hiding ((.~), die)
+import           Universum hiding (die, (.~))
 
-import           Graphics.Rendering.Chart.Backend.Cairo (FileFormat(..), toFile, fo_format)
+import           Graphics.Rendering.Chart.Backend.Cairo (FileFormat (..),
+                     fo_format, toFile)
 import           Graphics.Rendering.Chart.Easy hiding (argument, both)
 
 data PlotType

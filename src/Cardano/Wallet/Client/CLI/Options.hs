@@ -12,8 +12,8 @@ import           Options.Applicative
 import qualified Pos.Client.Txp.Util as Core
 import qualified Pos.Core as Core
 import           Pos.Core.NetworkAddress (addrParserNoWildcard)
-import           Servant.Client (BaseUrl (..), Scheme (Https))
 import           Pos.Util.OptParse (fromParsec)
+import           Servant.Client (BaseUrl (..), Scheme (Https))
 import           Universum
 
 import           Cardano.Mnemonic (mkMnemonic)
@@ -26,10 +26,10 @@ import           Cardano.Wallet.API.V1.Types (Account (..), AccountIndex,
                      WalletInputSelectionPolicy (..),
                      WalletInputSelectionPolicy (..), WalletOperation (..),
                      WalletPassPhrase (..), mkAccountIndex, mkSpendingPassword)
-import           Cardano.Wallet.Client (getAccounts, getAccountAddressIndex,
+import           Cardano.Wallet.Client (getAccountAddressIndex, getAccounts,
                      getAddressIndex, getTransactionIndex, getWallets)
-import           Cardano.Wallet.Client.Easy
 import           Cardano.Wallet.Client.CLI.ProcessUtil (ProcessID)
+import           Cardano.Wallet.Client.Easy
 
 ----------------------------------------------------------------------------
 -- CLI Types

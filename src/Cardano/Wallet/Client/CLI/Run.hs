@@ -10,8 +10,8 @@ import           Formatting (sformat, shown, string, (%))
 import           System.Exit (ExitCode (..))
 import           Universum
 
-import           Cardano.Wallet.Client.Easy
 import           Cardano.Wallet.Client.CLI.Options
+import           Cardano.Wallet.Client.Easy
 
 
 ----------------------------------------------------------------------------

@@ -6,7 +6,8 @@ import           Universum
 
 import           Cardano.Wallet.Client.CLI.Options (Action, optionsParser)
 import           Cardano.Wallet.Client.CLI.Run (runAction)
-import           Cardano.Wallet.Client.Easy (ConnectConfig, walletClientFromConfig)
+import           Cardano.Wallet.Client.Easy (ConnectConfig,
+                     walletClientFromConfig)
 
 main :: IO ()
 main = exitWith =<< uncurry run =<< execParser opts
