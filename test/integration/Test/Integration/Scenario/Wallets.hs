@@ -94,7 +94,7 @@ spec = do
 
         forM_ matrix $ \(title, wallets_number, page, per_page, expectations) ->
             let test = do
-                    _ <- forM ([1..wallets_number]) $ \name -> do
+                    _ <- forM_ ([1..wallets_number]) $ \name -> do
                         setup $ defaultSetup
                             & walletName .~ show (name :: Int)
 
@@ -170,7 +170,7 @@ spec = do
 
     xscenario "WALLETS_LIST_04 - One can sort results by 'balance' and 'created_at'" $ do
 
-        _ <- forM (zip [1,2,3] [3,2,1]) $ \(name, coins) -> do
+        _ <- forM_ (zip [1,2,3] [3,2,1]) $ \(name, coins) -> do
             setup $ defaultSetup
                 & walletName .~ show (name :: Int)
                 & initialCoins .~ [coins]
