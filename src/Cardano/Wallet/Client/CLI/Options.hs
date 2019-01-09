@@ -128,6 +128,7 @@ apiActionP = hsubparser (mconcat [ command name (info p (progDesc desc))
   where
     commands =
       [ ("node-info", "Query node info", WalletEndpoint <$> nodeInfoP)
+      , ("node-settings", "Query static settings of wallet", pure (WalletEndpoint getNodeSettings))
       , ("create-wallet", "Create a new wallet from mnemonic", WalletEndpoint <$> createWalletP CreateWallet)
       , ("restore-wallet", "Restore a wallet from mnemonic", WalletEndpoint <$> createWalletP RestoreWallet)
       , ("delete-wallet", "Delete a wallet", WalletEndpointVoid <$> deleteWalletP)
