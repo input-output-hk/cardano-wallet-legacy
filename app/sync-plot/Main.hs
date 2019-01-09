@@ -48,10 +48,10 @@ optionsParser :: Parser PlotOptions
 optionsParser = PlotOptions <$> plotP <*> titleP <*> leftP <*> rightP <*> inputP <*> outputP
   where
     plotP = subparser
-      ( command "sync" (info (pure PlotSync) (progDesc "Blockchain sync chart"))
-        <> command "restore" (info (pure PlotRestore) (progDesc "Wallet restore chart"))
-        <> commandGroup "Plot type"
-      )
+        ( command "sync" (info (pure PlotSync) (progDesc "Blockchain sync chart"))
+          <> command "restore" (info (pure PlotRestore) (progDesc "Wallet restore chart"))
+          <> commandGroup "Plot type"
+        )
     leftP = flag True False (long "no-left" <> help "Don't plot first dataset")
     rightP = flag True False (long "no-right" <> help "Don't plot second dataset")
     titleP = strOption (long "extra-title" <> short 't' <> value "" <> help "Append text to chart title")
@@ -111,19 +111,19 @@ plotRecords pl title pleft pright (DataFile rs startTime) = do
     layoutlr_right_axis_visibility . axis_show_labels .= showRight
 
     case pl of
-      PlotSync -> do
-        when pleft $ do
-          plotLeft (line "Local block height" [ [ (t,h) | Record t [h,_] <- rs] ])
-        when pright $ do
-          plotLeft (line "Remote block height" [ [ (t,h) | Record t [_,h] <- rs] ])
-        layoutlr_left_axis . laxis_title .= "Blocks"
-      PlotRestore -> do
-        when pleft $ do
-          plotLeft (line "Restore completion" [ [ (t,pc) | Record t [pc,_] <- rs] ])
-          layoutlr_left_axis . laxis_title .= "Percent"
-        when pright $ do
-          plotRight (line "Rate" [ [ (t,r) | Record t [_,r] <- rs] ])
-          layoutlr_right_axis . laxis_title .= "Blocks/second"
+        PlotSync -> do
+            when pleft $ do
+                plotLeft (line "Local block height" [ [ (t,h) | Record t [h,_] <- rs] ])
+            when pright $ do
+                plotLeft (line "Remote block height" [ [ (t,h) | Record t [_,h] <- rs] ])
+            layoutlr_left_axis . laxis_title .= "Blocks"
+        PlotRestore -> do
+            when pleft $ do
+                plotLeft (line "Restore completion" [ [ (t,pc) | Record t [pc,_] <- rs] ])
+                layoutlr_left_axis . laxis_title .= "Percent"
+            when pright $ do
+                plotRight (line "Rate" [ [ (t,r) | Record t [_,r] <- rs] ])
+                layoutlr_right_axis . laxis_title .= "Blocks/second"
 
 plotTitle :: PlotType -> String
 plotTitle PlotSync    = "Blockchain sync"
