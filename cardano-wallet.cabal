@@ -101,7 +101,6 @@ library
     , mwc-random
     , neat-interpolation
     , optparse-applicative
-    , parsec
     , pem
     , QuickCheck
     , reflection

@@ -13,7 +13,7 @@ import qualified Pos.Client.Txp.Util as Core
 import qualified Pos.Core as Core
 import           Pos.Core.NetworkAddress (addrParserNoWildcard)
 import           Servant.Client (BaseUrl (..), Scheme (Https))
-import qualified Text.Parsec as Parsec
+import           Pos.Util.OptParse (fromParsec)
 import           Universum
 
 import           Cardano.Mnemonic (mkMnemonic)
@@ -91,7 +91,7 @@ baseUrlP = baseUrl <$> addrP <*> path
   where
     baseUrl (host, port) = BaseUrl Https (B8.unpack host) (fromIntegral port)
     addrP = argument readAddrM (metavar "HOST:PORT" <> value ("localhost", 8090) <> help "Wallet API host and port to connect to")
-    readAddrM = eitherReader (first show . Parsec.parse addrParserNoWildcard "" . T.pack)
+    readAddrM = fromParsec addrParserNoWildcard
     path = strOption (long "path" <> short 'p' <> value "" <> metavar "PATH" <> help "Base URL path")
 
 authenticateServerP :: Parser AuthenticateServer

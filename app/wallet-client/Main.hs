@@ -4,9 +4,9 @@ import           Options.Applicative
 import           System.Exit (ExitCode)
 import           Universum
 
-import           Cardano.Wallet.Client.CLI.Options
-import           Cardano.Wallet.Client.CLI.Run
-import           Cardano.Wallet.Client.Easy
+import           Cardano.Wallet.Client.CLI.Options (Action, optionsParser)
+import           Cardano.Wallet.Client.CLI.Run (runAction)
+import           Cardano.Wallet.Client.Easy (ConnectConfig, walletClientFromConfig)
 
 main :: IO ()
 main = exitWith =<< uncurry run =<< execParser opts
