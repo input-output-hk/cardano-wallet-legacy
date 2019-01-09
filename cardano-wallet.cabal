@@ -469,6 +469,7 @@ test-suite unit
       Test.Spec.Addresses
       Test.Spec.BlockMetaScenarios
       Test.Spec.Client.Wait
+      Test.Spec.Client.CLI
       Test.Spec.CoinSelection
       Test.Spec.CoinSelection.Generators
       Test.Spec.DeltaCompression

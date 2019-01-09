@@ -319,7 +319,10 @@ amountP :: Parser WalletCoin
 amountP = WalletCoin <$> argument amountReader (metavar "AMOUNT" <> help "Amount in lovelace. Put \"Ada\" after the number to specify the amount in Ada")
 
 amountReader :: ReadM Core.Coin
-amountReader = eitherReader (intToCoin <=< parse . T.pack)
+amountReader = eitherReader coinAmountParser
+
+coinAmountParser :: String -> Either String Core.Coin
+coinAmountParser = intToCoin <=< parse . T.pack
   where
     parse = A.parseOnly ((ada <|> lovelace) <* A.endOfInput)
     lovelace = A.decimal <* optional (A.skipSpace *> A.asciiCI "lovelace")
