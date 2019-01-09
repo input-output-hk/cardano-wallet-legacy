@@ -52,7 +52,7 @@ import           Cardano.Wallet.Kernel.DB.InDb (InDb (..))
 import           Cardano.Wallet.Kernel.Internal (ActiveWallet, PassiveWallet,
                      wallets)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
-import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
+import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
 import qualified Cardano.Wallet.Kernel.PrefilterTx as Kernel
 import qualified Cardano.Wallet.Kernel.Transactions as Kernel
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
@@ -197,7 +197,7 @@ spec = describe "NewPayment" $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture @IO pm (InitialADA 10000) (PayLovelace 10) $ \_ _ aw Fixture{..} -> do
-                    policy <- Node.getFeePolicy (Kernel.walletPassive aw ^. Kernel.walletNode)
+                    policy <- NodeStateAdaptor.getFeePolicy (Kernel.walletPassive aw ^. Kernel.walletNode)
                     let opts = (newOptions (Kernel.cardanoFee policy)) {
                                csoExpenseRegulation = SenderPaysFee
                              , csoInputGrouping     = IgnoreGrouping
@@ -214,7 +214,7 @@ spec = describe "NewPayment" $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withFixture @IO pm (InitialADA 10000) (PayADA 1) $ \_ _ aw Fixture{..} -> do
-                    policy <- Node.getFeePolicy (Kernel.walletPassive aw ^. Kernel.walletNode)
+                    policy <- NodeStateAdaptor.getFeePolicy (Kernel.walletPassive aw ^. Kernel.walletNode)
                     let opts = (newOptions (Kernel.cardanoFee policy)) {
                                csoExpenseRegulation = ReceiverPaysFee
                              , csoInputGrouping     = IgnoreGrouping
@@ -295,7 +295,7 @@ spec = describe "NewPayment" $ do
                 monadicIO $ do
                     pm <- pick arbitrary
                     withFixture @IO pm (InitialADA 10000) (PayADA 1) $ \_ _ aw Fixture{..} -> do
-                        policy <- Node.getFeePolicy (Kernel.walletPassive aw ^. Kernel.walletNode)
+                        policy <- NodeStateAdaptor.getFeePolicy (Kernel.walletPassive aw ^. Kernel.walletNode)
                         let opts = (newOptions (Kernel.cardanoFee policy)) {
                                    csoExpenseRegulation = SenderPaysFee
                                  , csoInputGrouping     = IgnoreGrouping

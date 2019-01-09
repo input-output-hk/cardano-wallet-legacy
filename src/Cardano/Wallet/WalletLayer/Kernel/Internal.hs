@@ -26,7 +26,7 @@ import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.TxMeta
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
-import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
+import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
 import qualified Cardano.Wallet.Kernel.Submission as Submission
 import           Cardano.Wallet.WalletLayer (CreateWallet (..),
                      ImportWalletError (..))
@@ -40,7 +40,7 @@ import           Cardano.Wallet.WalletLayer.Kernel.Wallets (createWallet)
 nextUpdate :: MonadIO m
            => Kernel.PassiveWallet -> m (Maybe WalletSoftwareVersion)
 nextUpdate w = liftIO $ do
-    current <- Node.curSoftwareVersion (w ^. Kernel.walletNode)
+    current <- NodeStateAdaptor.curSoftwareVersion (w ^. Kernel.walletNode)
     fmap (fmap (WalletSoftwareVersion . _fromDb)) $
       update' (w ^. Kernel.wallets) $ GetNextUpdate (InDb current)
 
@@ -61,10 +61,10 @@ nextUpdate w = liftIO $ do
 applyUpdate :: MonadIO m => Kernel.PassiveWallet -> m ()
 applyUpdate w = liftIO $ do
     update' (w ^. Kernel.wallets) $ RemoveNextUpdate
-    Node.withNodeState (w ^. Kernel.walletNode) $ \_lock -> do
+    NodeStateAdaptor.withNodeState (w ^. Kernel.walletNode) $ \_lock -> do
       doFail <- liftIO $ testLogFInject (w ^. Kernel.walletFInjects) FInjApplyUpdateNoExit
       unless doFail
-        Node.triggerShutdown
+        NodeStateAdaptor.triggerShutdown
 
 -- | Postpone update
 --
@@ -75,8 +75,8 @@ postponeUpdate w = update' (w ^. Kernel.wallets) $ RemoveNextUpdate
 -- | Wait for an update notification
 waitForUpdate :: MonadIO m => Kernel.PassiveWallet -> m ConfirmedProposalState
 waitForUpdate w = liftIO $
-    Node.withNodeState (w ^. Kernel.walletNode) $ \_lock ->
-        Node.waitForUpdate
+    NodeStateAdaptor.withNodeState (w ^. Kernel.walletNode) $ \_lock ->
+        NodeStateAdaptor.waitForUpdate
 
 -- | Add an update in the DB, this is triggered by the notifier once getting
 -- a new proposal from the blockchain

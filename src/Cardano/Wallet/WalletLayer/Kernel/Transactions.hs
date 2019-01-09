@@ -28,7 +28,7 @@ import           Cardano.Wallet.Kernel.DB.InDb (InDb (..))
 import           Cardano.Wallet.Kernel.DB.TxMeta (TxMeta (..))
 import qualified Cardano.Wallet.Kernel.DB.TxMeta as TxMeta
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
-import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
+import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import           Cardano.Wallet.WalletLayer (GetTxError (..))
 import           UTxO.Util (exceptT)
@@ -72,8 +72,8 @@ getTransactions wallet mbWalletId mbAccountIndex mbAddress params fop sop = lift
                 (castFiltering $ mapIx unV1 <$> F.findMatchingFilterOp fop)
                 mbSorting
             db <- liftIO $ Kernel.getWalletSnapshot wallet
-            sc <- liftIO $ Node.getSlotCount (wallet ^. Kernel.walletNode)
-            currentSlot <- liftIO $ Node.getTipSlotId (wallet ^. Kernel.walletNode)
+            sc <- liftIO $ NodeStateAdaptor.getSlotCount (wallet ^. Kernel.walletNode)
+            currentSlot <- liftIO $ NodeStateAdaptor.getTipSlotId (wallet ^. Kernel.walletNode)
             if null metas then
                 -- A bit artificial, but we force the termination and make sure
                 -- in the meantime that the algorithm only exits by one and only
@@ -99,8 +99,8 @@ toTransaction :: MonadIO m
               -> m (Either HD.UnknownHdAccount V1.Transaction)
 toTransaction wallet meta = liftIO $ do
     db <- liftIO $ Kernel.getWalletSnapshot wallet
-    sc <- liftIO $ Node.getSlotCount (wallet ^. Kernel.walletNode)
-    currentSlot <- Node.getTipSlotId (wallet ^. Kernel.walletNode)
+    sc <- liftIO $ NodeStateAdaptor.getSlotCount (wallet ^. Kernel.walletNode)
+    currentSlot <- NodeStateAdaptor.getTipSlotId (wallet ^. Kernel.walletNode)
     return $ runExcept $ metaToTx db sc currentSlot meta
 
 -- | Type Casting for Account filtering from V1 to MetaData Types.

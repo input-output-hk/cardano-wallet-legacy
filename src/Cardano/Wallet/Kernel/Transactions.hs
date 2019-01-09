@@ -58,7 +58,7 @@ import           Cardano.Wallet.Kernel.Internal (ActiveWallet (..),
                      PassiveWallet (..), walletNode)
 import qualified Cardano.Wallet.Kernel.Internal as Internal
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
-import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
+import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
 import           Cardano.Wallet.Kernel.Pending (PartialTxMeta, newForeign,
                      newPending)
 import           Cardano.Wallet.Kernel.Read (getWalletSnapshot)
@@ -205,7 +205,7 @@ newUnsignedTransaction
 newUnsignedTransaction ActiveWallet{..} options accountId payees = runExceptT $ do
     snapshot <- liftIO $ getWalletSnapshot walletPassive
     initialEnv <- liftIO $ newEnvironment
-    maxTxSize  <- liftIO $ Node.getMaxTxSize (walletPassive ^. walletNode)
+    maxTxSize  <- liftIO $ NodeStateAdaptor.getMaxTxSize (walletPassive ^. walletNode)
     -- TODO: We should cache this maxInputs value
     let maxInputs = estimateMaxTxInputs maxTxSize
 
@@ -333,7 +333,7 @@ submitSignedTx aw@ActiveWallet{..} tx srcAddrsWithProofs =
             let (HD.HdAddress (HD.HdAddressId srcAccountId _) _) = firstSrcHdAddress
             -- We use `getCreationTimestamp` provided by the `NodeStateAdaptor`
             -- to compute the createdAt timestamp for `TxMeta`.
-            txMetaCreatedAt_ <- liftIO $ Node.getCreationTimestamp (walletPassive ^. walletNode)
+            txMetaCreatedAt_ <- liftIO $ NodeStateAdaptor.getCreationTimestamp (walletPassive ^. walletNode)
 
             -- STEP 4: Get available UTxO
             utxo <- withExceptT (PaymentNewTransactionError . NewTransactionUnknownAccount) $ exceptT $
@@ -435,7 +435,7 @@ newTransaction aw@ActiveWallet{..} spendingPassword options accountId payees = d
              let spentInputCoins = paymentAmount (toaOut . snd <$> inputs)
              -- we use `getCreationTimestamp` provided by the `NodeStateAdaptor`
              -- to compute the createdAt timestamp for `TxMeta`
-             txMetaCreatedAt_  <- liftIO $ Node.getCreationTimestamp (walletPassive ^. walletNode)
+             txMetaCreatedAt_  <- liftIO $ NodeStateAdaptor.getCreationTimestamp (walletPassive ^. walletNode)
              -- partially applied, because we don`t know here which outputs are ours
              partialMeta <- liftIO $ createNewMeta accountId txId txMetaCreatedAt_ inputs (_txOutputs . taTx $ txAux) True spentInputCoins
              return (txAux, partialMeta, availableUtxo)
@@ -714,10 +714,10 @@ redeemAda w@ActiveWallet{..} accId pw rsk = runExceptT $ do
     mkTx :: ProtocolMagic -> Address -> ExceptT RedeemAdaError IO (TxAux, TxMeta)
     mkTx pm output = do
         let nm = makeNetworkMagic pm
-        now  <- liftIO $ Node.getCreationTimestamp (walletPassive ^. walletNode)
+        now  <- liftIO $ NodeStateAdaptor.getCreationTimestamp (walletPassive ^. walletNode)
         utxo <- liftIO $
-                  Node.withNodeState (walletPassive ^. walletNode) $ \_lock ->
-                    Node.filterUtxo isOutput
+                  NodeStateAdaptor.withNodeState (walletPassive ^. walletNode) $ \_lock ->
+                    NodeStateAdaptor.filterUtxo isOutput
         (inp@(TxInUtxo inHash inIx), coin) <-
           case utxo of
             [i]   -> return i

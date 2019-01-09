@@ -31,7 +31,7 @@ import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types
 import           Cardano.Wallet.Kernel.Internal (walletProtocolMagic)
-import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
+import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
 import qualified Cardano.Wallet.Kernel.Transactions as Kernel
 import           Cardano.Wallet.WalletLayer (EstimateFeesError (..),
                      NewPaymentError (..), NewUnsignedTransactionError (..),
@@ -49,7 +49,7 @@ pay :: MonadIO m
     -> V1.Payment
     -> m (Either NewPaymentError (Tx, TxMeta))
 pay activeWallet pw grouping regulation payment = liftIO $ do
-    policy <- Node.getFeePolicy (Kernel.walletPassive activeWallet ^. Kernel.walletNode)
+    policy <- NodeStateAdaptor.getFeePolicy (Kernel.walletPassive activeWallet ^. Kernel.walletNode)
     limitExecutionTimeTo (60 :: Second) NewPaymentTimeLimitReached $
       runExceptT $ do
         (opts, accId, payees) <- withExceptT NewPaymentWalletIdDecodingFailed $
@@ -96,7 +96,7 @@ estimateFees :: MonadIO m
              -> V1.Payment
              -> m (Either EstimateFeesError Coin)
 estimateFees activeWallet grouping regulation payment = liftIO $ do
-    policy <- Node.getFeePolicy (Kernel.walletPassive activeWallet ^. Kernel.walletNode)
+    policy <- NodeStateAdaptor.getFeePolicy (Kernel.walletPassive activeWallet ^. Kernel.walletNode)
     limitExecutionTimeTo (60 :: Second) EstimateFeesTimeLimitReached $ do
       runExceptT $ do
         (opts, accId, payees) <- withExceptT EstimateFeesWalletIdDecodingFailed $
@@ -117,7 +117,7 @@ createUnsignedTx :: MonadIO m
                  -> V1.Payment
                  -> m (Either NewUnsignedTransactionError V1.UnsignedTransaction)
 createUnsignedTx activeWallet grouping regulation payment = liftIO $ do
-    policy <- Node.getFeePolicy (Kernel.walletPassive activeWallet ^. Kernel.walletNode)
+    policy <- NodeStateAdaptor.getFeePolicy (Kernel.walletPassive activeWallet ^. Kernel.walletNode)
     let spendingPassword = maybe mempty coerce $ V1.pmtSpendingPassword payment
     res <- runExceptT $ do
         (opts, accId, payees) <- withExceptT NewTransactionWalletIdDecodingFailed $
