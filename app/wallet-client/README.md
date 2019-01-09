@@ -37,4 +37,5 @@ An example usage would be:
  - provide option for human-readable output instead of formatted JSON
  - progress bar for sync/restore tasks if run in a terminal
  - use pagination features of the API
- 
+ - prompt for spending passwords and/or read from file
+ - add a command to wait for confirmation of a transaction

@@ -26,8 +26,8 @@ import           Cardano.Wallet.API.V1.Types (Account (..), AccountIndex,
                      WalletInputSelectionPolicy (..),
                      WalletInputSelectionPolicy (..), WalletOperation (..),
                      WalletPassPhrase (..), mkAccountIndex, mkSpendingPassword)
-import           Cardano.Wallet.Client (getAccounts, getAddressIndex,
-                     getTransactionIndex, getWallets)
+import           Cardano.Wallet.Client (getAccounts, getAccountAddressIndex,
+                     getAddressIndex, getTransactionIndex, getWallets)
 import           Cardano.Wallet.Client.Easy
 import           Cardano.Wallet.Client.CLI.ProcessUtil (ProcessID)
 
@@ -121,32 +121,51 @@ waitForRestoreP = WaitForRestore <$> optional pidP <*> optional outfileP
 -- API action parsers
 
 apiActionP :: Monad m => Parser (Action m)
-apiActionP = hsubparser (mconcat [ command name (info p (progDesc desc))
-                                 | (name, desc, p) <- commands]
-                         <> commandGroup "Basic API calls"
-                         <> hidden)
+apiActionP = basic <|> wallet <|> account <|> xact
   where
-    commands =
-      [ ("node-info", "Query node info", WalletEndpoint <$> nodeInfoP)
-      , ("node-settings", "Query static settings of wallet", pure (WalletEndpoint getNodeSettings))
-      , ("create-wallet", "Create a new wallet from mnemonic", WalletEndpoint <$> createWalletP CreateWallet)
-      , ("restore-wallet", "Restore a wallet from mnemonic", WalletEndpoint <$> createWalletP RestoreWallet)
-      , ("delete-wallet", "Delete a wallet", WalletEndpointVoid <$> deleteWalletP)
-      , ("list-accounts", "Retrieve full list of accounts in wallet", WalletEndpoint <$> listAccountsP)
-      , ("delete-account", "Delete account", WalletEndpointVoid <$> deleteAccountP)
-      , ("list-addresses", "List addresses", pure (WalletEndpoint getAddressIndex))
-      , ("list-wallets", "List wallets", pure (WalletEndpoint getWallets))
-      , ("send-transaction", "Send transaction to one or multiple target addresses", WalletEndpoint <$> sendTransactionP)
-      , ("estimate-fees", "Estimate fees for a transaction", WalletEndpoint <$> estimateFeesP)
-      , ("list-transactions", "Get transaction history", WalletEndpoint <$> listTransactionsP)
-      , ("get-utxo-statistics", "Get UTxO distribution of wallet", WalletEndpoint <$> getUtxoStatisticsP)
-      -- fixme: more endpoints, less boilerplate, user-friendly help text
-      ]
+    basic = commandGroupParser "Basic API calls"
+        [ ("node-info", "Query node info", WalletEndpoint <$> nodeInfoP)
+        , ("node-settings", "Query static settings of wallet", pure (WalletEndpoint getNodeSettings))
+        ]
+    wallet = commandGroupParser "Wallets"
+        [ ("list-wallets", "List wallets", pure (WalletEndpoint getWallets))
+        , ("show-wallet", "Information about a wallet", WalletEndpoint <$> showWalletP)
+        , ("edit-wallet", "Update a wallet", WalletEndpoint <$> editWalletP)
+        , ("create-wallet", "Create a new wallet from mnemonic", WalletEndpoint <$> createWalletP CreateWallet)
+        , ("restore-wallet", "Restore a wallet from mnemonic", WalletEndpoint <$> createWalletP RestoreWallet)
+        , ("delete-wallet", "Delete a wallet", WalletEndpointVoid <$> deleteWalletP)
+        , ("get-utxo-statistics", "Get UTxO distribution of wallet", WalletEndpoint <$> getUtxoStatisticsP)
+        ]
+    account = commandGroupParser "Accounts"
+        [ ("list-accounts", "Retrieve full list of accounts in wallet", WalletEndpoint <$> listAccountsP)
+        , ("show-account", "Information about an account", WalletEndpoint <$> showAccountP)
+        , ("account-balance", "Show the balance of an account", WalletEndpoint <$> accountBalanceP)
+        , ("create-account", "Add an account to a wallet", WalletEndpoint <$> createAccountP)
+        , ("edit-account", "Update an account", WalletEndpoint <$> editAccountP)
+        , ("delete-account", "Delete account", WalletEndpointVoid <$> deleteAccountP)
+        ]
+    xact = commandGroupParser "Addresses and Transactions"
+        [ ("list-addresses", "List addresses", WalletEndpoint <$> listAddressesP)
+        , ("show-address", "Information about an address", WalletEndpoint <$> showAddressP)
+        , ("create-address", "Create an address", WalletEndpoint <$> createAddressP)
+        , ("list-transactions", "Get transaction history", WalletEndpoint <$> listTransactionsP)
+        , ("send-transaction", "Send transaction to one or multiple target addresses", WalletEndpoint <$> sendTransactionP)
+        , ("estimate-fees", "Estimate fees for a transaction", WalletEndpoint <$> estimateFeesP)
+        ]
+    -- fixme: more endpoints, less boilerplate, user-friendly help text
+
+    commandGroupParser title commands =
+        hsubparser (mconcat [ command name (info p (progDesc desc))
+                            | (name, desc, p) <- commands]
+                    <> commandGroup title <> hidden)
 
 nodeInfoP :: Parser (WalletCall m NodeInfo)
 nodeInfoP = flip getNodeInfo <$> ntpCheck
   where
     ntpCheck = flag NoNtpCheck ForceNtpCheck (long "force-ntp-check")
+
+showWalletP :: Parser (WalletCall m Wallet)
+showWalletP = flip getWallet <$> walletIdArgP
 
 createWalletP :: WalletOperation -> Parser (WalletCall m Wallet)
 createWalletP op = flip postWallet <$> newWalletP
@@ -155,28 +174,59 @@ createWalletP op = flip postWallet <$> newWalletP
                  <$> backupPhraseP
                  <*> optional spendingPasswordP
                  <*> assuranceLevelP
-                 <*> nameP
+                 <*> walletNameP (value "New Wallet")
                  <*> pure op
     backupPhraseP = option parseBackupPhrase (long "backup-phrase" <> metavar "WORDS" <> help "12-word mnemonic")
-    assuranceLevelP = flag NormalAssurance StrictAssurance
-                      ( long "strict-assurance"
-                        <> help "Assurance level strict" )
-    nameP = T.pack <$> strOption (long "name" <> metavar "NAME" <> value "New Wallet" <> help "Name for the wallet")
+
+editWalletP :: Parser (WalletCall m Wallet)
+editWalletP = (\wid upd wc -> updateWallet wc wid upd) <$> walletIdArgP <*> updateP
+  where
+    updateP = WalletUpdate <$> assuranceLevelP <*> walletNameP mempty
 
 deleteWalletP :: Parser (WalletCallVoid m)
-deleteWalletP = flip deleteWallet <$> walletIdP
+deleteWalletP = flip deleteWallet <$> walletIdArgP
 
 deleteAccountP :: Parser (WalletCallVoid m)
-deleteAccountP = (\wid accIdx wc -> deleteAccount wc wid accIdx) <$> walletIdP <*> accountIndexP
+deleteAccountP = (\wid accIdx wc -> deleteAccount wc wid accIdx) <$> walletIdArgP <*> accountIndexArgP
 
 listAccountsP :: Monad m => Parser (WalletCall m [Account])
-listAccountsP = flip getAccounts <$> walletIdP
+listAccountsP = flip getAccounts <$> walletIdArgP
+
+createAccountP :: Parser (WalletCall m Account)
+createAccountP = (\wid acc wc -> postAccount wc wid acc) <$> walletIdArgP <*> newAccountP
+  where
+    newAccountP = NewAccount <$> optional spendingPasswordP <*> accountNameP (value "New account")
+
+editAccountP :: Parser (WalletCall m Account)
+editAccountP = (\wid accIdx upd wc -> updateAccount wc wid accIdx upd)
+    <$> walletIdArgP
+    <*> accountIndexArgP
+    <*> fmap AccountUpdate (accountNameP mempty)
+
+showAccountP :: Parser (WalletCall m Account)
+showAccountP = (\wid accIdx wc -> getAccount wc wid accIdx) <$> walletIdArgP <*> accountIndexArgP
+
+accountBalanceP :: Parser (WalletCall m AccountBalance)
+accountBalanceP = (\wid accIdx wc -> getAccountBalance wc wid accIdx) <$> walletIdArgP <*> accountIndexArgP
 
 listAddressesP :: Monad m => Parser (WalletCall m [WalletAddress])
-listAddressesP = pure getAddressIndex
+listAddressesP = listAccount <|> pure getAddressIndex
+  where
+    listAccount = (\wid accIdx wc -> getAccountAddressIndex wc wid accIdx)
+                  <$> walletIdArgP <*> accountIndexArgP
 
 showAddressP :: Parser (WalletCall m WalletAddress)
 showAddressP = flip getAddress <$> addressIdP
+
+createAddressP :: Parser (WalletCall m WalletAddress)
+createAddressP = flip postAddress <$> newAddressP
+  where
+    newAddressP = newAddress
+        <$> walletIdArgP
+        <*> accountIndexArgP
+        <*> optional spendingPasswordP
+    -- Change argument order so that optparse help is shown consistently.
+    newAddress wid maid sp = NewAddress sp maid wid
 
 sendTransactionP :: Parser (WalletCall m Transaction)
 sendTransactionP = flip postTransaction <$> paymentP
@@ -191,20 +241,20 @@ paymentP = Payment
            <*> optional (WalletInputSelectionPolicy <$> groupingPolicyP)
            <*> optional spendingPasswordP
   where
-    paymentSourceP = PaymentSource <$> walletIdP <*> accountIndexP
-    paymentDestinationP = PaymentDistribution <$> walAddressP <*> amountP
+    paymentSourceP = PaymentSource <$> walletIdArgP <*> accountIndexArgP
+    paymentDestinationP = PaymentDistribution <$> walAddressArgP <*> amountP
     groupingPolicyP = flag' Core.OptimizeForHighThroughput (long "group-for-high-throughput" <> help "Do not attempt to group transaction inputs")
                       <|> flag' Core.OptimizeForSecurity (long "group-for-security" <> help "The default strategy to use for selecting transaction inputs")
                       <|> pure Core.OptimizeForSecurity
 
 listTransactionsP :: Monad m => Parser (WalletCall m [Transaction])
 listTransactionsP = (\wid acc addr wc -> getTransactionIndex wc wid acc addr)
-                    <$> optional walletIdP
-                    <*> optional accountIndexP
-                    <*> optional walAddressP
+                    <$> optional walletIdOptP
+                    <*> optional accountIndexOptP
+                    <*> optional walAddressOptP
 
 getUtxoStatisticsP :: Parser (WalletCall m UtxoStatistics)
-getUtxoStatisticsP = flip getUtxoStatistics <$> walletIdP
+getUtxoStatisticsP = flip getUtxoStatistics <$> walletIdArgP
 
 ----------------------------------------------------------------------------
 -- Little option parsers
@@ -221,11 +271,28 @@ parseBackupPhrase = eitherReader (first show . fmap BackupPhrase . mkMnemonic . 
 parsePassPhrase :: ReadM WalletPassPhrase
 parsePassPhrase = eitherReader (first show . mkSpendingPassword . T.pack)
 
-walletIdP :: Parser WalletId
-walletIdP = WalletId . T.pack <$> argument str (metavar "HASH" <> help "Wallet ID")
+walletIdArgP :: Parser WalletId
+walletIdArgP = argument walletIdReader (metavar "WALLET"
+                                        <> help "Base58-encoded wallet ID hash")
 
-accountIndexP :: Parser AccountIndex
-accountIndexP = argument (eitherReader accIndex) (metavar "INTEGER" <> help "Account index")
+walletIdOptP :: Parser WalletId
+walletIdOptP = option walletIdReader (long "wallet-id" <> short 'w'
+                                      <> metavar "HASH"
+                                      <> help "Base58-encoded Wallet ID")
+
+walletIdReader :: ReadM WalletId
+walletIdReader = WalletId . T.pack <$> str
+
+accountIndexArgP :: Parser AccountIndex
+accountIndexArgP = argument accountIndexReader (metavar "ACCOUNT" <> help "Account index as integer")
+
+accountIndexOptP :: Parser AccountIndex
+accountIndexOptP = option accountIndexReader (long "account" <> short 'n'
+                                              <> metavar "INTEGER"
+                                              <> help "Account index")
+
+accountIndexReader :: ReadM AccountIndex
+accountIndexReader = eitherReader accIndex
   where
     accIndex s = case readMaybe s of
                      Just idx -> first show (mkAccountIndex idx)
@@ -234,16 +301,22 @@ accountIndexP = argument (eitherReader accIndex) (metavar "INTEGER" <> help "Acc
 addressIdP :: Parser Text
 addressIdP = T.pack <$> argument str (metavar "HASH" <> help "Address ID")
 
-walAddressP :: Parser WalAddress
-walAddressP = WalAddress <$> argument address (metavar "HASH" <> help "Base58-encoded address")
-  where
-    address = eitherReader (first T.unpack . Core.decodeTextAddress . T.pack)
+walAddressArgP :: Parser WalAddress
+walAddressArgP = argument addressReader (metavar "ADDRESS" <> help "Base58-encoded address hash")
+
+walAddressOptP :: Parser WalAddress
+walAddressOptP = option addressReader (long "address" <> short 'a'
+                                       <> metavar "HASH"
+                                       <> help "Base58-encoded address")
+
+addressReader :: ReadM WalAddress
+addressReader = WalAddress <$> eitherReader (first T.unpack . Core.decodeTextAddress . T.pack)
 
 spendingPasswordP :: Parser WalletPassPhrase
 spendingPasswordP = option parsePassPhrase (long "spending-password" <> metavar "PASSWORD" <> help "32-byte hex-encoded passphrase")
 
 amountP :: Parser WalletCoin
-amountP = WalletCoin <$> argument amountReader (metavar "AMOUNT" <> help "Amount in lovelace. Put \"Ada\" after the number to specify the amount in Ada.")
+amountP = WalletCoin <$> argument amountReader (metavar "AMOUNT" <> help "Amount in lovelace. Put \"Ada\" after the number to specify the amount in Ada")
 
 amountReader :: ReadM Core.Coin
 amountReader = eitherReader (intToCoin <=< parse . T.pack)
@@ -251,5 +324,16 @@ amountReader = eitherReader (intToCoin <=< parse . T.pack)
     parse = A.parseOnly ((ada <|> lovelace) <* A.endOfInput)
     lovelace = A.decimal <* optional (A.skipSpace *> A.asciiCI "lovelace")
     ada = fmap toLL A.decimal <* (A.skipSpace *> A.asciiCI "ada")
-    toLL = (1000000 *)
+    toLL = (* 1000000)
     intToCoin = first T.unpack . Core.integerToCoin
+
+accountNameP :: Mod OptionFields String -> Parser Text
+accountNameP m = T.pack <$> strOption (m <> long "name" <> metavar "NAME" <> help "Name for the account")
+
+walletNameP :: Mod OptionFields String -> Parser Text
+walletNameP m = T.pack <$> strOption (m <> long "name" <> metavar "NAME" <> help "Name for the wallet")
+
+assuranceLevelP :: Parser AssuranceLevel --
+assuranceLevelP = flag NormalAssurance StrictAssurance
+                        (long "strict-assurance"
+                         <> help "Assurance level strict")

@@ -11,6 +11,7 @@ module Cardano.Wallet.Client
     , getAccounts
     , getWallets
     , getAddressIndex
+    , getAccountAddressIndex
     , getTransactionIndex
     , Resp
     , hoistClient
@@ -197,6 +198,10 @@ paginateAll request = fmap fixMetadata <$> paginatePage 1
 
 getAddressIndex :: Monad m => WalletClient m -> Resp m [WalletAddress]
 getAddressIndex = paginateAll . getAddressIndexPaginated
+
+getAccountAddressIndex :: Monad m => WalletClient m -> WalletId -> AccountIndex -> Resp m [WalletAddress]
+getAccountAddressIndex wc wid maid =
+    paginateAll $ \mp mpp -> fmap (fmap acaAddresses) <$> getAccountAddresses wc wid maid mp mpp NoFilters
 
 getAccounts :: Monad m => WalletClient m -> WalletId -> Resp m [Account]
 getAccounts wc = paginateAll . getAccountIndexPaged wc
