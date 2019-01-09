@@ -435,6 +435,7 @@ test-suite unit
     , safecopy
     , serokell-util
     , servant
+    , servant-client
     , servant-server
     , servant-swagger
     , string-conv

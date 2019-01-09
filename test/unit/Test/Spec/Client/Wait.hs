@@ -7,9 +7,9 @@ import           Universum
 import           Pos.Util.Servant (single)
 
 import           Cardano.Wallet.API.V1.Types (WalletError (..))
+import           Cardano.Wallet.Client.CLI.ProcessUtil (interruptSelf)
 import           Cardano.Wallet.Client.Easy
 import           Cardano.Wallet.Client.Wait
-import           Cardano.Wallet.Client.CLI.ProcessUtil (interruptSelf)
 
 
 spec :: Spec
