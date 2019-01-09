@@ -142,9 +142,6 @@ library
     , x509-store
     , zlib
 
-  if !os(windows)
-    build-depends:     unix
-
   hs-source-dirs:
       src
   exposed-modules:
@@ -281,7 +278,12 @@ library
   other-modules:
       Paths_cardano_wallet
 
-
+  if os(windows)
+    other-modules: Cardano.Wallet.Client.CLI.ProcessUtil.Windows
+    build-depends: Win32
+  else
+    other-modules: Cardano.Wallet.Client.CLI.ProcessUtil.POSIX
+    build-depends: unix
 
 executable cardano-wallet-server
   default-language:
