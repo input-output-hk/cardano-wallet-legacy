@@ -1,5 +1,4 @@
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE LambdaCase                #-}
+{-# LANGUAGE GADTs #-}
 
 module Cardano.Wallet.Client.CLI.Options where
 
@@ -36,10 +35,13 @@ import           Cardano.Wallet.Client.CLI.ProcessUtil (ProcessID)
 -- CLI Types
 
 -- | The command from the user
-data Action m = WaitForSync (Maybe ProcessID) (Maybe FilePath)
-              | WaitForRestore (Maybe ProcessID) (Maybe FilePath)
-              | forall a. ToJSON a => WalletEndpoint (WalletCall m a) -- ^ Wallet API call
-              | WalletEndpointVoid (WalletCallVoid m) -- ^ Wallet API call with empty response
+data Action m where
+    WaitForSync :: Maybe ProcessID -> Maybe FilePath -> Action m
+    WaitForRestore :: Maybe ProcessID -> Maybe FilePath -> Action m
+    -- | Wallet API call
+    WalletEndpoint :: forall m a. ToJSON a => WalletCall m a -> Action m
+    -- | Wallet API call with empty response
+    WalletEndpointVoid :: WalletCallVoid m -> Action m
 
 -- | An API call
 type WalletCall m a = WalletClient m -> Resp m a
@@ -62,26 +64,27 @@ connectConfigP = certConfigP <*> authenticateServerP <*> baseUrlP
                    <> metavar "DIRECTORY"
                    <> help "Wallet state directory containing \"tls\" subdirectory with certificates")
     certFilesP  = ConnectConfig
-      <$> optional (clientAuthCertKeyP <|> clientAuthPemP)
-      <*> optional (strOption
+        <$> optional (clientAuthCertKeyP <|> clientAuthPemP)
+        <*> optional (strOption
                     (long "cacert"
                      <> metavar "FILENAME"
                      <> help "CA certificate chain for authenticating the server"))
 
 clientAuthCertKeyP :: Parser ClientAuthConfig
 clientAuthCertKeyP = ClientAuthConfig
-  <$> strOption (long "cert"
-                 <> metavar "FILENAME"
-                 <> help "X509 certificate file")
-  <*> strOption (long "key"
-                 <> metavar "FILENAME"
-                 <> help "Certificate key file")
+    <$> strOption (long "cert"
+                   <> metavar "FILENAME"
+                   <> help "X509 certificate file")
+    <*> strOption (long "key"
+                   <> metavar "FILENAME"
+                   <> help "Certificate key file")
 
 clientAuthPemP :: Parser ClientAuthConfig
 clientAuthPemP = pemConfig <$> strOption (long "pem"
                                           <> metavar "FILENAME"
                                           <> help "Combined X509 certificate and key file")
-  where pemConfig pem = ClientAuthConfig pem pem
+  where
+    pemConfig pem = ClientAuthConfig pem pem
 
 baseUrlP :: Parser BaseUrl
 baseUrlP = baseUrl <$> addrP <*> path
@@ -102,11 +105,11 @@ authenticateServerP = flag AllowInsecure AuthenticateServer
 
 actionP :: Monad m => Parser (Action m)
 actionP = hsubparser
-  ( command "wait-for-sync" (info waitForSyncP (progDesc "Poll wallet until it has fully synced its chain"))
-    <> command "wait-for-restore" (info waitForRestoreP (progDesc "Poll wallet until the restore operation is complete"))
-    <> commandGroup "High-level commands"
-  )
-  <|> apiActionP
+    ( command "wait-for-sync" (info waitForSyncP (progDesc "Poll wallet until it has fully synced its chain"))
+      <> command "wait-for-restore" (info waitForRestoreP (progDesc "Poll wallet until the restore operation is complete"))
+      <> commandGroup "High-level commands"
+    )
+    <|> apiActionP
 
 waitForSyncP :: Parser (Action m)
 waitForSyncP = WaitForSync <$> optional pidP <*> optional outfileP
@@ -190,7 +193,7 @@ paymentP = Payment
     paymentSourceP = PaymentSource <$> walletIdP <*> accountIndexP
     paymentDestinationP = PaymentDistribution <$> walAddressP <*> amountP
     groupingPolicyP = flag' Core.OptimizeForHighThroughput (long "group-for-high-throughput" <> help "Do not attempt to group transaction inputs")
-                      <|> flag' Core.OptimizeForSecurity  (long "group-for-security" <> help "The default strategy to use for selecting transaction inputs)")
+                      <|> flag' Core.OptimizeForSecurity (long "group-for-security" <> help "The default strategy to use for selecting transaction inputs")
                       <|> pure Core.OptimizeForSecurity
 
 listTransactionsP :: Monad m => Parser (WalletCall m [Transaction])
@@ -224,8 +227,8 @@ accountIndexP :: Parser AccountIndex
 accountIndexP = argument (eitherReader accIndex) (metavar "INTEGER" <> help "Account index")
   where
     accIndex s = case readMaybe s of
-                   Just idx -> first show (mkAccountIndex idx)
-                   Nothing  -> Left "Account index is not a number"
+                     Just idx -> first show (mkAccountIndex idx)
+                     Nothing  -> Left "Account index is not a number"
 
 addressIdP :: Parser Text
 addressIdP = T.pack <$> argument str (metavar "HASH" <> help "Address ID")

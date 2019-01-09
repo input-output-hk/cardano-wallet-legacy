@@ -2,12 +2,12 @@
 {-# LANGUAGE LambdaCase    #-}
 
 module Cardano.Wallet.Client.Wait
-  ( waitForSomething
-  , WaitOptions(..)
-  , waitOptionsPID
-  , SyncResult(..)
-  , SyncError(..)
-  ) where
+    ( waitForSomething
+    , WaitOptions(..)
+    , waitOptionsPID
+    , SyncResult(..)
+    , SyncError(..)
+    ) where
 
 import           Control.Concurrent (threadDelay)
 import           Control.Concurrent.Async (AsyncCancelled (..),
@@ -29,52 +29,53 @@ import           Cardano.Wallet.Client.CLI.ProcessUtil
 
 
 data WaitOptions = WaitOptions
-  { waitTimeoutSeconds  :: !(Maybe Double)  -- ^ Timeout in seconds
-  , waitProcessID       :: !(Maybe ProcessID) -- ^ Wallet process ID, so that crashes are handled
-  , waitIntervalSeconds :: !Double -- ^ Time between polls
-  } deriving (Show, Eq)
+    { waitTimeoutSeconds  :: !(Maybe Double)    -- ^ Timeout in seconds
+    , waitProcessID       :: !(Maybe ProcessID) -- ^ Wallet process ID, so that crashes are handled
+    , waitIntervalSeconds :: !Double            -- ^ Time between polls
+    } deriving (Show, Eq)
 
 instance Default WaitOptions where
   def = WaitOptions Nothing Nothing 1.0
 
 data SyncResult r = SyncResult
-  { syncResultError     :: !(Maybe SyncError)
-  , syncResultStartTime :: !UTCTime
-  , syncResultDuration  :: !Double
-  , syncResultData      :: ![(Double, r)]
-  } deriving (Show, Eq, Typeable, Generic)
+    { syncResultError     :: !(Maybe SyncError)
+    , syncResultStartTime :: !UTCTime
+    , syncResultDuration  :: !Double
+    , syncResultData      :: ![(Double, r)]
+    } deriving (Show, Eq, Typeable, Generic)
 
-data SyncError = SyncErrorClient ClientError
-               | SyncErrorProcessDied ProcessID
-               | SyncErrorTimedOut Double
-               | SyncErrorException SomeException
-               | SyncErrorInterrupted
-               deriving (Show, Typeable, Generic)
+data SyncError
+    = SyncErrorClient ClientError
+    | SyncErrorProcessDied ProcessID
+    | SyncErrorTimedOut Double
+    | SyncErrorException SomeException
+    | SyncErrorInterrupted
+    deriving (Show, Typeable, Generic)
 
 instance Buildable SyncError where
-  build (SyncErrorClient err) = bprint ("There was an error connecting to the wallet: "%shown) err
-  build (SyncErrorProcessDied pid) = bprint ("The cardano-node process with pid "%shown%" has gone") pid
-  build (SyncErrorTimedOut t) = bprint ("Timed out after "%fixed 1%" seconds") t
-  build (SyncErrorException e) = build e
-  build SyncErrorInterrupted = build ("Interrupted" :: Text)
+    build (SyncErrorClient err)      = bprint ("There was an error connecting to the wallet: "%shown) err
+    build (SyncErrorProcessDied pid) = bprint ("The cardano-node process with pid "%shown%" has gone") pid
+    build (SyncErrorTimedOut t)      = bprint ("Timed out after "%fixed 1%" seconds") t
+    build (SyncErrorException e)     = build e
+    build SyncErrorInterrupted       = build ("Interrupted" :: Text)
 
 instance Eq SyncError where
-  SyncErrorClient a      == SyncErrorClient b      = a == b
-  SyncErrorProcessDied a == SyncErrorProcessDied b = a == b
-  SyncErrorTimedOut a    == SyncErrorTimedOut b    = a == b
-  SyncErrorInterrupted   == SyncErrorInterrupted   = True
-  SyncErrorException _   == SyncErrorException _   = True
-  _ == _ = False
+    SyncErrorClient a      == SyncErrorClient b      = a == b
+    SyncErrorProcessDied a == SyncErrorProcessDied b = a == b
+    SyncErrorTimedOut a    == SyncErrorTimedOut b    = a == b
+    SyncErrorInterrupted   == SyncErrorInterrupted   = True
+    SyncErrorException _   == SyncErrorException _   = True
+    _ == _ = False
 
 instance ToJSON r => ToJSON (SyncResult r) where
-  toJSON (SyncResult err st dur rs) =
-    object $ ["data" .= toJSON rs, "start_time" .= st, "duration" .= dur] <> status err
-    where
-      status Nothing  = [ "success" .= True ]
-      status (Just e) = [ "success" .= False, "error" .= String (show e) ]
+    toJSON (SyncResult err st dur rs) = object $ fields <> status err
+      where
+        fields = ["data" .= toJSON rs, "start_time" .= st, "duration" .= dur]
+        status Nothing  = [ "success" .= True ]
+        status (Just e) = [ "success" .= False, "error" .= String (show e) ]
 
 instance ToJSON SyncError where
-  toJSON e = String (show e)
+    toJSON e = String (show e)
 
 
 -- | Really basic timing information.

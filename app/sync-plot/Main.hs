@@ -8,36 +8,37 @@ import           Data.Aeson hiding ((.=))
 import           Data.Char (toLower)
 import           Data.List (isSuffixOf)
 import qualified Data.Text as T
+import           Data.Time.Clock (UTCTime)
+import           Data.Time.Format (formatTime, defaultTimeLocale)
 import           Data.Vector ((!))
 import qualified Data.Vector as V
-import           Options.Applicative
-import           Universum hiding ((.~))
+import           Options.Applicative (Parser, execParser, info, helper, fullDesc, progDesc, subparser, commandGroup, command, flag, strOption, argument, help, metavar, str, value, short, long)
+import           System.Exit (die)
+import           Universum hiding ((.~), die)
 
-import           Graphics.Rendering.Chart.Backend.Cairo
+import           Graphics.Rendering.Chart.Backend.Cairo (FileFormat(..), toFile, fo_format)
 import           Graphics.Rendering.Chart.Easy hiding (argument, both)
+
+data PlotType
+    = PlotSync
+    | PlotRestore
+    deriving (Show, Eq)
+
+data PlotOptions = PlotOptions
+    { poPlot       :: PlotType
+    , poExtraTitle :: Text
+    , poPlotLeft   :: Bool
+    , poPlotRight  :: Bool
+    , poInputFile  :: FilePath
+    , poOutputFile :: FilePath
+    } deriving (Show, Eq)
 
 main :: IO ()
 main = run =<< execParser opts
   where
     opts = info (optionsParser <**> helper)
-      ( fullDesc
-        <> progDesc "Plot the results of a wallet sync" )
-
-run :: PlotOptions -> IO ()
-run PlotOptions{..} = do
-  df <- loadRecords poInputFile
-  plotRecords poPlot poExtraTitle poPlotLeft poPlotRight poOutputFile df
-
-data PlotType = PlotSync | PlotRestore deriving (Show, Eq)
-
-data PlotOptions = PlotOptions
-  { poPlot       :: PlotType
-  , poExtraTitle :: Text
-  , poPlotLeft   :: Bool
-  , poPlotRight  :: Bool
-  , poInputFile  :: FilePath
-  , poOutputFile :: FilePath
-  } deriving (Show, Eq)
+           ( fullDesc
+             <> progDesc "Plot the results of a wallet sync" )
 
 optionsParser :: Parser PlotOptions
 optionsParser = PlotOptions <$> plotP <*> titleP <*> leftP <*> rightP <*> inputP <*> outputP
@@ -53,33 +54,48 @@ optionsParser = PlotOptions <$> plotP <*> titleP <*> leftP <*> rightP <*> inputP
     inputP = argument str (metavar "INFILE" <> help "Input JSON")
     outputP = argument str (metavar "OUTFILE" <> help "Output PNG")
 
-data Record = Record Double [Double] deriving (Show)
+run :: PlotOptions -> IO ()
+run PlotOptions{..} = do
+    df <- loadRecords poInputFile
+    let p = plotRecords poPlot poExtraTitle poPlotLeft poPlotRight df
+    plotToFile poOutputFile p
+
+plotToFile :: (Default r, ToRenderable r) => FilePath -> EC r () -> IO ()
+plotToFile output = toFile (def & fo_format .~ formatFromFileName output) output
+
+data Record = Record
+    { recTime   :: !Double
+    , recValues :: ![Double]
+    } deriving (Show)
+
 data DataFile = DataFile
-  { dfRecords   :: [Record]
-  , dfStartTime :: Text
-  }
+    { dfRecords   :: ![Record]
+    , dfStartTime :: !(Maybe UTCTime)
+    }
 
 instance FromJSON DataFile where
-  parseJSON = withObject "DataFile" $ \ob -> DataFile <$> ob .: "data" <*> ob .:? "start_time" .!= ""
+    parseJSON = withObject "DataFile" $ \ob -> DataFile <$> ob .: "data" <*> ob .:? "start_time"
 
 instance FromJSON Record where
-  parseJSON = withArray "Record" $ \v ->
-    if V.length v == 2
-      then (Record <$> parseJSON (v ! 0) <*> parseJSON (v ! 1))
-      else fail "Incorrect record array length"
+    parseJSON = withArray "Record" $ \v ->
+        if V.length v == 2
+        then (Record <$> parseJSON (v ! 0) <*> parseJSON (v ! 1))
+        else fail
+             $ "Incorrect record array length for Record, expected 2 entries but got: "
+             ++ show v
 
 formatFromFileName :: FilePath -> FileFormat
 formatFromFileName f | ".png" `isSuffixOf` map toLower f = PNG
                      | otherwise = SVG
 
-timeAxisLabel :: Text -> String
-timeAxisLabel startTime = ("Time (seconds" <> extra <> ")")
-  where extra | T.null startTime = ""
-              | otherwise = " since started at " <> T.unpack startTime
+timeAxisLabel :: Maybe UTCTime -> String
+timeAxisLabel startTime = "Time (seconds" <> maybe "" since startTime <> ")"
+  where
+    since t = " since started at " <> fmt t
+    fmt = formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S %Z"
 
-plotRecords :: PlotType -> Text -> Bool -> Bool -> FilePath -> DataFile -> IO ()
-plotRecords pl title pleft pright outfile (DataFile rs startTime) =
-  toFile (def & fo_format .~ formatFromFileName outfile) outfile $ do
+plotRecords :: PlotType -> Text -> Bool -> Bool -> DataFile -> EC (LayoutLR Double Double Double) ()
+plotRecords pl title pleft pright (DataFile rs startTime) = do
     layoutlr_title .= plotTitle pl <> T.unpack title
     layoutlr_left_axis . laxis_override .= axisGridHide
     layoutlr_right_axis . laxis_override .= axisGridHide
@@ -112,5 +128,5 @@ plotTitle PlotRestore = "Wallet restore"
 loadRecords :: FilePath -> IO DataFile
 loadRecords = eitherDecodeFileStrict >=> handle
   where
-    handle (Left err) = die err >> pure (DataFile [] "")
+    handle (Left err) = die err
     handle (Right rs) = pure rs

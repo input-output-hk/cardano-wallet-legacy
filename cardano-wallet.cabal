@@ -692,6 +692,7 @@ executable cardano-wallet-sync-plot
                      , Chart
                      , Chart-cairo
                      , text
+                     , time
                      , universum
                      , vector
 
