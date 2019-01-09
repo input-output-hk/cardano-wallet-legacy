@@ -13,14 +13,16 @@ import           Data.Aeson (FromJSON)
 import qualified Data.Aeson as Aeson
 import           Data.ByteString.Lazy (ByteString)
 import           Data.Generics.Product.Typed (HasType, typed)
+import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import           GHC.Exts (IsList (..))
 import           Network.HTTP.Client (RequestBody (..), httpLbs, method,
                      parseRequest, requestBody, requestHeaders, responseBody,
                      responseHeaders, responseStatus, responseVersion)
+import qualified Network.HTTP.Client as HC
 import qualified Network.HTTP.Client as HTTP
 import           Network.HTTP.Types.Method (Method)
-import           Network.HTTP.Types.Status (status200, status300)
+import           Network.HTTP.Types.Status (status200, status300, status404)
 import           Servant.Client.Core.Internal.BaseUrl (BaseUrl (..),
                      showBaseUrl)
 import           Servant.Client.Core.Internal.Request (ServantError (..))
@@ -96,11 +98,32 @@ unsafeRequest (verb, path) body = do
     req <- parseRequest (showBaseUrl $ base { baseUrlPath = T.unpack path })
     res <- liftIO $ httpLbs (prepare req) man
     return $ case responseStatus res of
-        s | s >= status200 && s <= status300 -> maybe (Left $ decodeFailure res)
-            (Right . wrData) (Aeson.decode $ responseBody res)
-        _ -> fromMaybe (Left $ decodeFailure res) $
-            (Left . ClientWalletError <$> Aeson.decode (responseBody res)) <|>
-            (Left. ClientJSONError <$> Aeson.decode (responseBody res))
+        s
+            | s >= status200 && s <= status300 ->
+                maybe
+                    (Left $ decodeFailure res)
+                    (Right . wrData)
+                    (Aeson.decode $ responseBody res)
+            | s == status404 ->
+                Left
+                    $ ClientHttpError
+                    $ FailureResponse
+                    $ Servant.Response
+                    { Servant.responseStatusCode =
+                        HC.responseStatus res
+                    , Servant.responseHeaders =
+                        Seq.fromList (HC.responseHeaders res)
+                    , Servant.responseHttpVersion =
+                        HC.responseVersion res
+                    , Servant.responseBody =
+                        HC.responseBody res
+                    }
+
+        _ -> fromMaybe (Left $ decodeFailure res) $ asum
+            [ Left . ClientWalletError <$> Aeson.decode (responseBody res)
+            , Left . ClientJSONError <$> Aeson.decode (responseBody res)
+            ]
+
   where
     prepare :: HTTP.Request -> HTTP.Request
     prepare req = req
