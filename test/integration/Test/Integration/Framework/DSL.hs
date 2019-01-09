@@ -51,6 +51,7 @@ module Test.Integration.Framework.DSL
     , ErrNotEnoughMoney(..)
     , TransactionStatus(..)
     , expectAddressInIndexOf
+    , expectDataListSizeEqual
     , expectEqual
     , expectError
     , expectFieldEqual
@@ -121,7 +122,6 @@ import           Pos.Crypto (ShouldCheckPassphrase (..),
 import           Test.Integration.Framework.Request (HasHttpClient, request,
                      request_, successfulRequest, unsafeRequest, ($-))
 import           Test.Integration.Framework.Scenario (Scenario)
-
 --
 -- SCENARIO
 --
@@ -354,6 +354,16 @@ spendingPasswordLastUpdate f (Wallet v1 v2 v3 v4 spLU v6 v7 v8 v9) =
 -- EXPECTATIONS
 --
 
+-- | Expects data list returned by the API to be of certain length
+expectDataListSizeEqual
+    :: (MonadIO m, MonadFail m)
+    => Int
+    -> Either ClientError [a]
+    -> m ()
+expectDataListSizeEqual l = \case
+    Left e  -> wantedSuccessButError e
+    Right s -> length s `shouldBe` l
+
 -- | The type signature is more scary than it seems. This drills into a given
 --   `a` type through the provided lens and sees whether field matches.
 --
@@ -502,7 +512,6 @@ expectWalletEventuallyRestored = \case
             Nothing -> fail "expectWalletEventuallyRestored: waited too long for restoration."
             Just _  -> return ()
 
-
 expectWalletError
     :: (MonadIO m, MonadFail m, Show a)
     => WalletError
@@ -511,7 +520,6 @@ expectWalletError
 expectWalletError e' = \case
     Right a -> wantedErrorButSuccess a
     Left e  -> e `shouldBe` (ClientWalletError e')
-
 
 -- | Verifies that the response is errored from a failed JSON validation
 -- matching part of the given message.

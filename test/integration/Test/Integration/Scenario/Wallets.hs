@@ -43,11 +43,146 @@ spec = do
         getWalletsResp <- request $ Client.getWallets
         verify getWalletsResp
             [ expectSuccess
-            -- additional checks need to be added
-            -- expect returned list of wallets has size 3
-            -- expect there is a wallet on the list with certain field value
+            , expectDataListSizeEqual 3
+            -- TODO: expect there is a wallet on the list with certain field value
             ]
 
+    describe "WALLETS_LIST_02 - One can set page >= 1 and per_page [1..50] on the results." $ do
+
+        let matrix =
+                [ ( "2 wallets; page=1 & per_page=1 => 1 wallet returned"
+                  , 2
+                  , Just (Client.Page 1)
+                  , Just (Client.PerPage 1)
+                  , [ expectSuccess
+                    , expectDataListSizeEqual 1
+                    ]
+                  )
+                , ( "6 wallets; page=3 & per_page=2 => 2 wallets returned"
+                  , 6
+                  , Just (Client.Page 3)
+                  , Just (Client.PerPage 2)
+                  , [ expectSuccess
+                    , expectDataListSizeEqual 2
+                    ]
+                  )
+                , ( "4 wallets; per_page=3 => 3 wallets returned"
+                  , 4
+                  , Nothing
+                  , Just (Client.PerPage 3)
+                  , [ expectSuccess
+                    , expectDataListSizeEqual 3
+                    ]
+                  )
+                , ( "11 wallets; page=1 => 10 wallets returned"
+                  , 11
+                  , Just (Client.Page 1)
+                  , Nothing
+                  , [ expectSuccess
+                    , expectDataListSizeEqual 10
+                    ]
+                  )
+                , ( "1 wallet; page=9223372036854775807 & per_page=50 => 0 wallets returned"
+                  , 1
+                  , Just (Client.Page 9223372036854775807)
+                  , Just (Client.PerPage 50)
+                  , [ expectSuccess
+                    , expectDataListSizeEqual 0
+                    ]
+                  )
+                ]
+
+        forM_ matrix $ \(title, wallets_number, page, per_page, expectations) ->
+            let test = do
+                    _ <- forM ([1..wallets_number]) $ \name -> do
+                        setup $ defaultSetup
+                            & walletName .~ show (name :: Int)
+
+                    response <- request $ Client.getWalletIndexFilterSorts
+                        $- page
+                        $- per_page
+                        $- NoFilters
+                        $- NoSorts
+                    verify response expectations
+            in case (title == "1 wallet; page=9223372036854775807 & per_page=50 => 0 wallets returned") of
+                True      -> xscenario title $ test
+                False     -> scenario title $ test
+
+    describe "WALLETS_LIST_02 - One gets error when page and/or per_page have non-supported values" $ do
+
+        let matrix =
+                [ ( "api/v1/wallets?page=0"
+                  , [ expectError
+                    -- add expectClientHttpError message validation
+                    ]
+                  )
+                , ( "api/v1/wallets?page=-1"
+                  , [ expectError
+                    -- add expectClientHttpError message validation
+                    ]
+                  )
+                , ( "api/v1/wallets?page=0&per_page=35"
+                  , [ expectError
+                    -- add expectClientHttpError message validation
+                    ]
+                  )
+                , ( "api/v1/wallets?page=1漢patate字"
+                  , [ expectError
+                    -- add expectClientHttpError message validation
+                    ]
+                  )
+                , ( "api/v1/wallets?page=9223372036854775808"
+                  , [ expectError
+                    -- add expectClientHttpError message validation
+                    ]
+                  )
+                , ( "api/v1/wallets?page=-9223372036854775809"
+                  , [ expectError
+                    -- add expectClientHttpError message validation
+                    ]
+                  )
+                , ( "api/v1/wallets?per_page=0"
+                  , [ expectError
+                    -- add expectClientHttpError message validation
+                    ]
+                  )
+                , ( "api/v1/wallets?per_page=-1&page=1"
+                  , [ expectError
+                    -- add expectClientHttpError message validation
+                    ]
+                  )
+                , ( "api/v1/wallets?per_page=51"
+                  , [ expectError
+                    -- add expectClientHttpError message validation
+                    ]
+                  )
+                , ( "api/v1/wallets?per_page=5漢patate字"
+                  , [ expectError
+                    -- add expectClientHttpError message validation
+                    ]
+                  )
+                ]
+
+        forM_ matrix $ \(endpoint, expectations) -> scenario endpoint $ do
+            _ <- setup $ defaultSetup
+            resp <- unsafeRequest ("GET", fromString endpoint) $ Just $ [json|{}|]
+            verify (resp :: Either ClientError Wallet) expectations
+
+    xscenario "WALLETS_LIST_04 - One can sort results by 'balance' and 'created_at'" $ do
+
+        _ <- forM (zip [1,2,3] [3,2,1]) $ \(name, coins) -> do
+            setup $ defaultSetup
+                & walletName .~ show (name :: Int)
+                & initialCoins .~ [coins]
+
+        response <- request $ Client.getWalletIndexFilterSorts
+            $- Nothing
+            $- Nothing
+            $- NoFilters
+            $- NoSorts
+        verify response
+            [ expectSuccess
+            ]
 
     scenario "WALLETS_UPDATE_01 - updating a wallet persists the update" $ do
         fixture <- setup defaultSetup
