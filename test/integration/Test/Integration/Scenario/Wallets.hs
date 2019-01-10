@@ -92,7 +92,7 @@ spec = do
                   )
                 ]
 
-        forM_ matrix $ \(title, wallets_number, page, per_page, expectations) ->
+        forM_ matrix $ \(title, walletsNumber, page, perPage, expectations) ->
             let test = do
                     forM_ ([1..wallets_number]) $ \name -> do
                         setup $ defaultSetup
