@@ -6,6 +6,7 @@ module Test.Integration.Framework.DSL
     -- * Scenario
       scenario
     , xscenario
+    , pendingWith
     , Scenarios
     , Context(..)
 
@@ -52,6 +53,7 @@ module Test.Integration.Framework.DSL
     , TransactionStatus(..)
     , expectAddressInIndexOf
     , expectDataListSizeEqual
+    , expectDataListItemFieldEqual
     , expectEqual
     , expectError
     , expectFieldEqual
@@ -95,11 +97,13 @@ import           Data.Aeson.QQ (aesonQQ)
 import qualified Data.ByteArray as ByteArray
 import           Data.Generics.Internal.VL.Lens (lens)
 import           Data.Generics.Product.Typed (HasType, typed)
+import           Data.List ((!!))
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import           Language.Haskell.TH.Quote (QuasiQuoter)
 import           Test.Hspec.Core.Spec (SpecM, it, xit)
+import qualified Test.Hspec.Core.Spec as H
 import           Test.Hspec.Expectations.Lifted
 import           Test.QuickCheck (arbitrary, generate)
 import           Web.HttpApiData (ToHttpApiData (..))
@@ -160,6 +164,18 @@ xscenario
     -> Scenario Context IO ()
     -> Scenarios Context
 xscenario = xit
+
+-- | Lifted version of `H.pendingWith` allowing for temporarily skipping
+-- scenarios from execution with a reason, like:
+--
+--      scenario title $ do
+--          pendingWith "This test fails due to bug #213"
+--          test
+pendingWith
+    :: (MonadIO m, MonadFail m)
+    => String
+    -> m ()
+pendingWith = liftIO . H.pendingWith
 
 --
 -- TYPES
@@ -354,6 +370,7 @@ spendingPasswordLastUpdate f (Wallet v1 v2 v3 v4 spLU v6 v7 v8 v9) =
 -- EXPECTATIONS
 --
 
+
 -- | Expects data list returned by the API to be of certain length
 expectDataListSizeEqual
     :: (MonadIO m, MonadFail m)
@@ -363,6 +380,24 @@ expectDataListSizeEqual
 expectDataListSizeEqual l = \case
     Left e  -> wantedSuccessButError e
     Right s -> length s `shouldBe` l
+
+-- | Expects that returned data list's particular item field matches the expected value
+--
+--   e.g.
+--     verify response
+--          [ expectDataListItemFieldEqual 1 walletName "first"
+--          , expectDataListItemFieldEqual 2 walletName "second"
+--          ]
+expectDataListItemFieldEqual
+    :: (MonadIO m, MonadFail m, Show a, Eq a)
+    => Int
+    -> Lens' s a
+    -> a
+    -> Either ClientError [s]
+    -> m ()
+expectDataListItemFieldEqual i getter a = \case
+    Left e  -> wantedSuccessButError e
+    Right s -> (view getter $ s!!(i - 1)) `shouldBe` a
 
 -- | The type signature is more scary than it seems. This drills into a given
 --   `a` type through the provided lens and sees whether field matches.
