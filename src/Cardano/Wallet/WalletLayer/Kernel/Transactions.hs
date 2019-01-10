@@ -71,9 +71,6 @@ getTransactions wallet mbWalletId mbAccountIndex mbAddress params fop sop = lift
                 (castFiltering $ mapIx unV1 <$> F.findMatchingFilterOp fop)
                 (castFiltering $ mapIx unV1 <$> F.findMatchingFilterOp fop)
                 mbSorting
-            db <- liftIO $ Kernel.getWalletSnapshot wallet
-            sc <- liftIO $ getSlotCount (wallet ^. Kernel.walletProtocolParams)
-            currentSlot <- liftIO $ getTipSlotId (wallet ^. Kernel.walletProtocolParams)
             if null metas then
                 -- A bit artificial, but we force the termination and make sure
                 -- in the meantime that the algorithm only exits by one and only
@@ -81,7 +78,7 @@ getTransactions wallet mbWalletId mbAccountIndex mbAddress params fop sop = lift
                 go cp (min pp $ length acc) (acc, total <|> mbTotalEntries)
             else do
                 txs <- catMaybes <$> forM metas (\meta -> do
-                    runExceptT (metaToTx db sc currentSlot meta) >>= \case
+                    toTransaction wallet meta >>= \case
                         Left e -> do
                             let warn = lift . ((wallet ^. Kernel.walletLogMessage) Warning)
                             warn $ "Inconsistent entry in the metadata store: " <> sformat build e
