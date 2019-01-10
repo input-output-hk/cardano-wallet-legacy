@@ -171,50 +171,6 @@ spec = do
             resp <- unsafeRequest ("GET", fromString endpoint) $ Just $ [json|{}|]
             verify (resp :: Either ClientError [Wallet]) expectations
 
-    describe "WALLETS_LIST_04 - One can sort results by 'balance' and 'created_at'" $ do
-
-        -- forM_ (zip [1,2,3] [3,2,1]) $ \(name, coins) -> do
-        --     setup $ defaultSetup
-        --         & walletName .~ show (name :: Int)
-        --         & initialCoins .~ [coins]
-
-
-        let matrix =
-                [ ( "api/v1/wallets?sort_by=created_at"
-                  , [ expectSuccess
-                    , expectDataListSizeEqual 3
-                    , expectDataListItemFieldEqual 1 walletName "3"
-                    , expectDataListItemFieldEqual 2 walletName "2"
-                    , expectDataListItemFieldEqual 3 walletName "1"
-                    ]
-                  )
-                , ( "api/v1/wallets?sort_by=DES[created_at]"
-                  , [ expectSuccess
-                    , expectDataListSizeEqual 3
-                    , expectDataListItemFieldEqual 1 walletName "3"
-                    , expectDataListItemFieldEqual 2 walletName "2"
-                    , expectDataListItemFieldEqual 3 walletName "1"
-                    ]
-                  )
-                , ( "api/v1/wallets?sort_by=ASC[created_at]"
-                  , [ expectSuccess
-                    , expectDataListSizeEqual 3
-                    , expectDataListItemFieldEqual 1 walletName "1"
-                    , expectDataListItemFieldEqual 2 walletName "2"
-                    , expectDataListItemFieldEqual 3 walletName "3"
-                    ]
-                )
-
-                ]
-
-        forM_ matrix $ \(endpoint, expectations) -> scenario endpoint $ do
-            forM_ ([1,2,3]) $ \name -> do
-                setup $ defaultSetup
-                    & walletName .~ show (name :: Int)
-
-            resp <- unsafeRequest ("GET", fromString endpoint) $ Just $ [json|{}|]
-            verify (resp :: Either ClientError [Wallet]) expectations
-
     scenario "WALLETS_UPDATE_01 - updating a wallet persists the update" $ do
         fixture <- setup defaultSetup
 
