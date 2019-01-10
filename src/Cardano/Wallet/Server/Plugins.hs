@@ -61,26 +61,21 @@ import           Cardano.Wallet.WalletLayer (ActiveWalletLayer,
 import qualified Cardano.Wallet.WalletLayer as WalletLayer
 import qualified Cardano.Wallet.WalletLayer.Kernel as WalletLayer.Kernel
 
-import           Pos.Chain.Update (cpsSoftwareVersion)
+import           Cardano.Node.API as Node
+import           Ntp.Client (NtpConfiguration)
+import qualified Pos.Chain.Genesis as Genesis
+import           Pos.Chain.Update (cpsSoftwareVersion, updateConfiguration)
+import           Pos.Client.CLI (NodeWithApiArgs (..), getNodeApiOptions)
 import           Pos.Infra.Diffusion.Types (Diffusion (..), hoistDiffusion)
 import           Pos.Infra.Shutdown (HasShutdownContext (shutdownContext),
                      ShutdownContext)
 import           Pos.Launcher.Configuration (HasConfigurations)
-import           Pos.Util.CompileInfo (HasCompileInfo)
+import           Pos.Launcher.Resource (NodeResources (..))
+import           Pos.Util.CompileInfo (HasCompileInfo, compileInfo)
 import           Pos.Util.Wlog (logError, logInfo, modifyLoggerName,
                      usingLoggerName)
 import           Pos.Web (serveDocImpl, serveImpl)
 import qualified Pos.Web.Server
-
-
--- TODO: Move imports to above before merging
-import           Cardano.Node.API as Node
-import           Ntp.Client (NtpConfiguration)
-import qualified Pos.Chain.Genesis as Genesis
-import           Pos.Chain.Update (updateConfiguration)
-import           Pos.Client.CLI (NodeWithApiArgs (..), getNodeApiOptions)
-import           Pos.Launcher.Resource (NodeResources (..))
-import           Pos.Util.CompileInfo (compileInfo)
 
 -- A @Plugin@ running in the monad @m@.
 type Plugin m = Diffusion m -> m ()

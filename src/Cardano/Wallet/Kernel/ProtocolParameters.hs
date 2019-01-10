@@ -8,12 +8,10 @@ import           Servant.Client (BaseUrl (..), Scheme (..))
 
 import           Cardano.Node.Client (NodeClient (..), NodeHttpClient,
                      mkHttpClient)
-import           Cardano.Node.Manager (credentialLoadX509)
+import           Cardano.Node.Manager (credentialLoadX509,
+                     mkHttpsManagerSettings, readSignedObject)
 import           Cardano.Wallet.Server.CLI
 import           Network.HTTP.Client (Manager, newManager)
---import           Cardano.Node.API
-import           Cardano.Node.Manager (mkHttpsManagerSettings, readSignedObject)
---import qualified Pos.Node.API as P
 import           Pos.Chain.Genesis as Genesis (Config (..))
 import           Pos.Util.Wlog (logInfo)
 import           Pos.Web.Types
@@ -110,11 +108,11 @@ unMaxTxSize (API.MaxTxSize (Util.MeasuredIn s)) = s
 newProtocolParameterAdaptor :: NodeHttpClient -> ProtocolParameterAdaptor
 newProtocolParameterAdaptor client = ProtocolParameterAdaptor
     { nodeClient           = client
-    , getTipSlotId         = f $ API.unV1 <$> API.setSlotId <$> getNodeSettings client
-    , getMaxTxSize         = f $ fromIntegral <$> unMaxTxSize <$> API.setMaxTxSize <$> getNodeSettings client
-    , getFeePolicy         = f $ API.unV1 <$> API.setFeePolicy <$> getNodeSettings client
+    , getTipSlotId         = f $ API.unV1 . API.setSlotId <$> getNodeSettings client
+    , getMaxTxSize         = f $ fromIntegral . unMaxTxSize . API.setMaxTxSize <$> getNodeSettings client
+    , getFeePolicy         = f $ API.unV1 . API.setFeePolicy <$> getNodeSettings client
     , getSecurityParameter = f $ API.setSecurityParameter <$> getNodeSettings client
-    , getSlotCount         = f $ API.unV1 <$> API.setSlotCount <$> getNodeSettings client
+    , getSlotCount         = f $ API.unV1 . API.setSlotCount <$> getNodeSettings client
     , getCoreConfig        = error "TODO" --f $ API.coreConfig <$> getProtocolParameters client
     --, getCreationTimeStamp = f $ API.creationTimeStamp <$> getProtocolParameters client
     --, curSoftwareVersion   = f $ API.curSoftwareVersion <$> getProtocolParameters client
