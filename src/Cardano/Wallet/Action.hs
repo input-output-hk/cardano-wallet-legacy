@@ -2,6 +2,7 @@ module Cardano.Wallet.Action (actionWithWallet) where
 
 import           Universum
 
+import qualified Data.ByteString.Char8 as BS8
 import           Ntp.Client (NtpConfiguration, ntpClientSettings, withNtpClient)
 
 import           Pos.Chain.Genesis as Genesis (Config (..))
@@ -17,6 +18,7 @@ import           Pos.Util.Wlog (LoggerName, Severity (..), logInfo, logMessage,
                      usingLoggerName)
 import           Pos.WorkMode (EmptyMempoolExt)
 
+import           Cardano.Node.Client (NodeHttpClient)
 import qualified Cardano.Wallet.API.V1.Headers as Headers
 import           Cardano.Wallet.Kernel (PassiveWallet)
 import qualified Cardano.Wallet.Kernel as Kernel
@@ -25,8 +27,9 @@ import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import           Cardano.Wallet.Kernel.Migration (migrateLegacyDataLayer)
 import qualified Cardano.Wallet.Kernel.Mode as Kernel.Mode
 import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
-import           Cardano.Wallet.Server.CLI (NewWalletBackendParams,
-                     getFullMigrationFlag, getWalletDbOptions, walletDbPath,
+import           Cardano.Wallet.Server.CLI (NewWalletBackendParams (..),
+                     WalletBackendParams (..), getFullMigrationFlag,
+                     getWalletDbOptions, walletDbPath, walletNodeAddress,
                      walletRebuildDb)
 import           Cardano.Wallet.Server.Middlewares
                      (faultInjectionHandleIgnoreAPI, throttleMiddleware,
@@ -48,14 +51,27 @@ actionWithWallet
     -> SscParams
     -> NodeResources EmptyMempoolExt
     -> IO ()
-actionWithWallet params genesisConfig walletConfig txpConfig ntpConfig nodeParams _ nodeRes = do
+actionWithWallet
+    params@(NewWalletBackendParams (WalletBackendParams{..}))
+    genesisConfig walletConfig txpConfig ntpConfig nodeParams _ nodeRes = do
     logInfo "[Attention] Software is built with the wallet backend"
     ntpStatus <- withNtpClient (ntpClientSettings ntpConfig)
     userSecret <- readTVarIO (ncUserSecret $ nrContext nodeRes)
+
+    let (nodeIp, nodePort) = walletNodeAddress
+    nodeClient <- Plugins.setupNodeClient
+         (BS8.unpack nodeIp, fromIntegral nodePort)
+         walletNodeTlsClientCert
+         walletNodeTlsCaCertPath
+         walletNodeTlsPrivKey
+
     let nodeState = NodeStateAdaptor.newNodeStateAdaptor
             genesisConfig
             nodeRes
             ntpStatus
+            eta
+            nodeClient
+
     liftIO $ Keystore.bracketLegacyKeystore userSecret $ \keystore -> do
         let dbOptions = getWalletDbOptions params
         let dbPath = walletDbPath dbOptions
@@ -69,7 +85,7 @@ actionWithWallet params genesisConfig walletConfig txpConfig ntpConfig nodeParam
         WalletLayer.Kernel.bracketPassiveWallet pm dbMode logMessage' keystore nodeState (npFInjects nodeParams) $ \walletLayer passiveWallet -> do
             migrateLegacyDataLayer passiveWallet dbPath (getFullMigrationFlag params)
 
-            let plugs = plugins (walletLayer, passiveWallet) dbMode
+            let plugs = plugins (walletLayer, passiveWallet) nodeClient dbMode
 
             Kernel.Mode.runWalletMode
                 genesisConfig
@@ -78,13 +94,23 @@ actionWithWallet params genesisConfig walletConfig txpConfig ntpConfig nodeParam
                 walletLayer
                 (runNode genesisConfig txpConfig nodeRes plugs)
   where
+
+    -- TODO(@anviking #87): proper error handling
+    eta :: MonadIO m => Show e => ExceptT e m a -> m a
+    eta e = do
+        x <- runExceptT e
+        case x of
+            Right a   -> return a
+            Left  err -> error $ "Error talking to the Node: " <> (show err)
+
     plugins :: (PassiveWalletLayer IO, PassiveWallet)
+            -> NodeHttpClient
             -> Kernel.DatabaseMode
             -> [ (Text, Plugins.Plugin Kernel.Mode.WalletMode) ]
-    plugins w dbMode = concat [
+    plugins w nodeClient dbMode = concat [
             -- The actual wallet backend server.
             [
-              ("wallet-new api worker", Plugins.apiServer params w
+              ("wallet-new api worker", Plugins.apiServer params nodeClient w
                 [ faultInjectionHandleIgnoreAPI (npFInjects nodeParams) -- This allows dynamic control of fault injection
                 , throttleMiddleware (ccThrottle walletConfig)          -- Throttle requests
                 , withDefaultHeader Headers.applicationJson

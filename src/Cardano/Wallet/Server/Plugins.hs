@@ -16,6 +16,7 @@ module Cardano.Wallet.Server.Plugins
     , monitoringServer
     , acidStateSnapshots
     , updateWatcher
+    , setupNodeClient
     ) where
 
 import           Universum
@@ -82,22 +83,19 @@ defaultSettings = Warp.defaultSettings
 -- | A @Plugin@ to start the wallet REST server
 apiServer
     :: NewWalletBackendParams
+    -> NodeHttpClient
     -> (PassiveWalletLayer IO, PassiveWallet)
     -> [Middleware]
     -> Plugin Kernel.WalletMode
 apiServer
     (NewWalletBackendParams WalletBackendParams{..})
+    nodeClient
     (passiveLayer, passiveWallet)
     middlewares
     diffusion
   = do
     env <- ask
     let diffusion' = Kernel.fromDiffusion (lower env) diffusion
-    nodeClient <- setupNodeClient
-        (BS8.unpack nodeIp, fromIntegral nodePort)
-        walletNodeTlsClientCert
-        walletNodeTlsCaCertPath
-        walletNodeTlsPrivKey
     logInfo "Testing node client connection"
     eresp <- liftIO . runExceptT $ NodeClient.getNodeSettings nodeClient
     case eresp of
@@ -110,7 +108,7 @@ apiServer
     WalletLayer.Kernel.bracketActiveWallet passiveLayer passiveWallet diffusion' $ \active _ -> do
         ctx <- view shutdownContext
         serveImpl
-            (getApplication nodeClient active)
+            (getApplication active)
             (BS8.unpack ip)
             port
             (if isDebugMode walletRunMode then Nothing else walletTLSParams)
@@ -118,8 +116,6 @@ apiServer
             (Just $ portCallback ctx)
   where
     (ip, port) = walletAddress
-
-    (nodeIp, nodePort) = walletNodeAddress
 
     exceptionHandler :: SomeException -> Response
     exceptionHandler se = case translateWalletLayerErrors se of
@@ -141,10 +137,9 @@ apiServer
             defWalletError = V1.UnknownError $ T.pack . show $ typeOf se
 
     getApplication
-        :: NodeHttpClient
-        -> ActiveWalletLayer IO
+        :: ActiveWalletLayer IO
         -> Kernel.WalletMode Application
-    getApplication nodeClient active = do
+    getApplication active = do
         logInfo "New wallet API has STARTED!"
         return
             $ withMiddlewares middlewares
