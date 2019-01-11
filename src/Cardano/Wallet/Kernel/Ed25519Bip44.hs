@@ -19,6 +19,7 @@ module Cardano.Wallet.Kernel.Ed25519Bip44
     , deriveAddressPrivateKey
     , derivePublicKey
     , deriveAccountPrivateKey
+    , deriveAddressKeyPair
 
     -- helpers
     , isInternalChange
@@ -135,3 +136,19 @@ deriveAccountPrivateKey passPhrase masterEncPrvKey@(EncryptedSecretKey masterXPr
         -- lvl3 derivation in bip44 is hardened derivation of account' chain
         accountXPrv = deriveXPrv DerivationScheme2 passPhrase coinTypeXPrv accountIx
     pure $ EncryptedSecretKey accountXPrv passHash
+
+-- | Derives address public/private key pair from the given master private key,
+-- using bip44 and derivation scheme 2
+deriveAddressKeyPair
+    :: PassPhrase                            -- Passphrase used to encrypt Master Private Key
+    -> EncryptedSecretKey                    -- Master Private Key
+    -> Word32                                -- Hardened Account Key Index
+    -> ChangeChain                           -- Change chain
+    -> Word32                                -- Non-hardened Address Key Index
+    -> Maybe (PublicKey, EncryptedSecretKey) -- Address Public Key and Private Key pair
+deriveAddressKeyPair passPhrase masterEncPrvKey accountIx changeChain addressIx = do
+    -- derive account private key from master private key
+    accountPrvKey <- deriveAccountPrivateKey passPhrase masterEncPrvKey accountIx
+    -- derive address private key from account private key
+    addressPrvKey <- deriveAddressPrivateKey passPhrase accountPrvKey changeChain addressIx
+    pure (derivePublicKey addressPrvKey, addressPrvKey)
