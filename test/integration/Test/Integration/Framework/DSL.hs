@@ -206,12 +206,12 @@ data Fixture = Fixture
 setup
     :: Setup
     -> Scenario Context IO Fixture
-setup args = withNextFaucet $ \faucet -> do
+setup args = do
     phrase <- if null (args ^. mnemonicWords)
         then liftIO $ generate arbitrary
         else mkBackupPhrase (args ^. mnemonicWords)
     let password = mkPassword (args ^. rawPassword)
-    wal <- setupWallet args phrase faucet
+    wal <- setupWallet args phrase
     addrs  <- forM (RandomDestination :| []) setupDestination
     return $ Fixture wal addrs phrase password
 
@@ -651,9 +651,8 @@ withNextFaucet actionWithFaucet = do
 setupWallet
     :: Setup
     -> BackupPhrase
-    -> Wallet
     -> Scenario Context IO Wallet
-setupWallet args phrase faucet = do
+setupWallet args phrase = do
     wal <- successfulRequest $ Client.postWallet $- NewWallet
         phrase
         Nothing
@@ -661,26 +660,27 @@ setupWallet args phrase faucet = do
         (args ^. walletName)
         CreateWallet
 
-    let paymentSource = PaymentSource (walId faucet) minBound
-    let paymentDist (addr, coin) = pure $ PaymentDistribution (addrId addr) (WalletCoin coin)
+    unless (null $ args ^. initialCoins) $ withNextFaucet $ \faucet -> do
+        let paymentSource = PaymentSource (walId faucet) minBound
+        let paymentDist (addr, coin) = pure $ PaymentDistribution (addrId addr) (WalletCoin coin)
 
-    forM_ (args ^. initialCoins) $ \coin -> do
-        -- NOTE
-        -- Making payments to a different address each time to cope with
-        -- grouping policy. That's actually a behavior we might want to
-        -- test in the future. So, we'll need to do something smarter here.
-        addr <- successfulRequest $ Client.postAddress $- NewAddress
-            Nothing
-            minBound
-            (walId wal)
+        forM_ (args ^. initialCoins) $ \coin -> do
+            -- NOTE
+            -- Making payments to a different address each time to cope with
+            -- grouping policy. That's actually a behavior we might want to
+            -- test in the future. So, we'll need to do something smarter here.
+            addr <- successfulRequest $ Client.postAddress $- NewAddress
+                Nothing
+                minBound
+                (walId wal)
 
-        txn <- request $ Client.postTransaction $- Payment
-            paymentSource
-            (paymentDist (addr, mkCoin coin))
-            Nothing
-            Nothing
+            txn <- request $ Client.postTransaction $- Payment
+                paymentSource
+                (paymentDist (addr, mkCoin coin))
+                Nothing
+                Nothing
 
-        expectTxStatusEventually [InNewestBlocks, Persisted] txn
+            expectTxStatusEventually [InNewestBlocks, Persisted] txn
     return wal
 
 
