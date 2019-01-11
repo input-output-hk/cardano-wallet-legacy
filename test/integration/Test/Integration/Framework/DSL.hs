@@ -379,7 +379,16 @@ expectDataListSizeEqual
     -> m ()
 expectDataListSizeEqual l = \case
     Left e  -> wantedSuccessButError e
-    Right s -> length s `shouldBe` l
+import qualified Data.Foldable as F
+
+expectListSizeEqual
+    :: (MonadIO m, MonadFail m, Foldable xs)
+    => Int
+    -> Either ClientError (xs a)
+    -> m ()
+expectListSizeEqual l = \case
+    Left e   -> wantedSuccessButError e
+    Right xs -> length (F.toList xs) `shouldBe` l
 
 -- | Expects that returned data list's particular item field matches the expected value
 --
