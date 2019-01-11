@@ -52,8 +52,8 @@ module Test.Integration.Framework.DSL
     , ErrNotEnoughMoney(..)
     , TransactionStatus(..)
     , expectAddressInIndexOf
-    , expectDataListSizeEqual
-    , expectDataListItemFieldEqual
+    , expectListSizeEqual
+    , expectListItemFieldEqual
     , expectEqual
     , expectError
     , expectFieldEqual
@@ -95,6 +95,7 @@ import           Crypto.Hash (hash)
 import           Crypto.Hash.Algorithms (Blake2b_256)
 import           Data.Aeson.QQ (aesonQQ)
 import qualified Data.ByteArray as ByteArray
+import qualified Data.Foldable as F
 import           Data.Generics.Internal.VL.Lens (lens)
 import           Data.Generics.Product.Typed (HasType, typed)
 import           Data.List ((!!))
@@ -372,15 +373,6 @@ spendingPasswordLastUpdate f (Wallet v1 v2 v3 v4 spLU v6 v7 v8 v9) =
 
 
 -- | Expects data list returned by the API to be of certain length
-expectDataListSizeEqual
-    :: (MonadIO m, MonadFail m)
-    => Int
-    -> Either ClientError [a]
-    -> m ()
-expectDataListSizeEqual l = \case
-    Left e  -> wantedSuccessButError e
-import qualified Data.Foldable as F
-
 expectListSizeEqual
     :: (MonadIO m, MonadFail m, Foldable xs)
     => Int
@@ -394,19 +386,10 @@ expectListSizeEqual l = \case
 --
 --   e.g.
 --     verify response
---          [ expectDataListItemFieldEqual 1 walletName "first"
---          , expectDataListItemFieldEqual 2 walletName "second"
+--          [ expectDataListItemFieldEqual 0 walletName "first"
+--          , expectDataListItemFieldEqual 1 walletName "second"
 --          ]
-expectDataListItemFieldEqual
-    :: (MonadIO m, MonadFail m, Show a, Eq a)
-    => Int
-    -> Lens' s a
-    -> a
-    -> Either ClientError [s]
-    -> m ()
-expectDataListItemFieldEqual i getter a = \case
-    Left e  -> wantedSuccessButError e
-expectListItemFieldEqual 
+expectListItemFieldEqual
     :: (MonadIO m, MonadFail m, Show a, Eq a)
     => Int
     -> Lens' s a
@@ -414,13 +397,12 @@ expectListItemFieldEqual
     -> Either ClientError [s]
     -> m ()
 expectListItemFieldEqual i getter a = \case
-    Left _ -> expectFieldEqual getter a
-    Right s 
-      | length s > i -> expectFieldEqual getter a (Just (s !! i))
-      | otherwise    -> fail $
-        "expectListItemFieldEqual: trying to access the #" <> show i <> 
-        " element from a list but there's none! Here's the list: " <> 
-        show s
+    Left e -> wantedSuccessButError e
+    Right s
+        | length s > i -> expectFieldEqual getter a (Right (s !! i))
+        | otherwise    -> fail $
+            "expectListItemFieldEqual: trying to access the #" <> show i <>
+            " element from a list but there's none! "
 
 -- | The type signature is more scary than it seems. This drills into a given
 --   `a` type through the provided lens and sees whether field matches.
