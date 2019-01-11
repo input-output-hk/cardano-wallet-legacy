@@ -4,6 +4,9 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE RankNTypes                 #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+-- For SecurityParameter from the Node API
+
 module Cardano.Wallet.Kernel.NodeStateAdaptor (
     WithNodeState     -- opaque
   , NodeStateAdaptor  -- opaque
@@ -61,13 +64,14 @@ import           Ntp.Client (NtpStatus (..))
 import           Ntp.Packet (NtpOffset)
 import           Serokell.Data.Memory.Units (Byte)
 
+import           Cardano.Node.Client (NodeClient (..), NodeHttpClient)
 import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel.Util.Core as Util
 import           Pos.Chain.Block (Block, HeaderHash, LastKnownHeader,
                      LastKnownHeaderTag, MainBlock, blockHeader, headerHash,
-                     mainBlockSlot, prevBlockL)
+                     prevBlockL)
 import           Pos.Chain.Genesis as Genesis (Config (..), GenesisHash (..),
-                     configBlockVersionData, configEpochSlots, configK)
+                     configBlockVersionData, configEpochSlots)
 import           Pos.Chain.Txp (TxIn, TxOutAux)
 import           Pos.Chain.Update (ConfirmedProposalState,
                      HasUpdateConfiguration, SoftwareVersion, bvdMaxTxSize,
@@ -76,25 +80,28 @@ import qualified Pos.Chain.Update as Upd
 import           Pos.Context (NodeContext (..))
 import           Pos.Core (BlockCount, SlotCount, Timestamp (..), TxFeePolicy,
                      difficultyL, getChainDifficulty)
-import           Pos.Core.Slotting (EpochIndex (..), HasSlottingVar (..),
-                     LocalSlotIndex (..), MonadSlots (..), SlotId (..))
+import qualified Pos.Core as Core
+import           Pos.Core.Slotting (HasSlottingVar (..), MonadSlots (..),
+                     SlotId (..))
 import qualified Pos.DB.Block as DB
 import           Pos.DB.BlockIndex (getTipHeader)
 import           Pos.DB.Class (MonadDBRead (..), getBlock)
 import           Pos.DB.GState.Lock (StateLock, withStateLockNoMetrics)
 import           Pos.DB.Rocks (NodeDBs, dbGetDefault, dbIterSourceDefault)
 import           Pos.DB.Txp.Utxo (utxoSource)
-import           Pos.DB.Update (UpdateContext, getAdoptedBVData,
-                     ucDownloadedUpdate)
+import           Pos.DB.Update (UpdateContext, ucDownloadedUpdate)
 import           Pos.Infra.Shutdown.Class (HasShutdownContext (..))
 import qualified Pos.Infra.Shutdown.Logic as Shutdown
 import qualified Pos.Infra.Slotting.Impl.Simple as S
 import qualified Pos.Infra.Slotting.Util as Slotting
 import           Pos.Launcher.Resource (NodeResources (..))
+import           Pos.Node.API (SecurityParameter (..))
+import qualified Pos.Node.API as API
 import           Pos.Util (CompileTimeInfo, HasCompileInfo, HasLens (..),
                      lensOf', withCompileInfo)
 import qualified Pos.Util as Util
 import           Pos.Util.Concurrent.PriorityLock (Priority (..))
+import qualified Pos.Util.UnitsOfMeasure as Util
 import           Pos.Util.Wlog (CanLog (..), HasLoggerName (..))
 import           Test.Pos.Configuration (withDefConfiguration,
                      withDefUpdateConfiguration)
@@ -102,8 +109,6 @@ import           Test.Pos.Configuration (withDefConfiguration,
 {-------------------------------------------------------------------------------
   Additional types
 -------------------------------------------------------------------------------}
-
-newtype SecurityParameter = SecurityParameter Int
 
 deriveSafeCopy 1 'base ''SecurityParameter
 
@@ -374,17 +379,20 @@ newNodeStateAdaptor :: forall m ext. (NodeConstraints, MonadIO m, MonadMask m)
                     => Config
                     -> NodeResources ext
                     -> TVar NtpStatus
+                    -- (Above: hopefully to be replaced by below)
+                    -> (forall e a. (Show e, Show a) => ExceptT e IO a -> m a)
+                    -> NodeHttpClient
                     -> NodeStateAdaptor m
-newNodeStateAdaptor genesisConfig nr ntpStatus = Adaptor
+newNodeStateAdaptor genesisConfig nr ntpStatus eta client = Adaptor
     { withNodeState            =            run
-    , getTipSlotId             =            run $ \_lock -> defaultGetTipSlotId genesisHash
-    , getMaxTxSize             =            run $ \_lock -> defaultGetMaxTxSize
-    , getFeePolicy             =            run $ \_lock -> defaultGetFeePolicy
+    , getTipSlotId             = eta $ API.unV1 . API.setSlotId <$> getNodeSettings client
+    , getMaxTxSize             = eta $ fromIntegral . unMaxTxSize . API.setMaxTxSize <$> getNodeSettings client
+    , getFeePolicy             = eta $ toCoreFeePolicy . API.setFeePolicy <$> getNodeSettings client
     , getSlotStart             = \slotId -> run $ \_lock -> defaultGetSlotStart slotId
     , getNextEpochSlotDuration =            run $ \_lock -> defaultGetNextEpochSlotDuration
     , getNodeSyncProgress      = \lockCtx -> run $ defaultSyncProgress lockCtx
-    , getSecurityParameter     = return . SecurityParameter $ configK genesisConfig
-    , getSlotCount             = return $ configEpochSlots genesisConfig
+    , getSecurityParameter     = eta $ API.setSecurityParameter <$> getNodeSettings client
+    , getSlotCount             = eta $ API.unV1 . API.setSlotCount <$> getNodeSettings client
     , getCoreConfig            = return genesisConfig
     , curSoftwareVersion       = return $ Upd.curSoftwareVersion Upd.updateConfiguration
     , compileInfo              = return $ Util.compileInfo
@@ -392,7 +400,6 @@ newNodeStateAdaptor genesisConfig nr ntpStatus = Adaptor
     , getCreationTimestamp     =             run $ \_lock -> defaultGetCreationTimestamp
     }
   where
-    genesisHash = configGenesisHash genesisConfig
     run :: forall a.
            (    NodeConstraints
              => Lock (WithNodeState m)
@@ -400,6 +407,14 @@ newNodeStateAdaptor genesisConfig nr ntpStatus = Adaptor
            )
         -> m a
     run act = runReaderT (unwrap $ act withLock) (Res nr)
+
+
+    unMaxTxSize :: API.MaxTxSize -> Word
+    unMaxTxSize (API.MaxTxSize (Util.MeasuredIn s)) = s
+
+    toCoreFeePolicy :: API.TxFeePolicy -> TxFeePolicy
+    toCoreFeePolicy (API.TxFeePolicy (Util.MeasuredIn a) (Util.MeasuredIn b)) =
+        Core.TxFeePolicyTxSizeLinear $ Core.TxSizeLinear a b
 
 -- | Internal wrapper around 'withStateLockNoMetrics'
 --
@@ -414,26 +429,6 @@ withLock NotYetLocked  f = Wrap $ withStateLockNoMetrics LowPriority
   Default implementations for functions that are mockable
 -------------------------------------------------------------------------------}
 
-defaultGetMaxTxSize :: (MonadIO m, MonadCatch m, NodeConstraints)
-                    => WithNodeState m Byte
-defaultGetMaxTxSize = bvdMaxTxSize <$> getAdoptedBVData
-
-defaultGetFeePolicy :: (MonadIO m, MonadCatch m, NodeConstraints)
-                    => WithNodeState m TxFeePolicy
-defaultGetFeePolicy = bvdTxFeePolicy <$> getAdoptedBVData
-
--- | Get the slot ID of the chain tip
---
--- Returns slot 0 in epoch 0 if there are no blocks yet.
-defaultGetTipSlotId :: (MonadIO m, MonadCatch m, NodeConstraints)
-                    => GenesisHash -> WithNodeState m SlotId
-defaultGetTipSlotId genesisHash = do
-    hdrHash <- headerHash <$> getTipHeader
-    aux <$> mostRecentMainBlock genesisHash hdrHash
-  where
-    aux :: Maybe MainBlock -> SlotId
-    aux (Just mainBlock) = mainBlock ^. mainBlockSlot
-    aux Nothing          = SlotId (EpochIndex 0) (UnsafeLocalSlotIndex 0)
 
 -- | Get the start of the specified slot
 defaultGetSlotStart :: MonadIO m
