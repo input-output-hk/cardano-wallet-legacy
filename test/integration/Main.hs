@@ -39,12 +39,12 @@ main = do
     -- Run tests
     hspec $ do
         describe "API Documentation" $ Documentation.spec dClient
-        describe "Node Endpoints" $ Node.spec wClient
 
         beforeAll (newMVar $ Context keys wClient (wAddr, manager)) $ do
             describe "Accounts" Accounts.spec
             describe "Addresses" Addresses.spec
             describe "Transactions" Transactions.spec
             describe "Wallets" Wallets.spec
+            describe "Node" Node.spec
   where
     toBaseUrl = ntwrkAddrToBaseUrl . unsafeNetworkAddressFromString
