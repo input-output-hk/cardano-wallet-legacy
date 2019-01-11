@@ -133,7 +133,7 @@ apiServer
 
     -- Handle general exceptions
     handleGenericError :: SomeException -> Response
-    handleGenericError se =
+    handleGenericError (SomeException se) =
         responseLBS badRequest400 [applicationJson] $ encode defWalletError
         where
             -- NOTE: to ensure that we don't leak any sensitive information,

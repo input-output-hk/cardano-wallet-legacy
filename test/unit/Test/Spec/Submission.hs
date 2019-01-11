@@ -1,7 +1,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# OPTIONS_GHC -Wno-compat #-}
--- We are missing (MonadFail Gen), therfore [a,b,c,d] <- vectorOf 4 will trigger a warning with -compat
+
 module Test.Spec.Submission (
     spec
   ) where
@@ -183,7 +182,7 @@ dependentTransactions pm = do
     outputForB <- (Txp.TxOut <$> arbitrary <*> arbitrary)
     outputForC <- (Txp.TxOut <$> arbitrary <*> arbitrary)
     outputForD <- (Txp.TxOut <$> arbitrary <*> arbitrary)
-    [a,b,c,d] <- vectorOf 4 (Txp.genTxAux pm)
+    (a,b,c,d) <- let g = Txp.genTxAux pm in (,,,) <$> g <*> g <*> g <*> g
     let a' = a { Txp.taTx = (Txp.taTx a) {
                      Txp._txInputs  = inputForA :| mempty
                    , Txp._txOutputs = outputForA :| mempty

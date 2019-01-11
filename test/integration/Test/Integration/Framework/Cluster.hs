@@ -43,7 +43,17 @@ import           Pos.Util.Wlog.Compatibility (usingNamedPureLogger)
 prefix :: String
 prefix = "INTEGRATION_"
 
--- | All those can be overriden by environment variables
+-- | All those can be overriden by environment variables. These values
+-- correspond to command line arguments that would be passed to underlying
+-- processes.
+--
+-- As an example, if you wanted to enable the @--wallet-debug@ option for the
+-- underlying node, you would add an entry in this list:
+--
+-- > ("WALLET_DEBUG", "True")
+--
+-- Underscores (@_@) are converted to hyphens (@-@), the text is lowercased, and
+-- a leading @--@ is added.
 defaultIntegrationEnv :: Env
 defaultIntegrationEnv = Map.fromList
     [ ("CONFIGURATION_FILE", "./test/integration/configuration.yaml")
