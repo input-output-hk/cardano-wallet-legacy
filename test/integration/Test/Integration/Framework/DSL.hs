@@ -406,7 +406,21 @@ expectDataListItemFieldEqual
     -> m ()
 expectDataListItemFieldEqual i getter a = \case
     Left e  -> wantedSuccessButError e
-    Right s -> (view getter $ s!!(i - 1)) `shouldBe` a
+expectListItemFieldEqual 
+    :: (MonadIO m, MonadFail m, Show a, Eq a)
+    => Int
+    -> Lens' s a
+    -> a
+    -> Either ClientError [s]
+    -> m ()
+expectListItemFieldEqual i getter a = \case
+    Left _ -> expectFieldEqual getter a
+    Right s 
+      | length s > i -> expectFieldEqual getter a (Just (s !! i))
+      | otherwise    -> fail $
+        "expectListItemFieldEqual: trying to access the #" <> show i <> 
+        " element from a list but there's none! Here's the list: " <> 
+        show s
 
 -- | The type signature is more scary than it seems. This drills into a given
 --   `a` type through the provided lens and sees whether field matches.
