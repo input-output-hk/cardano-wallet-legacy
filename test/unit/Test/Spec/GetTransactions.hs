@@ -56,7 +56,6 @@ import           Cardano.Wallet.Kernel.DB.TxMeta
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import           Cardano.Wallet.Kernel.Internal
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
-import qualified Cardano.Wallet.Kernel.Prefiltering as Kernel
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import qualified Cardano.Wallet.Kernel.Transactions as Kernel
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
@@ -66,6 +65,7 @@ import qualified Cardano.Wallet.WalletLayer as WalletLayer
 import qualified Cardano.Wallet.WalletLayer.Kernel.Accounts as Accounts
 import qualified Cardano.Wallet.WalletLayer.Kernel.Conv as Kernel.Conv
 import           Cardano.Wallet.WalletLayer.Kernel.Transactions (toTransaction)
+import qualified Util.Prefiltering as Kernel
 
 import qualified Test.Spec.Addresses as Addresses
 import           Test.Spec.CoinSelection.Generators (InitialBalance (..),

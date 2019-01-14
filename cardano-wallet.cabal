@@ -468,6 +468,7 @@ test-suite unit
       Util.Buildable
       Util.Buildable.Hspec
       Util.Buildable.QuickCheck
+      Util.Prefiltering
       Wallet.Abstract
       Wallet.Basic
       Wallet.Incremental
