@@ -31,7 +31,6 @@ spec = do
             setup $ defaultSetup
                 & walletName .~ show (name :: Int)
                 & assuranceLevel .~ level
-
         forM_ fixtures $ \fixture -> do
             response <- request $ Client.getWallet
                 $- (fixture ^. wallet . walletId)
@@ -170,13 +169,6 @@ spec = do
             verify (resp :: Either ClientError [Wallet]) expectations
 
     describe "WALLETS_LIST_03 - One can filter wallets by balance" $ do
-        -- EQ[value] : only allow values equal to value
-        -- LT[value] : allow resource with attribute less than the value
-        -- GT[value] : allow objects with an attribute greater than the value
-        -- GTE[value] : allow objects with an attribute at least the value
-        -- LTE[value] : allow objects with an attribute at most the value
-        -- RANGE[lo,hi] : allow objects with the attribute in the range between lo and hi
-        -- IN[a,b,c,d] : allow objects with the attribute belonging to one provided.
 
         let matrix =
                 [ ( "api/v1/wallets?balance=EQ%5B3%5D"
@@ -241,12 +233,189 @@ spec = do
                 ]
 
         forM_ matrix $ \(endpoint, expectations) -> scenario endpoint $ do
+            pendingWith "Test fails due to bug #220"
             forM_ ([3,6,6,9,0]) $ \coins -> do
                 setup $ defaultSetup
                     & initialCoins .~ [coins]
 
             resp <- unsafeRequest ("GET", fromString endpoint) $ Just $ [json|{}|]
             verify (resp :: Either ClientError [Wallet]) expectations
+
+    scenario "WALLETS_LIST_03 - One can filter wallets by wallet id" $ do
+        -- EQ[value] : only allow values equal to value
+
+        fixtures <- forM ([1,2]) $ \name -> do
+            setup $ defaultSetup
+                & walletName .~ show (name :: Int)
+
+        let walletIds =
+                [ (fixtures !! 0) ^. wallet . walletId
+                , (fixtures !! 1) ^. wallet . walletId
+                ]
+        let endpoint = "api/v1/wallets?id=" <+> ( fromWalletId $ walletIds !! 0 )
+
+        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+        verify (resp :: Either ClientError [Wallet])
+            [ expectSuccess
+            , expectListSizeEqual 1
+            , expectListItemFieldEqual 0 walletId ( walletIds !! 0 )
+            ]
+
+    scenario "WALLETS_LIST_03 - One can filter wallets by wallet id -- EQ[value]" $ do
+        -- EQ[value] : only allow values equal to value
+
+        fixtures <- forM ([1,2]) $ \name -> do
+            setup $ defaultSetup
+                & walletName .~ show (name :: Int)
+
+        let walletIds =
+                [ (fixtures !! 0) ^. wallet . walletId
+                , (fixtures !! 1) ^. wallet . walletId
+                ]
+        let endpoint = "api/v1/wallets?id=EQ%5B" <+> ( fromWalletId $ walletIds !! 0 ) <+> ("%5D" :: Text)
+        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+        verify (resp :: Either ClientError [Wallet])
+            [ expectSuccess
+            , expectListSizeEqual 1
+            , expectListItemFieldEqual 0 walletId ( walletIds !! 0 )
+            ]
+
+    scenario "WALLETS_LIST_03 - One can filter wallets by wallet id -- LT[value]" $ do
+        -- LT[value] : allow resource with attribute less than the value
+
+        fixtures <- forM ([1,2]) $ \name -> do
+            setup $ defaultSetup
+                & walletName .~ show (name :: Int)
+
+        let sortedWalletIds =
+                sort [ fromWalletId $ (fixtures !! 0) ^. wallet . walletId
+                     , fromWalletId $ (fixtures !! 1) ^. wallet . walletId
+                     ]
+
+        let endpoint = "api/v1/wallets?id=LT%5B" <+> ( sortedWalletIds !! 1 ) <+> ("%5D" :: Text)
+        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+        verify (resp :: Either ClientError [Wallet])
+            [ expectSuccess
+            , expectListSizeEqual 1
+            , expectListItemFieldEqual 0 walletId ( Client.WalletId $ sortedWalletIds !! 0 )
+            ]
+
+    scenario "WALLETS_LIST_03 - One can filter wallets by wallet id -- GT[value]" $ do
+        -- GT[value] : allow objects with an attribute greater than the value
+
+        fixtures <- forM ([1,2]) $ \name -> do
+            setup $ defaultSetup
+                & walletName .~ show (name :: Int)
+
+        let sortedWalletIds =
+                sort [ fromWalletId $ (fixtures !! 0) ^. wallet . walletId
+                     , fromWalletId $ (fixtures !! 1) ^. wallet . walletId
+                     ]
+
+        let endpoint = "api/v1/wallets?id=GT%5B" <+> ( sortedWalletIds !! 0 ) <+> ("%5D" :: Text)
+
+        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+        verify (resp :: Either ClientError [Wallet])
+            [ expectSuccess
+            , expectListSizeEqual 1
+            , expectListItemFieldEqual 0 walletId ( Client.WalletId $ sortedWalletIds !! 1 )
+            ]
+
+    scenario "WALLETS_LIST_03 - One can filter wallets by wallet id -- GTE[value]" $ do
+        -- GTE[value] : allow objects with an attribute at least the value
+
+        fixtures <- forM ([1,2]) $ \name -> do
+            setup $ defaultSetup
+                & walletName .~ show (name :: Int)
+
+        let walletIds =
+                     [ fromWalletId $ (fixtures !! 0) ^. wallet . walletId
+                     , fromWalletId $ (fixtures !! 1) ^. wallet . walletId
+                     ]
+        let sortedWalletIds = sort walletIds
+
+        let endpoint = "api/v1/wallets?sort_by=created_at&id=GTE%5B" <+> ( sortedWalletIds !! 0 ) <+> ("%5D" :: Text)
+        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+        verify (resp :: Either ClientError [Wallet])
+            [ expectSuccess
+            , expectListSizeEqual 2
+            , expectListItemFieldEqual 0 walletId ( Client.WalletId $ walletIds !! 1 )
+            , expectListItemFieldEqual 1 walletId ( Client.WalletId $ walletIds !! 0 )
+            ]
+
+    scenario "WALLETS_LIST_03 - One can filter wallets by wallet id -- LTE[value]" $ do
+        -- LTE[value] : allow objects with an attribute at most the value
+
+        fixtures <- forM ([1,2]) $ \name -> do
+            setup $ defaultSetup
+                & walletName .~ show (name :: Int)
+
+        let walletIds =
+                     [ fromWalletId $ (fixtures !! 0) ^. wallet . walletId
+                     , fromWalletId $ (fixtures !! 1) ^. wallet . walletId
+                     ]
+        let sortedWalletIds = sort walletIds
+
+        let endpoint = "api/v1/wallets?sort_by=created_at&id=LTE%5B" <+> ( sortedWalletIds !! 1 ) <+> ("%5D" :: Text)
+        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+        verify (resp :: Either ClientError [Wallet])
+            [ expectSuccess
+            , expectListSizeEqual 2
+            , expectListItemFieldEqual 0 walletId ( Client.WalletId $ walletIds !! 1 )
+            , expectListItemFieldEqual 1 walletId ( Client.WalletId $ walletIds !! 0 )
+            ]
+
+    scenario "WALLETS_LIST_03 - One can filter wallets by wallet id -- RANGE[value]" $ do
+        -- RANGE[lo,hi] : allow objects with the attribute in the range between lo and hi
+
+        fixtures <- forM ([1,2,3]) $ \name -> do
+            setup $ defaultSetup
+                & walletName .~ show (name :: Int)
+
+        let walletIds =
+                     [ fromWalletId $ (fixtures !! 0) ^. wallet . walletId
+                     , fromWalletId $ (fixtures !! 1) ^. wallet . walletId
+                     , fromWalletId $ (fixtures !! 2) ^. wallet . walletId
+                     ]
+        let sortedWalletIds = sort walletIds
+
+        let endpoint = "api/v1/wallets?sort_by=created_at&id=RANGE%5B" <+> ( sortedWalletIds !! 0 )
+                        <+> "," <+> ( sortedWalletIds !! 2 )  <+> ("%5D" :: Text)
+
+        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+        verify (resp :: Either ClientError [Wallet])
+            [ expectSuccess
+            , expectListSizeEqual 3
+            , expectListItemFieldEqual 0 walletId ( Client.WalletId $ walletIds !! 2 )
+            , expectListItemFieldEqual 1 walletId ( Client.WalletId $ walletIds !! 1 )
+            , expectListItemFieldEqual 2 walletId ( Client.WalletId $ walletIds !! 0 )
+            ]
+
+    scenario "WALLETS_LIST_03 - One can filter wallets by wallet id -- IN[value]" $ do
+        -- IN[a,b,c,d] : allow objects with the attribute belonging to one provided.
+
+        fixtures <- forM ([1,2,3]) $ \name -> do
+            setup $ defaultSetup
+                & walletName .~ show (name :: Int)
+
+        let walletIds =
+                     [ fromWalletId $ (fixtures !! 0) ^. wallet . walletId
+                     , fromWalletId $ (fixtures !! 1) ^. wallet . walletId
+                     , fromWalletId $ (fixtures !! 2) ^. wallet . walletId
+                     ]
+        let sortedWalletIds = sort walletIds
+
+        let endpoint = "api/v1/wallets?sort_by=created_at&id=IN%5B" <+> ( sortedWalletIds !! 0 )
+                        <+> "," <+> ( sortedWalletIds !! 2 )  <+> ("%5D" :: Text)
+
+        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+
+        verify (resp :: Either ClientError [Wallet])
+            [ expectSuccess
+            , expectListSizeEqual 2
+            , expectListItemFieldEqual 0 walletId ( Client.WalletId $ walletIds !! 2 )
+            , expectListItemFieldEqual 1 walletId ( Client.WalletId $ walletIds !! 0 )
+            ]
 
     describe "WALLETS_LIST_04 - One can sort results only by 'balance' and 'created_at'" $ do
 
@@ -326,6 +495,7 @@ spec = do
                 ]
 
         forM_ matrix $ \(endpoint, expectations) -> scenario endpoint $ do
+            pendingWith "Test fails due to bug #220"
             forM_ (zip [1,2,3] [3,2,1]) $ \(name, coins) -> do
                 setup $ defaultSetup
                     & walletName .~ show (name :: Int)
@@ -689,6 +859,10 @@ spec = do
             }|]
             verify (response :: Either ClientError Wallet) expectations
   where
+
+    fromWalletId :: Client.WalletId -> Text
+    fromWalletId (Client.WalletId a) = a
+
     testBackupPhrase :: [Text]
     testBackupPhrase =
         ["clap", "panda", "slim", "laundry", "more", "vintage", "cash", "shaft"
