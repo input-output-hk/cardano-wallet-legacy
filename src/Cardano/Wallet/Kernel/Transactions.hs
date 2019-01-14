@@ -10,6 +10,8 @@ module Cardano.Wallet.Kernel.Transactions (
     , PaymentError(..)
     , EstimateFeesError(..)
     , RedeemAdaError(..)
+    , AddressSchemeVersion (..)
+    , addressSchemeVersion
     , cardanoFee
     , mkStdTx
     , prepareUnsignedTxWithSources
@@ -34,7 +36,7 @@ import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 import qualified Data.Vector as V
 import qualified System.Random.MWC (GenIO, asGenIO, initialize, uniformVector)
-import           Test.QuickCheck (Arbitrary (..), oneof)
+import           Test.QuickCheck (Arbitrary (..), elements, oneof)
 
 import           Formatting (bprint, build, sformat, (%))
 import qualified Formatting.Buildable
@@ -594,6 +596,27 @@ instance Arbitrary SignTransactionError where
         , SignTransactionErrorNotOwned <$> arbitrary
         ]
 
+-- Which address scheme is being used
+data AddressSchemeVersion
+    -- Address scheme 0 (initial address scheme) is bip32 HD wallet derived
+    -- address. It is derived with ed25519v0 curve and contains address payload: account index and address index
+    = AddressSchemeV0
+    -- Address scheme 1 is bip44 HD wallet derived
+    -- address. It is derived with ed25519v1 curve and contains no address payload
+    | AddressSchemeV1
+    deriving (Show)
+
+instance Arbitrary AddressSchemeVersion where
+    arbitrary = elements [AddressSchemeV0, AddressSchemeV1]
+
+addressSchemeVersion :: Address -> AddressSchemeVersion
+addressSchemeVersion addr =
+    if isJust mPayload
+        then AddressSchemeV0
+        else AddressSchemeV1
+  where
+    mPayload = Core.aaPkDerivationPath $ attrData $ Core.addrAttributes addr
+
 mkSigner :: NetworkMagic
          -> PassPhrase
          -> Maybe EncryptedSecretKey
@@ -612,16 +635,13 @@ mkSigner nm spendingPassword (Just esk) snapshot addr =
                                        . HD.hdAddressIdParent
                                        . HD.hdAccountIdIx
                                        . to HD.getHdAccountIx
-                mAddressPayload = hdAddr ^. HD.hdAddressAddress
+                internalAddress = hdAddr ^. HD.hdAddressAddress
                                           . fromDb
-                                          . to Core.addrAttributes
-                                          . to attrData
-                                          . to Core.aaPkDerivationPath
-                res = case mAddressPayload of
+                res = case addressSchemeVersion internalAddress of
                     -- If there is some payload we expect this payload to be addressIx and accountIx
                     -- used for old address scheme so we continue with using
                     -- old HD address derivation scheme: simple bip32 with ed25519 v0
-                    Just _ -> Core.deriveLvl2KeyPair nm
+                    AddressSchemeV0 -> Core.deriveLvl2KeyPair nm
                                     (Core.IsBootstrapEraAddr True)
                                     (ShouldCheckPassphrase False)
                                     spendingPassword
@@ -630,7 +650,7 @@ mkSigner nm spendingPassword (Just esk) snapshot addr =
                                     addressIndex
                     -- If there is no payload we assume it is a new address scheme (which doesn't have payload)
                     -- New HD address derivation scheme: bip44 with ed25519 v1
-                    Nothing -> first (Core.makePubKeyAddressBoot nm) <$>
+                    AddressSchemeV1 -> first (Core.makePubKeyAddressBoot nm) <$>
                         deriveAddressKeyPair
                             spendingPassword
                             esk

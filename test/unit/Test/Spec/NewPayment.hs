@@ -23,9 +23,10 @@ import qualified Data.Map.Strict as M
 import           Data.Acid (update)
 import           Formatting (build, formatToString, sformat)
 
-import           Pos.Chain.Txp (TxOut (..), TxOutAux (..))
+import           Pos.Chain.Txp (TxOut (..), TxOutAux (..), VTxContext (..))
 import           Pos.Core (Address, Coin (..), IsBootstrapEraAddr (..),
-                     deriveLvl2KeyPair, getCurrentTimestamp, mkCoin)
+                     deriveLvl2KeyPair, getCurrentTimestamp,
+                     makePubKeyAddressBoot, mkCoin)
 import           Pos.Core.NetworkMagic (NetworkMagic (..), makeNetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, ProtocolMagic,
                      ShouldCheckPassphrase (..), emptyPassphrase,
@@ -36,6 +37,8 @@ import           Test.Spec.CoinSelection.Generators (InitialBalance (..),
 
 import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel as Kernel
+import           Cardano.Wallet.Kernel.Ed25519Bip44
+                     (ChangeChain (ExternalChain), deriveAddressKeyPair)
 
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
                      (CoinSelectionOptions (..), ExpenseRegulation (..),
@@ -95,6 +98,7 @@ prepareFixtures nm initialBalance toPay = do
                           <*> pure (NoSpendingPassword $ InDb now)
                           <*> pure AssuranceLevelNormal
                           <*> (InDb <$> pick arbitrary)
+    addressVersion <- pick arbitrary
     newAccountId <- HdAccountId newRootId <$> deriveIndex (pick . choose) HdAccountIx HardDerivation
     utxo   <- pick (genUtxoWithAtLeast initialBalance)
     -- Override all the addresses of the random Utxo with something meaningful,
@@ -102,13 +106,21 @@ prepareFixtures nm initialBalance toPay = do
     utxo' <- foldlM (\acc (txIn, (TxOutAux (TxOut _ coin))) -> do
                         newIndex <- deriveIndex (pick . choose) HdAddressIx HardDerivation
 
-                        let Just (addr, _) = deriveLvl2KeyPair nm
-                                                               (IsBootstrapEraAddr True)
-                                                               (ShouldCheckPassphrase True)
-                                                               mempty
-                                                               esk
-                                                               (newAccountId ^. hdAccountIdIx . to getHdAccountIx)
-                                                               (getHdAddressIx newIndex)
+                        let Just (addr, _) =
+                                case addressVersion of
+                                    Kernel.AddressSchemeV0 -> deriveLvl2KeyPair nm
+                                                            (IsBootstrapEraAddr True)
+                                                            (ShouldCheckPassphrase True)
+                                                            mempty
+                                                            esk
+                                                            (newAccountId ^. hdAccountIdIx . to getHdAccountIx)
+                                                            (getHdAddressIx newIndex)
+                                    Kernel.AddressSchemeV1 -> first (makePubKeyAddressBoot nm) <$> deriveAddressKeyPair
+                                                            mempty
+                                                            esk
+                                                            (newAccountId ^. hdAccountIdIx . to getHdAccountIx)
+                                                            ExternalChain
+                                                            (getHdAddressIx newIndex)
                         return $ M.insert txIn (TxOutAux (TxOut addr coin)) acc
                     ) M.empty (M.toList utxo)
     payees <- fmap (\(TxOut addr coin) -> (addr, coin)) <$> pick (genPayeeWithNM nm utxo toPay)
@@ -208,7 +220,6 @@ spec = describe "NewPayment" $ do
                                                          fixturePayees
                                   )
                     liftIO ((bimap STB (const $ STB ()) res) `shouldSatisfy` isRight)
-
         prop "newTransaction works (ReceiverPaysFee)" $ withMaxSuccess 5 $ do
             monadicIO $ do
                 pm <- pick arbitrary

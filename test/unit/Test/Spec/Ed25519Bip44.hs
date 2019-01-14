@@ -23,6 +23,10 @@ import           Test.QuickCheck (Arbitrary (..), InfiniteList (..), Property,
                      arbitraryBoundedIntegral, arbitrarySizedBoundedIntegral,
                      property, shrinkIntegral, (.&&.), (===), (==>))
 
+-- TODO (akegalj): seems like there already is a notion of
+-- hardened vs non-hardened ix in Cardano.Wallet.Kernel.DB.HdWallet.Derivation module
+-- Consider using HardeningMode from that module instead of derivig it manually or merging these things together (ie, implementing Bounded and Arbitrary for them.
+
 -- A wrapper type for hardened keys generator
 newtype Hardened
     = Hardened Word32
