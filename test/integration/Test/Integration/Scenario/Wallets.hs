@@ -403,10 +403,9 @@ spec = do
                      , fromWalletId $ (fixtures !! 1) ^. wallet . walletId
                      , fromWalletId $ (fixtures !! 2) ^. wallet . walletId
                      ]
-        let sortedWalletIds = sort walletIds
 
-        let endpoint = "api/v1/wallets?sort_by=created_at&id=IN%5B" <+> ( sortedWalletIds !! 0 )
-                        <+> "," <+> ( sortedWalletIds !! 2 )  <+> ("%5D" :: Text)
+        let endpoint = "api/v1/wallets?sort_by=created_at&id=IN%5B" <+> ( walletIds !! 0 )
+                        <+> "," <+> ( walletIds !! 2 )  <+> ("%5D" :: Text)
 
         resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
 
