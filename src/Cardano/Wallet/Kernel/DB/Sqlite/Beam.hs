@@ -639,109 +639,104 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
                     Right c -> c
             return (txMeta, count)
 
-    where
-        filters meta = do
-            SQL.guard_ $ filterAccs meta accountFops
-            SQL.guard_ $ applyFilter (_txMetaTableId meta) fopTxId
-            SQL.guard_ $ applyFilter (_txMetaTableCreatedAt meta) fopTimestamp
-            pure ()
+  where
+    filters
+        :: TxMetaT (SQL.QExpr SqliteExpressionSyntax p)
+        -> SQL.Q SqliteSelectSyntax db p ()
+    filters meta = do
+        SQL.guard_ $ filterAccs meta accountFops
+        SQL.guard_ $ applyFilter (_txMetaTableId meta) fopTxId
+        SQL.guard_ $ applyFilter (_txMetaTableCreatedAt meta) fopTimestamp
+        pure ()
 
-        filtersC meta = do
-            SQL.guard_ $ filterAccs meta accountFops
-            SQL.guard_ $ applyFilter (_txMetaTableId meta) fopTxId
-            SQL.guard_ $ applyFilter (_txMetaTableCreatedAt meta) fopTimestamp
-            pure ()
-
-        metaQuery = do
-            let query = SQL.all_ $ _mDbMeta metaDB
-            meta <- case mbSorting of
-                    Nothing ->
-                        SQL.orderBy_ (SQL.desc_ . _txMetaTableCreatedAt) query
-                    Just (Sorting SortByCreationAt dir) ->
-                        SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableCreatedAt) query
-                    Just (Sorting SortByAmount     dir) ->
-                        SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableAmount) query
-            filters meta
-            return meta
-
-        metaQueryC = SQL.aggregate_ (\_ -> SQL.as_ SQL.countAll_) $ do
-            meta <-  SQL.all_ $ _mDbMeta metaDB
-            filtersC meta
-            return meta
-
-        findAndUnion addr = do
-                let input = do
-                        inp <- SQL.all_ $ _mDbInputs metaDB
-                        SQL.guard_ $ ((_inputTableAddress inp) ==. (SQL.val_ addr))
-                        pure $ _inputTableTxId inp
-                let output = do
-                        out <- SQL.all_ $ _mDbOutputs metaDB
-                        SQL.guard_ $ ((_outputTableAddress out) ==. (SQL.val_ addr))
-                        pure $ _outputTableTxId out
-                -- union removes txId duplicates.
-                txid <- SQL.union_ input output
-                SQL.join_ (_mDbMeta metaDB) (\ mt -> ((_txMetaTableId mt) ==. txid))
-
-        metaQueryWithAddr addr = do
-            meta <- case mbSorting of
+    metaQuery = do
+        let query = SQL.all_ $ _mDbMeta metaDB
+        meta <- case mbSorting of
                 Nothing ->
-                    SQL.orderBy_ (SQL.desc_ . _txMetaTableCreatedAt) (findAndUnion addr)
+                    SQL.orderBy_ (SQL.desc_ . _txMetaTableCreatedAt) query
                 Just (Sorting SortByCreationAt dir) ->
-                    SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableCreatedAt) (findAndUnion addr)
+                    SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableCreatedAt) query
                 Just (Sorting SortByAmount     dir) ->
-                    SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableAmount) (findAndUnion addr)
-            filters meta
-            return meta
+                    SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableAmount) query
+        filters meta
+        return meta
 
-        metaQueryWithAddrC addr = SQL.aggregate_ (\_ -> SQL.as_ SQL.countAll_) $ do
-            meta <- findAndUnion addr
-            filtersC meta
-            pure meta
+    metaQueryC = SQL.aggregate_ (\_ -> SQL.as_ SQL.countAll_) $ do
+        meta <-  SQL.all_ $ _mDbMeta metaDB
+        filters meta
+        return meta
 
-        filterAccs _ Everything = SQL.QExpr (pure (valueE (sqlValueSyntax True)))
-        filterAccs meta (AccountFops rootAddr (mbAccountIx)) =
-            (_txMetaTableWalletId meta ==. SQL.val_ rootAddr) &&.
-                case mbAccountIx of
-                    Nothing -> SQL.QExpr (pure (valueE (sqlValueSyntax True)))
-                    Just accountIx -> _txMetaTableAccountIx meta ==. SQL.val_ accountIx
+    findAndUnion addr = do
+        let input = do
+                inp <- SQL.all_ $ _mDbInputs metaDB
+                SQL.guard_ $ ((_inputTableAddress inp) ==. (SQL.val_ addr))
+                pure $ _inputTableTxId inp
+        let output = do
+                out <- SQL.all_ $ _mDbOutputs metaDB
+                SQL.guard_ $ ((_outputTableAddress out) ==. (SQL.val_ addr))
+                pure $ _outputTableTxId out
+        -- union removes txId duplicates.
+        txid <- SQL.union_ input output
+        SQL.join_ (_mDbMeta metaDB) (\ mt -> ((_txMetaTableId mt) ==. txid))
 
-        applyFilter inputData fop =
-            let byPredicate o i = case o of
-                    Kernel.Equal            -> inputData ==. i
-                    Kernel.LesserThan       -> inputData <. i
-                    Kernel.GreaterThan      -> inputData >. i
-                    Kernel.LesserThanEqual  -> inputData <=. i
-                    Kernel.GreaterThanEqual -> inputData >=. i
-            in case fop of
-                NoFilterOp -> SQL.val_ True
-                FilterByIndex a -> byPredicate Kernel.Equal (SQL.val_ a)
-                FilterByPredicate ford a -> byPredicate ford (SQL.val_ a)
-                FilterByRange from to -> between_ inputData (SQL.val_ from) (SQL.val_ to)
-                FilterIn ls -> in_ inputData (map SQL.val_ ls)
+    metaQueryWithAddr addr = do
+        meta <- case mbSorting of
+            Nothing ->
+                SQL.orderBy_ (SQL.desc_ . _txMetaTableCreatedAt) (findAndUnion addr)
+            Just (Sorting SortByCreationAt dir) ->
+                SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableCreatedAt) (findAndUnion addr)
+            Just (Sorting SortByAmount     dir) ->
+                SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableAmount) (findAndUnion addr)
+        filters meta
+        return meta
 
-        transform :: NonEmpty (Txp.TxId, a) -> M.Map Txp.TxId (NonEmpty a)
-        transform = Foldable.foldl' updateFn M.empty
+    metaQueryWithAddrC addr = SQL.aggregate_ (\_ -> SQL.as_ SQL.countAll_) $ do
+        meta <- findAndUnion addr
+        filters meta
+        pure meta
 
-        updateFn :: M.Map Txp.TxId (NonEmpty a)
-                -> (Txp.TxId, a)
-                -> M.Map Txp.TxId (NonEmpty a)
-        updateFn acc (txid, new) =
-            M.insertWith (<>) txid (new :| []) acc
+    filterAccs _ Everything = SQL.QExpr (pure (valueE (sqlValueSyntax True)))
+    filterAccs meta (AccountFops rootAddr (mbAccountIx)) =
+        (_txMetaTableWalletId meta ==. SQL.val_ rootAddr) &&.
+            case mbAccountIx of
+                Nothing -> SQL.QExpr (pure (valueE (sqlValueSyntax True)))
+                Just accountIx -> _txMetaTableAccountIx meta ==. SQL.val_ accountIx
 
-        toValidKernelTxMeta :: M.Map Txp.TxId (NonEmpty TxInput)
-                             -> M.Map Txp.TxId (NonEmpty TxOutput)
-                             -> [TxMeta]
-                             -> [Kernel.TxMeta]
-        toValidKernelTxMeta _ _ [] = []
-        toValidKernelTxMeta inputMap outputMap (m : meta) =
+    applyFilter inputData fop =
+        let byPredicate o i = case o of
+                Kernel.Equal            -> inputData ==. i
+                Kernel.LesserThan       -> inputData <. i
+                Kernel.GreaterThan      -> inputData >. i
+                Kernel.LesserThanEqual  -> inputData <=. i
+                Kernel.GreaterThanEqual -> inputData >=. i
+        in case fop of
+            NoFilterOp -> SQL.val_ True
+            FilterByIndex a -> byPredicate Kernel.Equal (SQL.val_ a)
+            FilterByPredicate ford a -> byPredicate ford (SQL.val_ a)
+            FilterByRange from to -> between_ inputData (SQL.val_ from) (SQL.val_ to)
+            FilterIn ls -> in_ inputData (map SQL.val_ ls)
+
+    transform :: NonEmpty (Txp.TxId, a) -> M.Map Txp.TxId (NonEmpty a)
+    transform = Foldable.foldl' updateFn M.empty
+
+    updateFn
+        :: M.Map Txp.TxId (NonEmpty a)
+        -> (Txp.TxId, a)
+        -> M.Map Txp.TxId (NonEmpty a)
+    updateFn acc (txid, new) =
+        M.insertWith (<>) txid (new :| []) acc
+
+    toValidKernelTxMeta
+        :: M.Map Txp.TxId (NonEmpty TxInput)
+        -> M.Map Txp.TxId (NonEmpty TxOutput)
+        -> [TxMeta]
+        -> [Kernel.TxMeta]
+    toValidKernelTxMeta inputMap outputMap =
+        mapMaybe $ \m -> do
             let txid = _txMetaTableId m
-                io = do
-                    inp <- M.lookup txid inputMap
-                    out <- M.lookup txid outputMap
-                    pure (inp, out)
-            in case io of
-                Nothing -> toValidKernelTxMeta inputMap outputMap meta
-                Just (inputs, outputs) -> toTxMeta m inputs outputs : toValidKernelTxMeta inputMap outputMap meta
+            inp <- M.lookup txid inputMap
+            out <- M.lookup txid outputMap
+            pure $ toTxMeta m inp out
 
 -- | Generates a Beam's AST fragment for use within a SQL query, to order
 -- the results of a @SELECT@.
