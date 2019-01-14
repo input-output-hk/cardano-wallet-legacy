@@ -22,6 +22,7 @@ module Test.Integration.Framework.DSL
     , NewAddress(..)
     , NewWallet (..)
     , NewAccount (..)
+    , PasswordUpdate (..)
     , Payment (..)
     , Redemption (..)
     , WalletUpdate(..)
@@ -41,6 +42,7 @@ module Test.Integration.Framework.DSL
     , defaultSource
     , defaultSpendingPassword
     , defaultWalletName
+    , mkSpendingPassword
     , noRedemptionMnemonic
     , noSpendingPassword
 
@@ -52,6 +54,7 @@ module Test.Integration.Framework.DSL
     , expectEqual
     , expectError
     , expectFieldEqual
+    , expectFieldDiffer
     , expectJSONError
     , expectSuccess
     , expectTxInHistoryOf
@@ -75,6 +78,7 @@ module Test.Integration.Framework.DSL
     , wallets
     , walletId
     , walletName
+    , spendingPasswordLastUpdate
     , json
     , hasSpendingPassword
     , mkBackupPhrase
@@ -342,6 +346,9 @@ walletId = typed
 walletName :: HasType Text s => Lens' s Text
 walletName = typed
 
+spendingPasswordLastUpdate :: Lens' Wallet WalletTimestamp
+spendingPasswordLastUpdate f (Wallet v1 v2 v3 v4 spLU v6 v7 v8 v9) =
+    (\spLU' -> Wallet v1 v2 v3 v4 spLU' v6 v7 v8 v9) <$> f spLU
 
 --
 -- EXPECTATIONS
@@ -363,6 +370,17 @@ expectFieldEqual
 expectFieldEqual getter a = \case
     Left e  -> wantedSuccessButError e
     Right s -> view getter s `shouldBe` a
+
+-- | The opposite to 'expectFieldEqual'.
+expectFieldDiffer
+    :: (MonadIO m, MonadFail m, Show a, Eq a)
+    => Lens' s a
+    -> a
+    -> Either ClientError s
+    -> m ()
+expectFieldDiffer getter a = \case
+    Left e  -> wantedSuccessButError e
+    Right s -> view getter s `shouldNotBe` a
 
 -- | Expects entire equality of two types
 expectEqual

@@ -65,6 +65,40 @@ spec = do
             , expectFieldEqual assuranceLevel StrictAssurance
             ]
 
+    scenario "WALLETS_UPDATE_PASS_04 - updating password updates date in spendingPasswordLastUpdate" $ do
+        fixture <- setup $ defaultSetup
+            & rawPassword .~ "3132333435363738393031323334353637383930313233343536373839303030"
+
+        successfulRequest $ Client.deleteWallet
+            $- (fixture ^. wallet . walletId)
+
+        -- 1. Create a wallet with init spending password.
+        response <- request $ Client.postWallet $- NewWallet
+            (fixture ^. backupPhrase)
+            (Just $ fixture ^. spendingPassword)
+            NormalAssurance
+            "My new Wallet with spending password"
+            CreateWallet
+
+        -- 2. Verify that we have a spending password on new wallet.
+        verify response
+            [ expectFieldEqual hasSpendingPassword True
+            ]
+
+        -- 3. Remove spending password.
+        updatePasswordResp <- request $ Client.updateWalletPassword
+            $- (fixture ^. wallet . walletId)
+            $- PasswordUpdate (fixture ^. spendingPassword) mempty
+
+        -- 4. Verify there's no spending password anymore and spendingPasswordLastUpdate was changed.
+        -- After wallet was created, spendingPasswordLastUpdate contains time of creation. Of course,
+        -- spendingPasswordLastUpdate after update is a little bit later, so verify it.
+        let latestUpdateTime = fixture ^. wallet ^. spendingPasswordLastUpdate
+        verify updatePasswordResp
+            [ expectFieldEqual hasSpendingPassword False
+            , expectFieldDiffer spendingPasswordLastUpdate latestUpdateTime
+            ]
+
     scenario "WALLETS_UTXO_03 - UTxO statistics reflect wallet's inactivity" $ do
         fixture <- setup defaultSetup
 
