@@ -73,9 +73,10 @@ import           Database.Beam.Migrate (CheckedDatabaseSettings, DataType (..),
                      createTable, evaluateDatabase, executeMigration, field,
                      migrationStep, notNull, runMigrationSilenced,
                      runMigrationSteps, unCheckDatabase)
-import           Formatting (sformat)
+import           Formatting (build, sformat)
 import           GHC.Generics (Generic)
 
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, decodeHdRootId)
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types (AccountFops (..),
                      FilterOperation (..), Limit (..), Offset (..),
                      SortCriteria (..), SortDirection (..), Sorting (..))
@@ -112,7 +113,7 @@ data TxMetaT f = TxMeta {
     , _txMetaTableCreatedAt  :: Beam.Columnar f Core.Timestamp
     , _txMetaTableIsLocal    :: Beam.Columnar f Bool
     , _txMetaTableIsOutgoing :: Beam.Columnar f Bool
-    , _txMetaTableWalletId   :: Beam.Columnar f Core.Address
+    , _txMetaTableWalletId   :: Beam.Columnar f HdRootId
     , _txMetaTableAccountIx  :: Beam.Columnar f Word32
     } deriving Generic
 
@@ -139,7 +140,7 @@ instance Beamable TxMetaT
 instance Table TxMetaT where
     data PrimaryKey TxMetaT f = TxPrimKey
                                     (Beam.Columnar f Txp.TxId)
-                                    (Beam.Columnar f Core.Address)
+                                    (Beam.Columnar f HdRootId)
                                     (Beam.Columnar f Word32) deriving Generic
     primaryKey TxMeta{..} = TxPrimKey
                                 _txMetaTableId
@@ -296,6 +297,9 @@ instance HasSqlValueSyntax SqliteValueSyntax Core.Timestamp where
 instance HasSqlValueSyntax SqliteValueSyntax Core.Address where
     sqlValueSyntax addr = sqlValueSyntax (sformat Core.addressF addr)
 
+instance HasSqlValueSyntax SqliteValueSyntax HdRootId where
+    sqlValueSyntax rootId = sqlValueSyntax (sformat build rootId)
+
 instance HasSqlEqualityCheck SqliteExpressionSyntax Txp.TxId
 
 instance FromField Txp.TxId where
@@ -308,6 +312,8 @@ instance FromField Txp.TxId where
 instance FromBackendRow Sqlite Txp.TxId
 
 instance HasSqlEqualityCheck SqliteExpressionSyntax Core.Address
+
+instance HasSqlEqualityCheck SqliteExpressionSyntax HdRootId
 
 instance HasSqlEqualityCheck SqliteExpressionSyntax Core.Timestamp
 
@@ -328,7 +334,16 @@ instance FromField Core.Address where
            Left _  -> returnError Sqlite.ConversionFailed f "not a valid Address"
            Right a -> pure a
 
+instance FromField HdRootId where
+    fromField f = do
+        rootId <- decodeHdRootId <$> fromField f
+        case rootId of
+           Left _  -> returnError Sqlite.ConversionFailed f "not a valid HdRootId"
+           Right a -> pure a
+
 instance FromBackendRow Sqlite Core.Address
+
+instance FromBackendRow Sqlite HdRootId
 
 -- | Creates new 'DatabaseSettings' for the 'MetaDB', locking the backend to
 -- be 'Sqlite'.
@@ -358,7 +373,7 @@ coinDT = DataType sqliteBigIntType
 outputIndexDT :: DataType SqliteDataTypeSyntax Word32
 outputIndexDT = DataType intType
 
-walletidDT :: DataType SqliteDataTypeSyntax Core.Address
+walletidDT :: DataType SqliteDataTypeSyntax HdRootId
 walletidDT = DataType (varCharType Nothing Nothing)
 
 accountixDT :: DataType SqliteDataTypeSyntax Word32
@@ -452,7 +467,7 @@ putTxMeta conn txMeta = void $ putTxMetaT conn txMeta
 deleteTxMetas
     :: Sqlite.Connection
         -- | Database Handle
-    -> Core.Address
+    -> HdRootId
         -- | Target wallet
     -> Maybe Word32
         -- |  A target account index. If none, delete metas for all accounts
@@ -547,7 +562,7 @@ toTxMeta TxMeta{..} inputs outputs = Kernel.TxMeta {
     }
 
 -- | Fetches a 'Kernel.TxMeta' from the database, given its 'Txp.TxId'.
-getTxMeta :: Sqlite.Connection -> Txp.TxId -> Core.Address -> Word32 -> IO (Maybe Kernel.TxMeta)
+getTxMeta :: Sqlite.Connection -> Txp.TxId -> HdRootId -> Word32 -> IO (Maybe Kernel.TxMeta)
 getTxMeta conn txid walletId accountIx = do
     res <- Sqlite.runDBAction $ runBeamSqlite conn $ do
         metas <- SQL.runSelectReturningList txMetaById
@@ -699,8 +714,8 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
             pure meta
 
         filterAccs _ Everything = SQL.QExpr (pure (valueE (sqlValueSyntax True)))
-        filterAccs meta (AccountFops rootAddr (mbAccountIx)) =
-            (_txMetaTableWalletId meta ==. SQL.val_ rootAddr) &&.
+        filterAccs meta (AccountFops uniqueId (mbAccountIx)) =
+            (_txMetaTableWalletId meta ==. SQL.val_ uniqueId) &&.
                 case mbAccountIx of
                     Nothing -> SQL.QExpr (pure (valueE (sqlValueSyntax True)))
                     Just accountIx -> _txMetaTableAccountIx meta ==. SQL.val_ accountIx

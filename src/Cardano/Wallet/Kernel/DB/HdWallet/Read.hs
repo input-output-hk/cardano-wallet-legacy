@@ -38,6 +38,7 @@ import           Pos.Chain.Txp (TxId, Utxo)
 import           Pos.Core (Address, Coin, SlotId, mkCoin, unsafeAddCoin)
 
 import           Cardano.Wallet.Kernel.DB.BlockMeta (AddressMeta)
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.Spec (IsCheckpoint (..),

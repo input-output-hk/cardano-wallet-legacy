@@ -17,7 +17,6 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , HasSpendingPassword(..)
     -- * HD wallet types proper
   , HdWallets(..)
-  , HdRootId(..)
   , HdAccountId(..)
   , HdAddressId(..)
   , HdRoot(..)
@@ -92,9 +91,6 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , zoomOrCreateHdAddress
   , assumeHdRootExists
   , assumeHdAccountExists
-    -- * General-utility functions
-  , eskToHdRootId
-  , pkToHdRootId
     -- * IsOurs
   , IsOurs(..)
   , ourAddresses
@@ -104,11 +100,10 @@ import           Universum hiding ((:|))
 
 import           Control.Lens (Getter, at, lazy, to, (+~), _Wrapped)
 import           Control.Lens.TH (makeLenses)
-import qualified Data.ByteString as BS
 import qualified Data.IxSet.Typed as IxSet (Indexable (..))
 import           Data.SafeCopy (base, deriveSafeCopy)
 
-import           Test.QuickCheck (Arbitrary (..), oneof, vectorOf)
+import           Test.QuickCheck (Arbitrary (..), oneof)
 
 import           Formatting (bprint, build, (%))
 import qualified Formatting.Buildable
@@ -117,12 +112,12 @@ import           Serokell.Util (listJson)
 import           Pos.Chain.Txp (TxOut (..), TxOutAux (..))
 import qualified Pos.Core as Core
 import           Pos.Core.Chrono (NewestFirst (..))
-import           Pos.Core.NetworkMagic (NetworkMagic (..))
 import           Pos.Crypto (HDPassphrase)
 import qualified Pos.Crypto as Core
 
 import           Cardano.Wallet.API.V1.Types (WalAddress (..))
 import           Cardano.Wallet.Kernel.DB.BlockContext
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.Spec
 import           Cardano.Wallet.Kernel.DB.Util.AcidState
@@ -248,56 +243,12 @@ decryptHdLvl2DerivationPath hdPass addr = do
   General-utility functions
 -------------------------------------------------------------------------------}
 
--- | Computes the 'HdRootId' from the given 'EncryptedSecretKey'. See the
--- comment in the definition of 'makePubKeyAddressBoot' on why this is
--- acceptable.
---
--- TODO: This may well disappear as part of [CBR-325].
-eskToHdRootId :: NetworkMagic -> Core.EncryptedSecretKey -> HdRootId
-eskToHdRootId nm = HdRootId . InDb . (Core.makePubKeyAddressBoot nm) . Core.encToPublic
-
 eskToHdPassphrase :: Core.EncryptedSecretKey -> HDPassphrase
 eskToHdPassphrase = Core.deriveHDPassphrase . Core.encToPublic
-
-pkToHdRootId :: NetworkMagic -> Core.PublicKey -> HdRootId
-pkToHdRootId nm = HdRootId . InDb . (Core.makePubKeyAddressBoot nm)
 
 {-------------------------------------------------------------------------------
   HD wallets
 -------------------------------------------------------------------------------}
-
--- | HD wallet root ID.
---
--- Conceptually, this is just an 'Address' in the form
--- of 'Ae2tdPwUPEZ18ZjTLnLVr9CEvUEUX4eW1LBHbxxxJgxdAYHrDeSCSbCxrvx', but is,
--- in a sense, a special breed as it's derived from the 'PublicKey' (derived
--- from some BIP-39 mnemonics, typically) and which does not depend from any
--- delegation scheme, as you cannot really pay into this 'Address'. This
--- ensures that, given an 'EncryptedSecretKey' we can derive its 'PublicKey'
--- and from that the 'Core.Address'.
--- On the \"other side\", given a RESTful 'WalletId' (which is ultimately
--- just a Text) it's possible to call 'decodeTextAddress' to grab a valid
--- 'Core.Address', and then transform this into a 'Kernel.WalletId' type
--- easily.
---
--- NOTE: Comparing 'HdRootId' is a potentially expensive computation, as it
--- implies comparing large addresses. Use with care.
---
--- TODO: It would be better not to have the address here, and just use an 'Int'
--- as a primary key. This however is a slightly larger refactoring we don't
--- currently have time for.
-newtype HdRootId = HdRootId { getHdRootId :: InDb Core.Address }
-  deriving (Eq, Ord, Show, Generic)
-
-instance NFData HdRootId
-
-
-instance Arbitrary HdRootId where
-  arbitrary = do
-      (_, esk) <- Core.safeDeterministicKeyGen <$> (BS.pack <$> vectorOf 32 arbitrary)
-                                               <*> pure mempty
-      nm <- arbitrary
-      pure (eskToHdRootId nm esk)
 
 -- | HD wallet account ID
 data HdAccountId = HdAccountId {
@@ -497,7 +448,6 @@ makeLenses ''HdRoot
 makeLenses ''HdAccount
 makeLenses ''HdAddress
 
-deriveSafeCopy 1 'base ''HdRootId
 deriveSafeCopy 1 'base ''HdAccountId
 deriveSafeCopy 1 'base ''HdAddressId
 
@@ -971,9 +921,6 @@ instance Buildable HdAddress where
       )
       _hdAddressId
       (_fromDb _hdAddressAddress)
-
-instance Buildable HdRootId where
-    build (HdRootId addr) = bprint ("HdRootId " % build) (_fromDb addr)
 
 instance Buildable HdAccountId where
     build HdAccountId{..} = bprint

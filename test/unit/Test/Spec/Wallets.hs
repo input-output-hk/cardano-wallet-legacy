@@ -16,19 +16,17 @@ import           Test.QuickCheck.Monadic (PropertyM, monadicIO, pick)
 import           Data.Coerce (coerce)
 import           Formatting (build, formatToString)
 
-import           Pos.Core (decodeTextAddress)
 import           Pos.Core.NetworkMagic (makeNetworkMagic)
 import           Pos.Crypto (ProtocolMagic, emptyPassphrase, hash)
 import           Pos.Crypto.HD (firstHardened)
 
 import qualified Cardano.Mnemonic as Mnemonic
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, decodeHdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel (..),
-                     HdRootId (..), UnknownHdRoot (..), WalletName (..),
-                     hdRootId)
+                     UnknownHdRoot (..), WalletName (..), hdRootId)
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.HdWallet.Create
                      (CreateHdRootError (..))
-import           Cardano.Wallet.Kernel.DB.InDb (InDb (..))
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import qualified Cardano.Wallet.Kernel.Internal as Internal
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
@@ -83,13 +81,12 @@ prepareFixtures = do
              Left e         -> error (show e)
              Right v1Wallet -> do
                  let (V1.WalletId wId) = V1.walId v1Wallet
-                 case decodeTextAddress wId of
-                      Left e -> error $  "Error decoding the input Address "
+                 case decodeHdRootId wId of
+                      Left e -> error $  "Error decoding HdRootId "
                                       <> show wId
                                       <> ": "
                                       <> show e
-                      Right rootAddr -> do
-                          let rootId = HdRootId . InDb $ rootAddr
+                      Right rootId -> do
                           return (Fixture spendingPassword v1Wallet rootId)
 
 -- | A 'Fixture' where we already have a new 'Wallet' in scope.

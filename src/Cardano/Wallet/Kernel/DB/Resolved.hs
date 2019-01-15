@@ -30,9 +30,8 @@ import           Serokell.Util (listJson, mapJson, pairF)
 
 import           Cardano.Wallet.Kernel.DB.BlockContext (BlockContext)
 import           Cardano.Wallet.Kernel.DB.HdWallet (HdAccountId (..),
-                     HdAccountIx (..), HdRootId (..), IsOurs (..),
-                     hdAccountIdIx, hdAccountIdParent, hdAddressId,
-                     hdAddressIdParent)
+                     HdAccountIx (..), IsOurs (..), hdAccountIdIx,
+                     hdAccountIdParent, hdAddressId, hdAddressIdParent)
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types (TxMeta (..))
 import           Cardano.Wallet.Kernel.Util.Core (absCoin, sumCoinsUnsafe)
@@ -113,7 +112,7 @@ resolvedToTxMetas rb = runState $ runExceptT $ fmap mconcat $ do
                 , _txMetaCreationAt = tx ^. rtxMeta . fromDb . _2
                 , _txMetaIsLocal = isLocal
                 , _txMetaIsOutgoing = gained < spent
-                , _txMetaWalletId = view fromDb $ getHdRootId $ accId ^. hdAccountIdParent
+                , _txMetaWalletId = accId ^. hdAccountIdParent
                 , _txMetaAccountIx = getHdAccountIx $ accId ^. hdAccountIdIx
                 }
   where

@@ -34,6 +34,7 @@ import           Cardano.Wallet.Kernel.DB.AcidState (ApplyHistoricalBlocks (..),
                      RestorationComplete (..), RestoreHdWallet (..),
                      dbHdWallets)
 import           Cardano.Wallet.Kernel.DB.BlockContext
+import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.HdWallet.Create (CreateHdRootError)
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
@@ -139,7 +140,7 @@ restoreWallet pw hasSpendingPassword defaultCardanoAddress name assurance esk = 
 
   where
     nm = makeNetworkMagic (pw ^. walletProtocolMagic)
-    creds = (HD.eskToHdRootId nm esk, esk)
+    creds = (HD.mkHdRootIdForFOWallet nm esk, esk)
 
     prefilter :: Blund -> IO (PrefilteredBlock, [TxMeta])
     prefilter = mkPrefilter pw creds

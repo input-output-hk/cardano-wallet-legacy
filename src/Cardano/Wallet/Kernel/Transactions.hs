@@ -51,7 +51,7 @@ import           Cardano.Wallet.Kernel.DB.AcidState (DB, NewForeignError,
                      NewPendingError)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
-import           Cardano.Wallet.Kernel.DB.InDb
+import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import           Cardano.Wallet.Kernel.DB.Read as Getters
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types
 import           Cardano.Wallet.Kernel.Ed25519Bip44
@@ -460,7 +460,7 @@ metaForNewTx time accountId txId inputs outputs allInpOurs spentInputsCoins allO
         , _txMetaCreationAt = time
         , _txMetaIsLocal = allInpOurs && allOutOurs
         , _txMetaIsOutgoing = gainedOutputsCoins < spentInputsCoins -- it`s outgoing if our inputs spent are more than the new utxo.
-        , _txMetaWalletId = _fromDb $ getHdRootId (accountId ^. hdAccountIdParent)
+        , _txMetaWalletId = accountId ^. hdAccountIdParent
         , _txMetaAccountIx = getHdAccountIx $ accountId ^. hdAccountIdIx
     }
   where
@@ -759,7 +759,7 @@ redeemAda w@ActiveWallet{..} accId pw rsk = runExceptT $ do
               , _txMetaCreationAt = now
               , _txMetaIsLocal    = False -- input does not belong to wallet
               , _txMetaIsOutgoing = False -- increases wallet's balance
-              , _txMetaWalletId   = _fromDb $ getHdRootId (accId ^. hdAccountIdParent)
+              , _txMetaWalletId   = accId ^. hdAccountIdParent
               , _txMetaAccountIx  = getHdAccountIx (accId ^. hdAccountIdIx)
               }
         return (txAux, txMeta)

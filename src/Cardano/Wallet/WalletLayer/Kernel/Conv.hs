@@ -39,7 +39,7 @@ import qualified Formatting.Buildable
 import qualified Serokell.Util.Base64 as B64
 
 import           Pos.Client.Txp.Util (InputSelectionPolicy (..))
-import           Pos.Core (Address, BlockCount (..), decodeTextAddress)
+import           Pos.Core (Address, BlockCount (..))
 import           Pos.Crypto (AesKey, RedeemSecretKey, aesDecrypt,
                      redeemDeterministicKeyGen)
 
@@ -49,8 +49,9 @@ import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
                      (InputGrouping (..))
 import           Cardano.Wallet.Kernel.DB.BlockMeta (addressMetaIsUsed)
+import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
-import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
+import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import           Cardano.Wallet.Kernel.DB.Spec (cpAddressMeta)
 import           Cardano.Wallet.Kernel.DB.Spec.Read
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (ixedIndexed)
@@ -69,10 +70,7 @@ import           UTxO.Util (exceptT)
 
 fromRootId :: Monad m => V1.WalletId -> ExceptT Text m HD.HdRootId
 fromRootId (V1.WalletId wId) =
-    aux <$> exceptT (decodeTextAddress wId)
-  where
-    aux :: V1.Address -> HD.HdRootId
-    aux = HD.HdRootId . InDb
+    exceptT (HD.decodeHdRootId wId)
 
 fromAccountId :: Monad m
               => V1.WalletId -> V1.AccountIndex -> ExceptT Text m HD.HdAccountId
@@ -134,7 +132,7 @@ toAccountId =
     . view HD.hdAccountIdIx
 
 toRootId :: HD.HdRootId -> V1.WalletId
-toRootId = V1.WalletId . sformat build . _fromDb . HD.getHdRootId
+toRootId = V1.WalletId . sformat build
 
 -- | Converts a Kernel 'HdAccount' into a V1 'Account'.
 --
@@ -144,7 +142,7 @@ toAccount snapshot account = V1.Account {
     , accAddresses = map (toAddress account . view ixedIndexed) addresses
     , accAmount    = V1.WalletCoin accountAvailableBalance
     , accName      = account ^. HD.hdAccountName . to HD.getAccountName
-    , accWalletId  = V1.WalletId (sformat build (hdRootId ^. to HD.getHdRootId . fromDb))
+    , accWalletId  = V1.WalletId (sformat build hdRootId)
     }
   where
     -- NOTE(adn): Perhaps we want the minimum or expected balance here?
@@ -181,7 +179,7 @@ toWallet db hdRoot = V1.Wallet {
     -- matches this wallet creation time.
     rootId           = hdRoot ^. HD.hdRootId
     createdAt        = hdRoot ^. HD.hdRootCreatedAt . fromDb
-    walletId         = sformat build . _fromDb . HD.getHdRootId $ rootId
+    walletId         = sformat build rootId
     v1AssuranceLevel = toAssuranceLevel $ hdRoot ^. HD.hdRootAssurance
 
 toAssuranceLevel :: HD.AssuranceLevel -> V1.AssuranceLevel

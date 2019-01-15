@@ -6,8 +6,9 @@ import           Universum
 
 import qualified Data.Map.Strict as Map
 
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (HdAccountId, HdAddress,
-                     HdRootId, hdAddressId, hdAddressIdParent, isOurs)
+                     hdAddressId, hdAddressIdParent, isOurs)
 import           Pos.Chain.Txp (TxOut (..), TxOutAux (..), Utxo)
 import           Pos.Crypto (EncryptedSecretKey)
 

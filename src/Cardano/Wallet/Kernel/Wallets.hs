@@ -40,10 +40,10 @@ import           Cardano.Wallet.Kernel.DB.AcidState (CreateEosHdWallet (..),
                      UpdateHdRootPassword (..), UpdateHdWallet (..))
 import           Cardano.Wallet.Kernel.DB.EosHdWallet (EosHdRoot (..))
 import qualified Cardano.Wallet.Kernel.DB.EosHdWallet.Create as EosHD
+import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel,
                      HdAccountId (..), HdAccountIx (..), HdAddress,
-                     HdAddressId (..), HdAddressIx (..), HdRoot, HdRootId,
-                     WalletName, eskToHdRootId)
+                     HdAddressId (..), HdAddressIx (..), HdRoot, WalletName)
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
@@ -183,7 +183,7 @@ createHdWallet pw mnemonic spendingPassword assuranceLevel walletName = do
     -- (We got interrupted before inserting it) causing a system panic.
     -- We can fix this properly as part of [CBR-404].
     let nm = makeNetworkMagic (pw ^. walletProtocolMagic)
-        newRootId = eskToHdRootId nm esk
+        newRootId = HD.mkHdRootIdForFOWallet nm esk
     Keystore.insert newRootId esk (pw ^. walletKeystore)
 
     -- STEP 2.5: Generate the fresh Cardano Address which will be used for the
@@ -299,7 +299,7 @@ createWalletHdRnd :: PassiveWallet
 createWalletHdRnd pw hasSpendingPassword defaultCardanoAddress name assuranceLevel esk createWallet = do
     created <- InDb <$> getCurrentTimestamp
     let nm      = makeNetworkMagic (pw ^. walletProtocolMagic)
-        rootId  = eskToHdRootId nm esk
+        rootId  = HD.mkHdRootIdForFOWallet nm esk
         newRoot = HD.initHdRoot rootId
                                 name
                                 (hdSpendingPassword created)
@@ -352,10 +352,10 @@ defaultHdAddressWith :: EncryptedSecretKey
 defaultHdAddressWith esk rootId addr =
     fst $ HD.isOurs addr [(rootId, esk)]
 
-defaultHdAccountId :: HdRootId -> HdAccountId
+defaultHdAccountId :: HD.HdRootId -> HdAccountId
 defaultHdAccountId rootId = HdAccountId rootId (HdAccountIx firstHardened)
 
-defaultHdAddressId :: HdRootId -> HdAddressId
+defaultHdAddressId :: HD.HdRootId -> HdAddressId
 defaultHdAddressId rootId =
     HdAddressId (defaultHdAccountId rootId) (HdAddressIx firstHardened)
 

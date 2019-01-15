@@ -10,6 +10,7 @@ import           Universum
 
 import           Control.Lens (at, (.=))
 
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.Util.AcidState
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (ixedIndexed)
