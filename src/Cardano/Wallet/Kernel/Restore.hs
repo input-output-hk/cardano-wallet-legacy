@@ -36,8 +36,11 @@ import           Cardano.Wallet.Kernel.DB.AcidState (ApplyHistoricalBlocks (..),
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.HdWallet.Create (CreateHdRootError)
+import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
-import           Cardano.Wallet.Kernel.DB.Resolved (ResolvedBlock)
+import           Cardano.Wallet.Kernel.DB.Resolved (ResolvedBlock,
+                     resolvedToTxMetas)
+import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending
 import qualified Cardano.Wallet.Kernel.DB.Spec.Update as Spec
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types
 import           Cardano.Wallet.Kernel.Internal (WalletRestorationInfo (..),
@@ -52,9 +55,8 @@ import           Cardano.Wallet.Kernel.NodeStateAdaptor (Lock, LockContext (..),
                      defaultGetSlotStart, filterUtxo, getCoreConfig,
                      getSecurityParameter, getSlotCount, mostRecentMainBlock,
                      withNodeState)
-import           Cardano.Wallet.Kernel.PrefilterTx (PrefilteredBlock,
-                     UtxoWithAddrId, prefilterBlock, prefilterUtxo',
-                     toPrefilteredUtxo)
+import           Cardano.Wallet.Kernel.Prefiltering (PrefilteredBlock,
+                     prefilterBlock, prefilterUtxo)
 import           Cardano.Wallet.Kernel.Read (foreignPendingByAccount,
                      getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Types (RawResolvedBlock (..),
@@ -139,7 +141,7 @@ restoreWallet pw hasSpendingPassword defaultCardanoAddress name assurance esk = 
     nm = makeNetworkMagic (pw ^. walletProtocolMagic)
     creds = (HD.eskToHdRootId nm esk, esk)
 
-    prefilter :: Blund -> IO (Map HD.HdAccountId PrefilteredBlock, [TxMeta])
+    prefilter :: Blund -> IO (PrefilteredBlock, [TxMeta])
     prefilter = mkPrefilter pw creds
 
     restart :: HD.HdRoot -> IO ()
@@ -162,12 +164,17 @@ mkPrefilter
     :: Kernel.PassiveWallet
     -> (HD.HdRootId, EncryptedSecretKey)
     -> Blund
-    -> IO (Map HD.HdAccountId PrefilteredBlock, [TxMeta])
+    -> IO (PrefilteredBlock, [TxMeta])
 mkPrefilter wallet creds blund = do
-    foreignPendings <- foreignPendingByAccount <$> getWalletSnapshot wallet
-    blundToResolvedBlock (wallet ^. Kernel.walletNode) blund <&> \case
-        Nothing -> (M.empty, [])
-        Just rb -> prefilterBlock foreignPendings rb [creds]
+    foreigns <- fmap Pending.txIns . foreignPendingByAccount <$> getWalletSnapshot wallet
+    blundToResolvedBlock (wallet ^. Kernel.walletNode) blund >>= \case
+        Nothing -> return (mempty, [])
+        Just rb -> flip evalStateT [creds] $ do
+            pb <- state $ prefilterBlock foreigns rb
+            metas <- state (resolvedToTxMetas rb) >>= \case
+                Left e  -> throwM e
+                Right x -> return x
+            return (pb, metas)
 
 
 -- | Begin a restoration for a wallet that is already known. This is used
@@ -241,7 +248,7 @@ continueRestoration pw root cur tgt = do
 
 -- | Register and start up a background restoration task.
 beginRestoration  :: Kernel.PassiveWallet
-                  -> (Blund -> IO (Map HD.HdAccountId PrefilteredBlock, [TxMeta]))
+                  -> (Blund -> IO (PrefilteredBlock, [TxMeta]))
                   -> HD.HdRoot
                   -> Maybe BlockContext
                      -- ^ The block to start from, or Nothing to
@@ -329,9 +336,16 @@ getWalletInitInfo coreConfig creds lock = do
 
     -- Find genesis UTxO for this wallet
     let genUtxo :: Map HD.HdAccountId (Utxo, [HD.HdAddress])
-        genUtxo = fmap toPrefilteredUtxo . snd $
-                    prefilterUtxo' creds
-                                   (genesisUtxo $ configGenesisData coreConfig)
+        genUtxo = M.unionsWith (<>) $ flip evalState [creds] $ do
+            fmap (fmap byAccount . M.toList) $ state $
+                prefilterUtxo (genesisUtxo $ configGenesisData coreConfig)
+              where
+                byAccount (txin, (hdAddr, coin)) =
+                    M.singleton accId (utxo, [hdAddr])
+                  where
+                    accId = hdAddr ^. HD.hdAddressId . HD.hdAddressIdParent
+                    addr = hdAddr ^. HD.hdAddressAddress . fromDb
+                    utxo = M.singleton txin (TxOutAux $ TxOut addr coin)
 
     -- Get the tip
     let gh = configGenesisHash coreConfig
@@ -341,6 +355,18 @@ getWalletInitInfo coreConfig creds lock = do
       Just tip -> WalletRestore (mergeInfo curUtxo genUtxo) <$> mainBlockContext gh tip
 
   where
+    toPrefilteredUtxo :: Map TxIn (TxOutAux, HD.HdAddressId) -> (Utxo, [HD.HdAddress])
+    toPrefilteredUtxo utxoWithAddrs = (M.fromList utxoL, addrs)
+      where
+        toUtxo (txIn,(txOutAux,_))         = (txIn,txOutAux)
+        toAddr (_   ,(txOutAux,addressId)) = HD.initHdAddress addressId (txOutAddress . toaOut $ txOutAux)
+
+        toSummary :: (TxIn,(TxOutAux,HD.HdAddressId))
+                  -> ((TxIn,TxOutAux),HD.HdAddress)
+        toSummary item = (toUtxo item, toAddr item)
+
+        utxoSummary = map toSummary $ M.toList utxoWithAddrs
+        (utxoL, addrs) = unzip utxoSummary
 
     mergeInfo :: (Monoid cur, Monoid gen)
               => Map HD.HdAccountId (cur, [HD.HdAddress])
@@ -351,11 +377,11 @@ getWalletInitInfo coreConfig creds lock = do
         (M.mapMaybeMissing     $ \_ (g, as) -> Just (mempty, g, as))
         (M.zipWithMaybeMatched $ \_ (c, as) (g, as') -> Just (c, g, as ++ as'))
 
-    mergeUtxos :: [(HD.HdAccountId, UtxoWithAddrId)]
-               -> Map HD.HdAccountId UtxoWithAddrId
+    mergeUtxos :: [(HD.HdAccountId, Map TxIn (TxOutAux, HD.HdAddressId))]
+               -> Map HD.HdAccountId (Map TxIn (TxOutAux, HD.HdAddressId))
     mergeUtxos = M.fromListWith M.union
 
-    isOurs :: (TxIn, TxOutAux) -> Maybe (HD.HdAccountId, UtxoWithAddrId)
+    isOurs :: (TxIn, TxOutAux) -> Maybe (HD.HdAccountId, Map TxIn (TxOutAux, HD.HdAddressId))
     isOurs (inp, out@(TxOutAux (TxOut addr _))) = do
         hdAddr <- evalState (state $ HD.isOurs addr) [creds]
         let addrId = hdAddr ^. HD.hdAddressId
@@ -366,7 +392,7 @@ getWalletInitInfo coreConfig creds lock = do
 -- TODO: Think about what we should do if a 'RestorationException' is thrown.
 restoreWalletHistoryAsync :: Kernel.PassiveWallet
                           -> HD.HdRootId
-                          -> (Blund -> IO (Map HD.HdAccountId PrefilteredBlock, [TxMeta]))
+                          -> (Blund -> IO (PrefilteredBlock, [TxMeta]))
                           -> IORef WalletRestorationProgress
                           -> Maybe HeaderHash
                             -- ^ The last hash that this wallet has already restored,
@@ -448,7 +474,7 @@ restoreWalletHistoryAsync wallet rootId prefilter progress start (tgtHash, tgtSl
     getPrefilteredBlockOrThrow
         :: GenesisHash
         -> HeaderHash
-        -> IO (Maybe ((BlockContext, Map HD.HdAccountId PrefilteredBlock), [TxMeta], SlotId))
+        -> IO (Maybe ((BlockContext, PrefilteredBlock), [TxMeta], SlotId))
     getPrefilteredBlockOrThrow genesisHash hh = do
         block <- getBlockOrThrow genesisHash hh
         case block of
@@ -466,7 +492,7 @@ restoreWalletHistoryAsync wallet rootId prefilter progress start (tgtHash, tgtSl
         :: GenesisHash
         -> HeaderHash
         -> Int
-        -> IO ([((BlockContext, Map HD.HdAccountId PrefilteredBlock), [TxMeta], SlotId)], HeaderHash)
+        -> IO ([((BlockContext, PrefilteredBlock), [TxMeta], SlotId)], HeaderHash)
     getBatch genesisHash hh batchSize = go [] batchSize hh
         where
             go !updates !n !currentHash | n <= 0 =

@@ -87,8 +87,8 @@ import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import qualified Cardano.Wallet.Kernel.DB.Util.Zoomable as Z
 import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
 import           Cardano.Wallet.Kernel.NodeStateAdaptor (SecurityParameter (..))
-import           Cardano.Wallet.Kernel.PrefilterTx (PrefilteredBlock (..),
-                     emptyPrefilteredBlock)
+import           Cardano.Wallet.Kernel.Prefiltering (PrefilteredBlock, pfbAddrs,
+                     pfbByAccounts)
 import           Cardano.Wallet.Kernel.Util.NonEmptyMap (NonEmptyMap)
 import qualified Cardano.Wallet.Kernel.Util.NonEmptyMap as NEM
 import           Test.QuickCheck (Arbitrary (..), oneof)
@@ -250,7 +250,7 @@ cancelPending cancelled = void . runUpdate' . zoom dbHdWallets $
 applyBlock :: SecurityParameter
            -> BlockContext
            -> Maybe (NE.NonEmpty HdAccountId) -- ^ optionally restrict accounts receiving the block
-           -> Map HdAccountId PrefilteredBlock
+           -> PrefilteredBlock
            -> Update DB (Either (NonEmptyMap HdAccountId Spec.ApplyBlockFailed) (Map HdAccountId (Set TxId)))
 applyBlock k context restriction blocks = runUpdateDiscardSnapshot $ do
     -- Try to apply the block to each account in each wallet. If *any* have failed, throw the
@@ -271,7 +271,7 @@ applyBlock k context restriction blocks = runUpdateDiscardSnapshot $ do
         . Map.toList
         . Map.filterWithKey (const . acctFilter)
         . markMissingMapEntries (IxSet.toMap existingAccounts)
-        $ blocks
+        $ pfbByAccounts blocks
 
     -- The account update
     --
@@ -290,18 +290,18 @@ applyBlock k context restriction blocks = runUpdateDiscardSnapshot $ do
         , accountUpdateNew   = AccountUpdateNewUpToDate Map.empty
         , accountUpdate      =
             matchHdAccountCheckpoints
-              (tryUpdate' $ Spec.applyBlock k      pb)
-              (tryUpdate' $ Spec.applyBlockPartial pb)
+              (tryUpdate' $ Spec.applyBlock k      (context, pb))
+              (tryUpdate' $ Spec.applyBlockPartial (context, pb))
         }
       where
         pb :: PrefilteredBlock
-        pb = fromMaybe (emptyPrefilteredBlock context) mPB
+        pb = fromMaybe mempty mPB
 
 
 -- | Apply a batch of historical blocks, stopping at the first failure
 applyHistoricalBlocks :: SecurityParameter
                       -> HdRootId
-                      -> [(BlockContext, Map HdAccountId PrefilteredBlock)]
+                      -> [(BlockContext, PrefilteredBlock)]
                       -> Update DB (Either Spec.ApplyBlockFailed ())
 applyHistoricalBlocks k rootId updates =
     runExceptT $ forM_ updates $ \(context, blocks) ->
@@ -322,7 +322,7 @@ applyHistoricalBlocks k rootId updates =
 applyHistoricalBlock :: SecurityParameter
                      -> BlockContext
                      -> HdRootId
-                     -> Map HdAccountId PrefilteredBlock
+                     -> PrefilteredBlock
                      -> Update DB (Either Spec.ApplyBlockFailed ())
 applyHistoricalBlock k context rootId blocks =
     runUpdateDiscardSnapshot $ zoom dbHdWallets $
@@ -333,7 +333,7 @@ applyHistoricalBlock k context rootId blocks =
           map mkUpdate
         . Map.toList
         . markMissingMapEntries (IxSet.toMap existingAccounts)
-        $ blocks
+        $ pfbByAccounts blocks
 
     -- The account update
     --
@@ -373,11 +373,11 @@ applyHistoricalBlock k context rootId blocks =
                     Z.UpdResult $ return (mempty, acc)
                 HdAccountStateIncomplete (HdAccountIncomplete current history) ->
                     second (updateHistory acc current) $
-                        Z.unwrap (Spec.applyBlock k pb) history
+                        Z.unwrap (Spec.applyBlock k (context, pb)) history
         }
       where
         pb :: PrefilteredBlock
-        pb = fromMaybe (emptyPrefilteredBlock context) mPb
+        pb = fromMaybe mempty mPb
 
         updateHistory :: HdAccount
                       -> Checkpoints PartialCheckpoint
@@ -436,7 +436,7 @@ switchToFork :: SecurityParameter
              -> Maybe HeaderHash
                 -- ^ 'Nothing' for genesis block, or else @Just hh@ where @hh@
                 -- is the hash of some main block.
-             -> [(BlockContext, Map HdAccountId PrefilteredBlock)]
+             -> [(BlockContext, PrefilteredBlock)]
              -> Set HdRootId
              -> Update DB (Either [HdAccountId]
                                   (Map HdAccountId (Pending, Set TxId)))
@@ -451,14 +451,14 @@ switchToFork k oldest blocks toSkip =
         . Map.toList
         . (Map.filterWithKey $ \acctId _ -> not ((acctId ^. hdAccountIdParent) `Set.member` toSkip))
         . redistribute
-        . map (second (markMissingMapEntries (IxSet.toMap existingAccounts)))
+        . map (second (markMissingMapEntries (IxSet.toMap existingAccounts) . pfbByAccounts))
         $ blocks
 
-    mkUpdate :: (HdAccountId, OldestFirst [] PrefilteredBlock)
+    mkUpdate :: (HdAccountId, OldestFirst [] (BlockContext, PrefilteredBlock))
              -> AccountUpdate SwitchToForkInternalError (Pending, Set TxId)
     mkUpdate (accId, pbs) = AccountUpdate {
           accountUpdateId    = accId
-        , accountUpdateAddrs = concatMap pfbAddrs pbs
+        , accountUpdateAddrs = concatMap (pfbAddrs . snd) pbs
         , accountUpdateNew   = AccountUpdateNewUpToDate Map.empty
         , accountUpdate      =
             matchHdAccountCheckpoints
@@ -474,15 +474,15 @@ switchToFork k oldest blocks toSkip =
     -- account A, but the second does not, we end up with an empty block
     -- inserted for slot 2.
     redistribute :: [(BlockContext, Map HdAccountId (Maybe PrefilteredBlock))]
-                 -> Map HdAccountId (OldestFirst [] PrefilteredBlock)
+                 -> Map HdAccountId (OldestFirst [] (BlockContext, PrefilteredBlock))
     redistribute = Map.map mkPBS
                  . Map.unionsWith (++)
                  . map (\(slotId, pbs) -> Map.map (\pb -> [(slotId, pb)]) pbs)
 
     mkPBS :: [(BlockContext, Maybe PrefilteredBlock)]
-          -> OldestFirst [] PrefilteredBlock
+          -> OldestFirst [] (BlockContext, PrefilteredBlock)
     mkPBS = OldestFirst
-          . map (\(bc, mPB) -> fromMaybe (emptyPrefilteredBlock bc) mPB)
+          . map (\(bc, mPB) -> (bc,) $ fromMaybe mempty mPB)
           . sortOn (view bcSlotId . fst)
 
 -- | Observable rollback, used for tests only

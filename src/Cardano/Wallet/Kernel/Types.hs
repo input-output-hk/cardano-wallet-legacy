@@ -20,7 +20,8 @@ import           Universum
 import qualified Data.List.NonEmpty as NE
 
 import           Pos.Chain.Block (MainBlock, gbBody, mbTxs, mbWitnesses)
-import           Pos.Chain.Txp (Tx, TxAux (..), TxId, TxIn (..), txInputs)
+import           Pos.Chain.Txp (Tx, TxAux (..), TxId, TxIn (..), TxOutAux (..),
+                     txInputs)
 import qualified Pos.Core as Core
 
 import           Cardano.Wallet.Kernel.DB.BlockContext
@@ -34,7 +35,7 @@ import qualified Cardano.Wallet.Kernel.Util.Core as Core
 -------------------------------------------------------------------------------}
 
 -- | All resolved inputs of a transaction
-type ResolvedTxInputs = NonEmpty ResolvedInput
+type ResolvedTxInputs = NonEmpty TxOutAux
 
 -- | All resolved inputs of a block
 type ResolvedBlockInputs = [ResolvedTxInputs]
