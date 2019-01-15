@@ -332,9 +332,8 @@ spec = do
                      [ fromWalletId $ (fixtures !! 0) ^. wallet . walletId
                      , fromWalletId $ (fixtures !! 1) ^. wallet . walletId
                      ]
-        let sortedWalletIds = sort walletIds
 
-        let endpoint = "api/v1/wallets?sort_by=created_at&id=GTE%5B" <+> ( sortedWalletIds !! 0 ) <+> ("%5D" :: Text)
+        let endpoint = "api/v1/wallets?sort_by=created_at&id=GTE%5B" <+> ( sort ( walletIds ) !! 0 ) <+> ("%5D" :: Text)
         resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
         verify (resp :: Either ClientError [Wallet])
             [ expectSuccess
@@ -354,9 +353,8 @@ spec = do
                      [ fromWalletId $ (fixtures !! 0) ^. wallet . walletId
                      , fromWalletId $ (fixtures !! 1) ^. wallet . walletId
                      ]
-        let sortedWalletIds = sort walletIds
 
-        let endpoint = "api/v1/wallets?sort_by=created_at&id=LTE%5B" <+> ( sortedWalletIds !! 1 ) <+> ("%5D" :: Text)
+        let endpoint = "api/v1/wallets?sort_by=created_at&id=LTE%5B" <+> ( sort ( walletIds ) !! 1 ) <+> ("%5D" :: Text)
         resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
         verify (resp :: Either ClientError [Wallet])
             [ expectSuccess
