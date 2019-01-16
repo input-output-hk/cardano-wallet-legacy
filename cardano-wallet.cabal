@@ -440,6 +440,7 @@ test-suite unit
       Arbitrary
       Golden.APILayout
       Golden.APIV1Types
+      Golden.Ed25519Addresses
       Golden.WalletError
       Test.Infrastructure.Generator
       Test.Infrastructure.Genesis

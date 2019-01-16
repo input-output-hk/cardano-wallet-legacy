@@ -33,7 +33,7 @@ packages:
   commit: 93f2246c54436e7f98cc363b4e0f8f1cb5e78717
 
 - git: https://github.com/input-output-hk/cardano-crypto
-  commit: 59eb60b3a227c615736db9bb1609fd5c20109098
+  commit: 45e1a0eafac774c109704be44ca06fd8cae193ba
 
 - git: https://github.com/andrewthad/haskell-ip
   commit: 9bb453139aa82cc973125091800422a523e1eb8f
