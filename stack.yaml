@@ -30,3 +30,4 @@ extra-deps:
     - x509
 
 - generic-lens-1.1.0.0
+- esqueleto-2.6.0

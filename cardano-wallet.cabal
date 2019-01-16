@@ -79,6 +79,7 @@ library
     , data-default
     , data-default-class
     , directory
+    , esqueleto
     , exceptions
     , filepath
     , foldl

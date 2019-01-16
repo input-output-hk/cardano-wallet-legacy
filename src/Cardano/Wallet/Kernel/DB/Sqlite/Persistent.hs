@@ -43,6 +43,10 @@ import qualified Database.SQLite.Simple as Sqlite
 import qualified Database.SQLite.SimpleErrors.Types as Sqlite
 
 import           Cardano.Wallet.Kernel.DB.Sqlite.Persistent.Orphans ()
+import qualified Data.Foldable as Foldable
+import qualified Data.Map as M
+import           Data.Traversable (for)
+import qualified Database.Esqueleto as E
 import           Database.Persist.Sqlite as Persist
 import           Database.Persist.TH
 
@@ -54,8 +58,7 @@ import           GHC.Generics (Generic)
 
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types (AccountFops (..),
                      FilterOperation (..), Limit (..), Offset (..),
-                    -- SortCriteria (..), SortDirection (..),
-                     Sorting (..))
+                     SortCriteria (..), SortDirection (..), Sorting (..))
 import qualified Cardano.Wallet.Kernel.DB.TxMeta.Types as Kernel
 
 import qualified Pos.Chain.Txp as Txp
@@ -334,15 +337,15 @@ putTxMetaT conn txMeta = do
 
 -- | Converts a database-fetched 'TxMeta' into a domain-specific 'Kernel.TxMeta'.
 toTxMeta :: TxMeta -> NonEmpty TxInput -> NonEmpty TxOutput -> Kernel.TxMeta
-toTxMeta TxMeta{..} inputs outputs = Kernel.TxMeta {
-      _txMetaId         = txMetaTableId
-    , _txMetaAmount     = txMetaTableAmount
-    , _txMetaInputs     = fromInputs inputs
-    , _txMetaOutputs    = fromOutputs outputs
+toTxMeta TxMeta{..} inputs outputs = Kernel.TxMeta
+    { _txMetaId = txMetaTableId
+    , _txMetaAmount = txMetaTableAmount
+    , _txMetaInputs = fromInputs inputs
+    , _txMetaOutputs = fromOutputs outputs
     , _txMetaCreationAt = txMetaTableCreatedAt
-    , _txMetaIsLocal    = txMetaTableIsLocal
+    , _txMetaIsLocal = txMetaTableIsLocal
     , _txMetaIsOutgoing = txMetaTableIsOutgoing
-    , _txMetaWalletId   = txMetaTableWalletId
+    , _txMetaWalletId = txMetaTableWalletId
     , _txMetaAccountIx  = txMetaTableAccountIx
     }
 
@@ -356,12 +359,10 @@ getTxMeta
 getTxMeta conn txid walletId accountIx = do
     res <- runPersistConn conn $ do
         mmeta <- Persist.get (TxMetaKey txid walletId accountIx)
-        case mmeta of
-            Just txMeta -> do
-                inputs  <- nonEmpty <$> selectList [InputTableTxId ==. txid] []
-                outputs <- nonEmpty <$> selectList [OutputTableTxId ==. txid] []
-                pure $ toTxMeta txMeta <$> deentity inputs <*> deentity outputs
-            _        -> pure Nothing
+        fmap join . for mmeta $ \txMeta -> do
+            inputs  <- nonEmpty <$> selectList [InputTableTxId ==. txid] []
+            outputs <- nonEmpty <$> selectList [OutputTableTxId ==. txid] []
+            pure $ toTxMeta txMeta <$> deentity inputs <*> deentity outputs
     case res of
          Left e  -> throwIO $ Kernel.StorageFailure (toException e)
          Right r -> return r
@@ -371,7 +372,7 @@ getTxMetasById conn txId = safeHead . fst <$> getTxMetas conn (Offset 0)
     (Limit 10) Everything Nothing (FilterByIndex txId) NoFilterOp Nothing
 
 getAllTxMetas :: Sqlite.Connection -> IO [Kernel.TxMeta]
-getAllTxMetas conn =  fst <$> getTxMetas conn (Offset 0)
+getAllTxMetas conn = fst <$> getTxMetas conn (Offset 0)
     (Limit $ fromIntegral (maxBound :: Int)) Everything Nothing NoFilterOp NoFilterOp Nothing
 
 getTxMetas
@@ -384,160 +385,222 @@ getTxMetas
     -> FilterOperation Core.Timestamp
     -> Maybe Sorting
     -> IO ([Kernel.TxMeta], Maybe Int)
-getTxMetas _conn (Offset _offset) (Limit _limit) _accountFops _mbAddress _fopTxId _fopTimestamp _mbSorting = do
-    error "TODO"
---     res <- Sqlite.runDBAction $ runBeamSqlite conn $ do
---
---        -- The following 3 queries are disjointed and both fetches, respectively,
---        -- @TxMeta@ @TxInput@ and @TxOutput@.
---        -- The rationale behind doing three separate queries is that SQlite does
---        -- not support array types, neither array aggregations
---        -- (https://www.sqlite.org/lang_aggfunc.html).
---        -- This in particular means the list of Inputs and Outputs for each TxId
---        -- must be assembled in memory. One workarroun is to use group_concat
---        -- (see link above), but this would return the array in a string format,
---        -- separated by commas.
---
---        -- The length of meta list is bounded by 50 in each realistic senario.
---        -- So the marshalling between Haskell types - UTF8 - binary SQlite types
---        -- shouldn`t be costly.
---        meta <- SQL.runSelectReturningList $ SQL.select $ do
---            case mbAddress of
---                Nothing   -> SQL.limit_ limit $ SQL.offset_ offset $ metaQuery
---                Just addr -> SQL.limit_ limit $ SQL.offset_ offset $ metaQueryWithAddr addr
---        let txids = map (SQL.val_ . _txMetaTableId) meta
---        input <- SQL.runSelectReturningList $ SQL.select $ do
---                input <- SQL.all_ $ _mDbInputs metaDB
---                let txid = _inputTableTxId input
---                SQL.guard_ $ in_ txid txids
---                pure input
---        output <- SQL.runSelectReturningList $ SQL.select $ do
---                output <- SQL.all_ $ _mDbOutputs metaDB
---                let txid = _outputTableTxId output
---                SQL.guard_ $ in_ txid txids
---                pure output
---        return $ do
---             mt  <- nonEmpty meta
---             inp <- nonEmpty input
---             out <- nonEmpty output
---             return (mt, inp, out)
---
---    case res of
---        Left e -> throwIO $ Kernel.StorageFailure (toException e)
---        Right Nothing -> return ([], Just 0)
---        Right (Just (meta, inputs, outputs)) ->  do
---            eiCount <- Sqlite.runDBAction $ runBeamSqlite conn $
---                case mbAddress of
---                    Nothing   -> SQL.runSelectReturningOne $ SQL.select metaQueryC
---                    Just addr -> SQL.runSelectReturningOne $ SQL.select $ metaQueryWithAddrC addr
---            let mapWithInputs  = transform $ map (\inp -> (_inputTableTxId inp, inp)) inputs
---            let mapWithOutputs = transform $ map (\out -> (_outputTableTxId out, out)) outputs
---            let txMeta = toValidKernelTxMeta mapWithInputs mapWithOutputs $ NonEmpty.toList meta
---                count = case eiCount of
---                    Left _  -> Nothing
---                    Right c -> c
---            return (txMeta, count)
---
---    where
---        filters meta = do
---            SQL.guard_ $ filterAccs meta accountFops
---            SQL.guard_ $ applyFilter (_txMetaTableId meta) fopTxId
---            SQL.guard_ $ applyFilter (_txMetaTableCreatedAt meta) fopTimestamp
---            pure ()
---
---        filtersC meta = do
---            SQL.guard_ $ filterAccs meta accountFops
---            SQL.guard_ $ applyFilter (_txMetaTableId meta) fopTxId
---            SQL.guard_ $ applyFilter (_txMetaTableCreatedAt meta) fopTimestamp
---            pure ()
---
---        metaQuery = do
---            let query = SQL.all_ $ _mDbMeta metaDB
---            meta <- case mbSorting of
---                    Nothing ->
---                        SQL.orderBy_ (SQL.desc_ . _txMetaTableCreatedAt) query
---                    Just (Sorting SortByCreationAt dir) ->
---                        SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableCreatedAt) query
---                    Just (Sorting SortByAmount     dir) ->
---                        SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableAmount) query
---            filters meta
---            return meta
---
---        metaQueryC = SQL.aggregate_ (\_ -> SQL.as_ SQL.countAll_) $ do
---            meta <-  SQL.all_ $ _mDbMeta metaDB
---            filtersC meta
---            return meta
---
---        findAndUnion addr = do
---                let input = do
---                        inp <- SQL.all_ $ _mDbInputs metaDB
---                        SQL.guard_ $ ((_inputTableAddress inp) ==. (SQL.val_ addr))
---                        pure $ _inputTableTxId inp
---                let output = do
---                        out <- SQL.all_ $ _mDbOutputs metaDB
---                        SQL.guard_ $ ((_outputTableAddress out) ==. (SQL.val_ addr))
---                        pure $ _outputTableTxId out
---                -- union removes txId duplicates.
---                txid <- SQL.union_ input output
---                SQL.join_ (_mDbMeta metaDB) (\ mt -> ((_txMetaTableId mt) ==. txid))
---
---        metaQueryWithAddr addr = do
---            meta <- case mbSorting of
---                Nothing ->
---                    SQL.orderBy_ (SQL.desc_ . _txMetaTableCreatedAt) (findAndUnion addr)
---                Just (Sorting SortByCreationAt dir) ->
---                    SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableCreatedAt) (findAndUnion addr)
---                Just (Sorting SortByAmount     dir) ->
---                    SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableAmount) (findAndUnion addr)
---            filters meta
---            return meta
---
---        metaQueryWithAddrC addr = SQL.aggregate_ (\_ -> SQL.as_ SQL.countAll_) $ do
---            meta <- findAndUnion addr
---            filtersC meta
---            pure meta
---
---        filterAccs _ Everything = SQL.QExpr (pure (valueE (sqlValueSyntax True)))
---        filterAccs meta (AccountFops rootAddr (mbAccountIx)) =
---            (_txMetaTableWalletId meta ==. SQL.val_ rootAddr) &&.
---                case mbAccountIx of
---                    Nothing -> SQL.QExpr (pure (valueE (sqlValueSyntax True)))
---                    Just accountIx -> _txMetaTableAccountIx meta ==. SQL.val_ accountIx
---
---        applyFilter inputData fop =
---            let byPredicate o i = case o of
---                    Kernel.Equal            -> inputData ==. i
---                    Kernel.LesserThan       -> inputData <. i
---                    Kernel.GreaterThan      -> inputData >. i
---                    Kernel.LesserThanEqual  -> inputData <=. i
---                    Kernel.GreaterThanEqual -> inputData >=. i
---            in case fop of
---                NoFilterOp -> SQL.val_ True
---                FilterByIndex a -> byPredicate Kernel.Equal (SQL.val_ a)
---                FilterByPredicate ford a -> byPredicate ford (SQL.val_ a)
---                FilterByRange from to -> between_ inputData (SQL.val_ from) (SQL.val_ to)
---                FilterIn ls -> in_ inputData (map SQL.val_ ls)
---
---        transform :: NonEmpty (Txp.TxId, a) -> M.Map Txp.TxId (NonEmpty a)
---        transform = Foldable.foldl' updateFn M.empty
---
---        updateFn
---            :: M.Map Txp.TxId (NonEmpty a)
---            -> (Txp.TxId, a)
---            -> M.Map Txp.TxId (NonEmpty a)
---        updateFn acc (txid, new) =
---            M.insertWith (<>) txid (new :| []) acc
---
---        toValidKernelTxMeta
---            :: M.Map Txp.TxId (NonEmpty TxInput)
---            -> M.Map Txp.TxId (NonEmpty TxOutput)
---            -> [TxMeta]
---            -> [Kernel.TxMeta]
---        toValidKernelTexMeta im om =
---            mapMaybe $ \m -> do
---                let txid = _txMetaTableId m
---                toTxMeta m <$> M.lookup txid im <*> M.lookup txid om
+getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopTimestamp mbSorting = do
+    res <- runPersistConn conn $ do
 
+        -- The following 3 queries are disjointed and both fetches, respectively,
+        -- @TxMeta@ @TxInput@ and @TxOutput@.
+        -- The rationale behind doing three separate queries is that SQlite does
+        -- not support array types, neither array aggregations
+        -- (https://www.sqlite.org/lang_aggfunc.html).
+        -- This in particular means the list of Inputs and Outputs for each TxId
+        -- must be assembled in memory. One workarroun is to use group_concat
+        -- (see link above), but this would return the array in a string format,
+        -- separated by commas.
+
+        -- The length of meta list is bounded by 50 in each realistic senario.
+        -- So the marshalling between Haskell types - UTF8 - binary SQlite types
+        -- shouldn`t be costly.
+
+        meta <- fmap entityVal <$> case mbAddress of
+           Nothing   -> metaQuery
+           Just addr -> error "todo" -- metaQueryWithAddr addr
+
+        let txids = E.valList (map txMetaTableId meta)
+
+        input <-
+            E.select $
+            E.from $ \inp -> do
+            E.where_ (inp E.^. InputTableTxId `E.in_` txids)
+            pure inp
+
+        output <-
+            E.select $
+            E.from $ \out -> do
+            E.where_ (out E.^. OutputTableTxId `E.in_` txids)
+            pure out
+
+        return $ do
+            mt  <- nonEmpty meta
+            inp <- nonEmpty (entityVal <$> input)
+            out <- nonEmpty (entityVal <$> output)
+            return (mt, inp, out)
+
+    case res of
+        Left e ->
+            throwIO $ Kernel.StorageFailure (toException e)
+        Right Nothing ->
+            return ([], Just 0)
+        Right (Just (meta, inputs, outputs)) -> do
+            eiCount <- fmap (fmap listToMaybe) . runPersistConn conn $ do
+                case mbAddress of
+                    Nothing   -> metaQueryC
+                    Just addr -> metaQueryWithAddrC addr
+            let mapWithInputs  = transform $ map (\inp -> (inputTableTxId inp, inp)) inputs
+            let mapWithOutputs = transform $ map (\out -> (outputTableTxId out, out)) outputs
+            let txMeta = toValidKernelTxMeta mapWithInputs mapWithOutputs $ NonEmpty.toList meta
+            let count' = case eiCount of
+                    Left _  -> Nothing
+                    Right c -> E.unValue <$> c
+            return (txMeta, count')
+--
+  where
+    metaQuery =
+        E.select $
+        E.from $ \t -> do
+        case mbSorting of
+            Nothing ->
+                E.orderBy [E.desc (t E.^. TxMetaTableCreatedAt)]
+            Just (Sorting SortByCreationAt dir) ->
+                E.orderBy [toEsqSortDir dir (t E.^. TxMetaTableCreatedAt)]
+            Just (Sorting SortByAmount     dir) ->
+                E.orderBy [toEsqSortDir dir (t E.^. TxMetaTableAmount)]
+        filters t
+        E.limit (fromIntegral limit)
+        E.offset (fromIntegral offset)
+        return t
+
+    metaQueryC =
+        E.select $
+        E.from $ \t -> do
+        filters t
+        return E.countRows
+
+    filters t = do
+        E.where_
+            $ filterAccs t accountFops
+            E.&&. applyFilter (t E.^. TxMetaTableId) fopTxId
+            E.&&. applyFilter (t E.^. TxMetaTableCreatedAt) fopTimestamp
+
+    filterAccs _ Everything =
+        E.val True
+    filterAccs meta (AccountFops rootAddr (mbAccountIx)) =
+        (meta E.^. TxMetaTableWalletId E.==. E.val rootAddr) E.&&.
+            case mbAccountIx of
+                Nothing ->
+                    E.val True
+                Just accountIx ->
+                    meta E.^. TxMetaTableAccountIx E.==. E.val accountIx
+
+    applyFilter inputData fop =
+        let byPredicate o i = case o of
+                Kernel.Equal            -> inputData E.==. i
+                Kernel.LesserThan       -> inputData E.<. i
+                Kernel.GreaterThan      -> inputData E.>. i
+                Kernel.LesserThanEqual  -> inputData E.<=. i
+                Kernel.GreaterThanEqual -> inputData E.>=. i
+        in case fop of
+            NoFilterOp -> E.val True
+            FilterByIndex a -> byPredicate Kernel.Equal (E.val a)
+            FilterByPredicate ford a -> byPredicate ford (E.val a)
+            FilterByRange from to ->
+                inputData E.>=. (E.val from)
+                E.&&. inputData E.<=. (E.val to)
+            FilterIn ls -> E.in_ inputData (E.valList ls)
+--
+    metaQueryWithAddrC addr =
+        E.select $
+        E.from $ \(inp `InnerJoin` out) -> do
+        E.on (inp E.^. InputTableAddress meta)
+        meta <- findAndUnion addr
+        filters meta
+        pure countRows
+
+        -- 'findAndUnion' gets all of the inputs and outputs with the given
+        -- address, and takes the union of the transaction IDs. Then we join the
+        -- transaction meta table onto this result. The result is a table of
+        -- transaction metadata where each transaction has either an input or an
+        -- output with the given address.
+        --
+        -- SELECT inputTableTxId
+        -- FROM inputTable
+        -- WHERE inputTableAddress = addr
+        -- UNION
+        -- SELECT outputTableTxId
+        -- FROM outputTable
+        -- WHERE outputTabelAddress = addr
+        --
+        -- Esqueleto does not support unions! So we need to identify another
+        -- approach to solving this problem.
+        --
+        -- The easy way out is to do a raw SQL query and use that. We would need
+        -- to use the ERaw data constructor to make a SqlExpr that returns
+        -- a `ValueList TxId`, and then we could do something like:
+
+        -- SELECT txMeta.*
+        -- FROM txMeta
+        -- WHERE txMeta.txId IN (
+        --     SELECT inputTableTxId
+        --     FROM inputTable
+        --     WHERE inputTableAddress = addr
+        --     UNION
+        --     SELECT outputTableTxId
+        --     FROM outputTable
+        --     WHERE outputTabelAddress = addr
+        -- )
+        --
+        -- In code, it'd look a bit like:
+        --
+        -- E.select $
+        -- E.from $ \txMeta -> do
+        -- E.where $ txMeta E.^. TxMetaTableTxId `E.in_` E.ERaw $ \info ->
+        --      ( sqlQuery, [] )
+    findAndUnion addr = do
+        error "TODO"
+
+--        let input = do
+--        inp <- SQL.all_ $ _mDbInputs metaDB
+--                SQL.guard_ $ ((_inputTableAddress inp) ==. (SQL.val_ addr))
+--                pure $ _inputTableTxId inp
+--        let output = do
+--                out <- SQL.all_ $ _mDbOutputs metaDB
+--                SQL.guard_ $ ((_outputTableAddress out) ==. (SQL.val_ addr))
+--                pure $ _outputTableTxId out
+--        -- union removes txId duplicates.
+--        txid <- SQL.union_ input output
+--        SQL.join_ (_mDbMeta metaDB) (\ mt -> ((_txMetaTableId mt) ==. txid))
+--
+    metaQueryWithAddr addr = do
+        meta <- case mbSorting of
+            Nothing ->
+                SQL.orderBy_ (SQL.desc_ . _txMetaTableCreatedAt) (findAndUnion addr)
+            Just (Sorting SortByCreationAt dir) ->
+                SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableCreatedAt) (findAndUnion addr)
+            Just (Sorting SortByAmount     dir) ->
+                SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableAmount) (findAndUnion addr)
+        filters meta
+        return meta
+--
+--
+--
+--
+    transform :: NonEmpty (Txp.TxId, a) -> M.Map Txp.TxId (NonEmpty a)
+    transform = Foldable.foldl' updateFn M.empty
+
+    updateFn
+        :: M.Map Txp.TxId (NonEmpty a)
+        -> (Txp.TxId, a)
+        -> M.Map Txp.TxId (NonEmpty a)
+    updateFn acc (txid, new) =
+        M.insertWith (<>) txid (new :| []) acc
+
+    toValidKernelTxMeta
+        :: M.Map Txp.TxId (NonEmpty TxInput)
+        -> M.Map Txp.TxId (NonEmpty TxOutput)
+        -> [TxMeta]
+        -> [Kernel.TxMeta]
+    toValidKernelTxMeta im om =
+        mapMaybe $ \m -> do
+            let txid = txMetaTableId m
+            toTxMeta m <$> M.lookup txid im <*> M.lookup txid om
+
+toEsqSortDir
+    :: PersistField a
+    => SortDirection
+    -> E.SqlExpr (E.Value a)
+    -> E.SqlExpr E.OrderBy
+toEsqSortDir Ascending  = E.asc
+toEsqSortDir Descending = E.desc
 -- Lower level api intended for testing
 
 getTxMetasTable :: Sqlite.Connection -> IO [TxMeta]
