@@ -4,10 +4,6 @@ sudo: false
 # Generic language, we provide our custom builds
 language: generic
 
-# Only clone the repo's tip
-git:
-  depth: false
-
 # Caching so the next build will be fast too.
 cache:
   timeout: 1337
@@ -61,13 +57,15 @@ stages:
 # Install foreign dependencies required by some modules below
 before_install:
 - export LTS=$(cat cardano-sl.yaml | grep resolver) # Extract the LTS from the stack.yaml
+- export CARDANO_SL_YAML_DIFF=$(git diff HEAD HEAD^ -- cardano-sl.yaml)
+- export STACK_YAML_DIFF=$(git diff HEAD HEAD^ -- stack.yaml)
 
 # Rebuild only the snapshot. Note that, when triggered, job-concurrency should be limited
 # to 1 and we might have to re-play the build multiple times in case it couldn't build
 # everything in one go.
 # Before kicking this action, it would also be advised to cleanup the entire cache.
 snapshot-1: &snapshot-1
-  if: (type = cron) OR (commit_message =~ /ci@update lts/)
+  if: (type = cron) OR (env(CARDANO_SL_YAML_DIFF) IS NOT blank)
   script:
   - test "$TRAVIS_EVENT_TYPE" = cron && rm -rf $HOME/.ghc $HOME/.stack $HOME/.local || true
   - mkdir -p .stack-work $HOME/.ghc $HOME/.stack $HOME/.local/bin $HOME/.local/lib $HOME/.local/include
@@ -91,7 +89,7 @@ snapshot-1: &snapshot-1
 # Build out custom snapshot on top of the LTS. We separate this from the lts job to split
 # the workload and have two jobs running < 50 mins.
 snapshot-2: &snapshot-2
-  if: (type = cron) OR (commit_message =~ /ci@update lts/)
+  if: (type = cron) OR (env(CARDANO_SL_YAML_DIFF) IS NOT blank)
   script:
   # Install rest of the the snapshot, mostly servant and cardano-sl
   - travis_wait 42 stack --no-terminal build --only-snapshot -j1
@@ -106,7 +104,7 @@ snapshot-2: &snapshot-2
 # Still, we build that as a separate job and only triggers it when appropriated. It's cached
 # otherwise.
 extra-dependencies: &extra-dependencies
-  if: (type = cron) OR (commit_message =~ /ci@update stack.yaml/)
+  if: (type = cron) OR (env(STACK_YAML_DIFF) IS NOT blank)
   script:
   # We don't cache .stack-work, though we want to avoid rebuilding extra-dependencies on each CI run. So, we just cache it manually.
   - travis_wait 42 stack --no-terminal build --fast --only-dependencies -j1
