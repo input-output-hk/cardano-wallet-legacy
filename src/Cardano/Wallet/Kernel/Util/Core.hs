@@ -8,12 +8,8 @@
 module Cardano.Wallet.Kernel.Util.Core (
     -- * General utility functions
     absCoin
-  , derefIn
   , getCurrentTimestamp
-  , fromUtxo
-  , nothingToZero
   , sumCoinsUnsafe
-  , toOutPair
     -- * UTxO
   , utxoBalance
   , utxoRestrictToInputs
@@ -115,25 +111,10 @@ absCoin ca cb
       a = Core.unsafeGetCoin ca
       b = Core.unsafeGetCoin cb
 
-nothingToZero :: Ord a => a -> Map a Core.Coin -> Core.Coin
-nothingToZero acc mp = case Map.lookup acc mp of
-    Nothing -> Core.unsafeIntegerToCoin 0
-    Just n  -> n
-
 -- | Gets the underlying value (as a 'Coin') from a 'TxOutAux'.
 toCoin :: Core.TxOutAux -> Core.Coin
 toCoin = Core.txOutValue . Core.toaOut
 
-toOutPair :: Core.TxOutAux -> (Core.Address, Core.Coin)
-toOutPair txOutAux = (toAddress txOutAux, toCoin txOutAux)
-
-fromUtxo :: Core.Utxo -> Maybe (NE.NonEmpty (Core.Address, Core.Coin))
-fromUtxo utxo = NE.nonEmpty $ toOutPair <$> Map.elems utxo
-
-derefIn :: Core.TxIn -> Maybe (Core.TxId, Word32)
-derefIn txIn = case txIn of
-   Core.TxInUnknown _ _  -> Nothing
-   Core.TxInUtxo txId ix -> Just (txId, ix)
 
 {-------------------------------------------------------------------------------
   Internal auxiliary

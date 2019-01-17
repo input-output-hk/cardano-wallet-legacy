@@ -14,9 +14,9 @@ import           Test.Integration.Framework.Cluster (startCluster, waitForNode)
 import           Test.Integration.Framework.DSL (Context (..))
 import qualified Test.Integration.Scenario.Accounts as Accounts
 import qualified Test.Integration.Scenario.Addresses as Addresses
+import qualified Test.Integration.Scenario.Node as Node
 import qualified Test.Integration.Scenario.Transactions as Transactions
 import qualified Test.Integration.Scenario.Wallets as Wallets
-
 
 main :: IO ()
 main = do
@@ -45,5 +45,6 @@ main = do
             describe "Addresses" Addresses.spec
             describe "Transactions" Transactions.spec
             describe "Wallets" Wallets.spec
+            describe "Node" Node.spec
   where
     toBaseUrl = ntwrkAddrToBaseUrl . unsafeNetworkAddressFromString

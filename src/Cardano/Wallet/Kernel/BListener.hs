@@ -36,13 +36,15 @@ import           Cardano.Wallet.Kernel.DB.AcidState (ApplyBlock (..),
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
-import           Cardano.Wallet.Kernel.DB.Resolved (ResolvedBlock, rbContext)
+import           Cardano.Wallet.Kernel.DB.Resolved (ResolvedBlock, rbContext,
+                     resolvedToTxMetas)
 import           Cardano.Wallet.Kernel.DB.Spec.Pending (Pending)
+import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending
 import           Cardano.Wallet.Kernel.DB.Spec.Update (ApplyBlockFailed (..))
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types
 import           Cardano.Wallet.Kernel.Internal
 import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
-import           Cardano.Wallet.Kernel.PrefilterTx (PrefilteredBlock (..),
+import           Cardano.Wallet.Kernel.Prefiltering (PrefilteredBlock,
                      prefilterBlock)
 import           Cardano.Wallet.Kernel.Read (foreignPendingByAccount,
                      getWalletCredentials, getWalletSnapshot)
@@ -57,23 +59,26 @@ import           Cardano.Wallet.WalletLayer.Kernel.Wallets
   Passive Wallet API implementation
 -------------------------------------------------------------------------------}
 
-type PrefilterResult = ((BlockContext, Map HdAccountId PrefilteredBlock), [TxMeta])
+type PrefilterResult = ((BlockContext, PrefilteredBlock), [TxMeta])
 
 -- | Prefilter the block for each account. Returns 'Nothing' if the prefiltering
 -- is irrelevant for this node, i.e. there are no user wallets stored, so we
 -- can avoid doing work (i.e. writing into the acid-state DB log) by skipping
 -- such block application.
---
--- TODO: Improve performance (CBR-379)
 prefilterBlocks :: PassiveWallet
                 -> [ResolvedBlock]
                 -> IO (Maybe [PrefilterResult])
 prefilterBlocks pw bs = do
     res <- getWalletCredentials pw
-    foreignPendings <- foreignPendingByAccount <$> getWalletSnapshot pw
-    return $ case res of
-         [] -> Nothing
-         xs -> Just $ map (\b -> first (b ^. rbContext,) $ prefilterBlock foreignPendings b xs) bs
+    isForeign <- fmap Pending.txIns . foreignPendingByAccount <$> getWalletSnapshot pw
+    case res of
+         [] -> return Nothing
+         xs -> fmap Just $ flip evalStateT xs $ forM bs $ \rb -> do
+            pb <- state (prefilterBlock isForeign rb)
+            metas <- state (resolvedToTxMetas rb) >>= \case
+                Left e  -> throwM e
+                Right x -> return x
+            return ((rb ^. rbContext, pb), metas)
 
 data BackfillFailed
     = SuccessorChanged BlockContext (Maybe BlockContext)
@@ -321,7 +326,7 @@ switchToFork pw@PassiveWallet{..} oldest bs = do
   where
 
     trySwitchingToFork :: Node.SecurityParameter
-                       -> [(BlockContext, Map HdAccountId PrefilteredBlock)]
+                       -> [(BlockContext, PrefilteredBlock)]
                        -> IO (Map HdAccountId (Pending, Set TxId))
     trySwitchingToFork k blockssByAccount = do
         -- Find any new restorations that we didn't know about.

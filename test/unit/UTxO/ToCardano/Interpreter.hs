@@ -38,7 +38,6 @@ import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.BlockMeta (AddressMeta,
                      BlockMeta (..))
 import           Cardano.Wallet.Kernel.DB.InDb
-import           Cardano.Wallet.Kernel.DB.Resolved
 import           Cardano.Wallet.Kernel.Types
 import           Control.Arrow ((&&&))
 import           Control.Lens (strict, (%=), (.=))
@@ -278,10 +277,10 @@ instance Interpret DSL2Cardano h Addr where
   int = asks . resolveAddr
 
 instance DSL.Hash h Addr => Interpret DSL2Cardano h (DSL.Input h Addr) where
-  type Interpreted DSL2Cardano (DSL.Input h Addr) = (TxOwnedInput SomeKeyPair, ResolvedInput)
+  type Interpreted DSL2Cardano (DSL.Input h Addr) = (TxOwnedInput SomeKeyPair, TxOutAux)
 
   int :: Monad m
-      => DSL.Input h Addr -> IntT h e m (TxOwnedInput SomeKeyPair, ResolvedInput)
+      => DSL.Input h Addr -> IntT h e m (TxOwnedInput SomeKeyPair, TxOutAux)
   int inp@DSL.Input{..} = do
       -- We figure out who must sign the input by looking at the output
       spentOutput   <- inpSpentOutput' inp
