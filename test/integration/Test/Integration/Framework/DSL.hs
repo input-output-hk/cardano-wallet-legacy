@@ -70,7 +70,6 @@ module Test.Integration.Framework.DSL
     -- * Helpers
     , ($-)
     , (</>)
-    , (<+>)
     , (!!)
     , amount
     , assuranceLevel
@@ -309,11 +308,6 @@ json = aesonQQ
 infixr 5 </>
 (</>) :: ToHttpApiData a => Text -> a -> Text
 base </> next = mconcat [base, "/", toQueryParam next]
-
-infixr 5 <+>
-(<+>) :: ToHttpApiData a => Text -> a -> Text
-base <+> next = mconcat [base, toQueryParam next]
-
 
 amount
     :: HasType WalletCoin s

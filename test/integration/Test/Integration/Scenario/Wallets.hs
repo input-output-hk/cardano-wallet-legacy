@@ -165,7 +165,7 @@ spec = do
 
         forM_ matrix $ \(endpoint, expectations) -> scenario endpoint $ do
             _ <- setup $ defaultSetup
-            resp <- unsafeRequest ("GET", fromString endpoint) $ Just $ [json|{}|]
+            resp <- unsafeRequest ("GET", fromString endpoint) $ Nothing
             verify (resp :: Either ClientError [Wallet]) expectations
 
     describe "WALLETS_LIST_03 - One can filter wallets by balance" $ do
@@ -238,7 +238,7 @@ spec = do
                 setup $ defaultSetup
                     & initialCoins .~ [coins]
 
-            resp <- unsafeRequest ("GET", fromString endpoint) $ Just $ [json|{}|]
+            resp <- unsafeRequest ("GET", fromString endpoint) $ Nothing
             verify (resp :: Either ClientError [Wallet]) expectations
 
     scenario "WALLETS_LIST_03 - One can filter wallets by wallet id" $ do
@@ -252,9 +252,9 @@ spec = do
                 [ (fixtures !! 0) ^. wallet . walletId
                 , (fixtures !! 1) ^. wallet . walletId
                 ]
-        let endpoint = "api/v1/wallets?id=" <+> ( fromWalletId $ walletIds !! 0 )
+        let endpoint = "api/v1/wallets?id=" <> ( fromWalletId $ walletIds !! 0 )
 
-        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+        resp <- unsafeRequest ("GET", endpoint) $ Nothing
         verify (resp :: Either ClientError [Wallet])
             [ expectSuccess
             , expectListSizeEqual 1
@@ -272,8 +272,8 @@ spec = do
                 [ (fixtures !! 0) ^. wallet . walletId
                 , (fixtures !! 1) ^. wallet . walletId
                 ]
-        let endpoint = "api/v1/wallets?id=EQ%5B" <+> ( fromWalletId $ walletIds !! 0 ) <+> ("%5D" :: Text)
-        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+        let endpoint = "api/v1/wallets?id=EQ%5B" <> ( fromWalletId $ walletIds !! 0 ) <> ("%5D" :: Text)
+        resp <- unsafeRequest ("GET", endpoint) $ Nothing
         verify (resp :: Either ClientError [Wallet])
             [ expectSuccess
             , expectListSizeEqual 1
@@ -292,8 +292,8 @@ spec = do
                      , fromWalletId $ (fixtures !! 1) ^. wallet . walletId
                      ]
 
-        let endpoint = "api/v1/wallets?id=LT%5B" <+> ( sortedWalletIds !! 1 ) <+> ("%5D" :: Text)
-        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+        let endpoint = "api/v1/wallets?id=LT%5B" <> ( sortedWalletIds !! 1 ) <> ("%5D" :: Text)
+        resp <- unsafeRequest ("GET", endpoint) $ Nothing
         verify (resp :: Either ClientError [Wallet])
             [ expectSuccess
             , expectListSizeEqual 1
@@ -312,9 +312,9 @@ spec = do
                      , fromWalletId $ (fixtures !! 1) ^. wallet . walletId
                      ]
 
-        let endpoint = "api/v1/wallets?id=GT%5B" <+> ( sortedWalletIds !! 0 ) <+> ("%5D" :: Text)
+        let endpoint = "api/v1/wallets?id=GT%5B" <> ( sortedWalletIds !! 0 ) <> ("%5D" :: Text)
 
-        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+        resp <- unsafeRequest ("GET", endpoint) $ Nothing
         verify (resp :: Either ClientError [Wallet])
             [ expectSuccess
             , expectListSizeEqual 1
@@ -333,8 +333,8 @@ spec = do
                      , fromWalletId $ (fixtures !! 1) ^. wallet . walletId
                      ]
 
-        let endpoint = "api/v1/wallets?sort_by=created_at&id=GTE%5B" <+> ( sort ( walletIds ) !! 0 ) <+> ("%5D" :: Text)
-        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+        let endpoint = "api/v1/wallets?sort_by=created_at&id=GTE%5B" <> ( sort ( walletIds ) !! 0 ) <> ("%5D" :: Text)
+        resp <- unsafeRequest ("GET", endpoint) $ Nothing
         verify (resp :: Either ClientError [Wallet])
             [ expectSuccess
             , expectListSizeEqual 2
@@ -354,8 +354,8 @@ spec = do
                      , fromWalletId $ (fixtures !! 1) ^. wallet . walletId
                      ]
 
-        let endpoint = "api/v1/wallets?sort_by=created_at&id=LTE%5B" <+> ( sort ( walletIds ) !! 1 ) <+> ("%5D" :: Text)
-        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+        let endpoint = "api/v1/wallets?sort_by=created_at&id=LTE%5B" <> ( sort ( walletIds ) !! 1 ) <> ("%5D" :: Text)
+        resp <- unsafeRequest ("GET", endpoint) $ Nothing
         verify (resp :: Either ClientError [Wallet])
             [ expectSuccess
             , expectListSizeEqual 2
@@ -377,10 +377,10 @@ spec = do
                      ]
         let sortedWalletIds = sort walletIds
 
-        let endpoint = "api/v1/wallets?sort_by=created_at&id=RANGE%5B" <+> ( sortedWalletIds !! 0 )
-                        <+> "," <+> ( sortedWalletIds !! 2 )  <+> ("%5D" :: Text)
+        let endpoint = "api/v1/wallets?sort_by=created_at&id=RANGE%5B" <> ( sortedWalletIds !! 0 )
+                        <> "," <> ( sortedWalletIds !! 2 )  <> ("%5D" :: Text)
 
-        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+        resp <- unsafeRequest ("GET", endpoint) $ Nothing
         verify (resp :: Either ClientError [Wallet])
             [ expectSuccess
             , expectListSizeEqual 3
@@ -402,10 +402,10 @@ spec = do
                      , fromWalletId $ (fixtures !! 2) ^. wallet . walletId
                      ]
 
-        let endpoint = "api/v1/wallets?sort_by=created_at&id=IN%5B" <+> ( walletIds !! 0 )
-                        <+> "," <+> ( walletIds !! 2 )  <+> ("%5D" :: Text)
+        let endpoint = "api/v1/wallets?sort_by=created_at&id=IN%5B" <> ( walletIds !! 0 )
+                        <> "," <> ( walletIds !! 2 )  <> ("%5D" :: Text)
 
-        resp <- unsafeRequest ("GET", endpoint) $ Just $ [json|{}|]
+        resp <- unsafeRequest ("GET", endpoint) $ Nothing
 
         verify (resp :: Either ClientError [Wallet])
             [ expectSuccess
@@ -498,7 +498,7 @@ spec = do
                     & walletName .~ show (name :: Int)
                     & initialCoins .~ [coins]
 
-            resp <- unsafeRequest ("GET", fromString endpoint) $ Just $ [json|{}|]
+            resp <- unsafeRequest ("GET", fromString endpoint) $ Nothing
             verify (resp :: Either ClientError [Wallet]) expectations
 
     scenario "WALLETS_UPDATE_01 - updating a wallet persists the update" $ do
