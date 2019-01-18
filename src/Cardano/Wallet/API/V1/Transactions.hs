@@ -31,4 +31,14 @@ type API = Tags '["Transactions"] :>
                         :> Summary "Redeem a certificate"
                         :> ReqBody '[ValidJSON] Redemption
                         :> Post '[ValidJSON] (APIResponse Transaction)
+
+    :<|> "transactions" :> "unsigned"
+                        :> Summary "Creates a new unsigned transaction."
+                        :> ReqBody '[ValidJSON] Payment
+                        :> Post '[ValidJSON] (APIResponse UnsignedTransaction)
+
+    :<|> "transactions" :> "externally-signed"
+                        :> Summary "Publish an externally-signed transaction."
+                        :> ReqBody '[ValidJSON] SignedTransaction
+                        :> Post '[ValidJSON] (APIResponse Transaction)
     )

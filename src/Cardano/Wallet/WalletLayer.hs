@@ -49,12 +49,12 @@ import           Cardano.Wallet.API.Request.Filter (FilterOperations (..))
 import           Cardano.Wallet.API.Request.Sort (SortOperations (..))
 import           Cardano.Wallet.API.Response (APIResponse, SliceOf (..))
 import           Cardano.Wallet.API.V1.Types (Account, AccountBalance,
-                     AccountIndex, AccountUpdate, EosWallet, EosWalletId,
-                     NewAccount, NewAddress, NewEosWallet, NewWallet,
-                     PasswordUpdate, Payment, Redemption, SignedTransaction,
-                     SpendingPassword, Transaction, UnsignedTransaction,
-                     WalAddress, Wallet, WalletAddress, WalletId, WalletImport,
-                     WalletTimestamp, WalletTxId, WalletUpdate)
+                     AccountIndex, AccountUpdate, EosWallet, NewAccount,
+                     NewAddress, NewEosWallet, NewWallet, PasswordUpdate,
+                     Payment, Redemption, SignedTransaction, SpendingPassword,
+                     Transaction, UnsignedTransaction, WalAddress, Wallet,
+                     WalletAddress, WalletId, WalletImport, WalletTimestamp,
+                     WalletTxId, WalletUpdate)
 import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import qualified Cardano.Wallet.Kernel.Addresses as Kernel
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
@@ -420,9 +420,8 @@ instance Exception GetTxError
 -- | The passive wallet (data) layer. See @PassiveWallet@.
 data PassiveWalletLayer m = PassiveWalletLayer
     {
-    -- wallets
+    -- fully-owned wallets
       createWallet         :: CreateWallet -> m (Either CreateWalletError Wallet)
-    , createEosWallet      :: NewEosWallet -> m (Either CreateEosWalletError EosWallet)
     , getWallets           :: m (IxSet Wallet)
     , getWallet            :: WalletId -> m (Either GetWalletError Wallet)
     , updateWallet         :: WalletId
@@ -432,7 +431,9 @@ data PassiveWalletLayer m = PassiveWalletLayer
                            -> PasswordUpdate
                            -> m (Either UpdateWalletPasswordError Wallet)
     , deleteWallet         :: WalletId -> m (Either DeleteWalletError ())
-    , deleteEosWallet      :: EosWalletId -> m (Either DeleteEosWalletError ())
+    -- externally-owned wallets
+    , createEosWallet      :: NewEosWallet -> m (Either CreateEosWalletError EosWallet)
+    , deleteEosWallet      :: WalletId -> m (Either DeleteEosWalletError ())
     , getUtxos             :: WalletId
                            -> m (Either GetUtxosError [(Account, Utxo)])
     -- accounts

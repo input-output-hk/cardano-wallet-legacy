@@ -98,6 +98,7 @@ import           Data.Aeson.QQ (aesonQQ)
 import qualified Data.ByteArray as ByteArray
 import qualified Data.Foldable as F
 import           Data.Generics.Internal.VL.Lens (lens)
+import           Data.Generics.Product.Fields (field)
 import           Data.Generics.Product.Typed (HasType, typed)
 import           Data.List ((!!))
 import qualified Data.Map.Strict as Map
@@ -365,8 +366,7 @@ walletName :: HasType Text s => Lens' s Text
 walletName = typed
 
 spendingPasswordLastUpdate :: Lens' Wallet WalletTimestamp
-spendingPasswordLastUpdate f (Wallet v1 v2 v3 v4 spLU v6 v7 v8 v9) =
-    (\spLU' -> Wallet v1 v2 v3 v4 spLU' v6 v7 v8 v9) <$> f spLU
+spendingPasswordLastUpdate = field @"walSpendingPasswordLastUpdate"
 
 --
 -- EXPECTATIONS

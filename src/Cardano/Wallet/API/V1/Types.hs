@@ -34,7 +34,6 @@ module Cardano.Wallet.API.V1.Types (
   , WalletUpdate (..)
   , WalletId (..)
   , exampleWalletId
-  , WalletType (..)
   , WalletOperation (..)
   , SpendingPassword
   , mkSpendingPassword
@@ -47,7 +46,7 @@ module Cardano.Wallet.API.V1.Types (
   , WalletCoin (..)
   , EosWallet (..)
   , NewEosWallet (..)
-  , WalletAndTxHistory (..)
+  , UpdateEosWallet (..)
   -- * Addresses
   , AddressOwnership (..)
   , AddressIndex
@@ -126,8 +125,6 @@ module Cardano.Wallet.API.V1.Types (
   , ErrNotEnoughMoney(..)
   , toServantError
   , toHttpErrorStatus
-  -- * EOS-wallet id
-  , module Cardano.Wallet.Kernel.EosWalletId
   , module Cardano.Wallet.Types.UtxoStatistics
   ) where
 
@@ -143,11 +140,8 @@ import           Data.Aeson.Types (Parser, Value (..), typeMismatch)
 import           Data.Bifunctor (first)
 import qualified Data.ByteArray as ByteArray
 import qualified Data.ByteString as BS
-import           Data.ByteString.Base58 (bitcoinAlphabet, decodeBase58)
 import qualified Data.Char as C
 import           Data.Default (Default (def))
-import           Data.List ((!!))
-import           Data.Maybe (fromJust)
 import           Data.Semigroup (Semigroup)
 import           Data.Swagger hiding (Example, example)
 import           Data.Text (Text, dropEnd, toLower)
@@ -174,7 +168,6 @@ import           Cardano.Wallet.API.V1.Generic (jsendErrorGenericParseJSON,
                      jsendErrorGenericToJSON)
 import           Cardano.Wallet.API.V1.Swagger.Example (Example, example)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
-import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
 import           Cardano.Wallet.Types.UtxoStatistics
 import           Cardano.Wallet.Util (mkJsonKey, showApiUtcTime)
 
@@ -628,6 +621,41 @@ instance BuildableSafeGen NewEosWallet where
         neweoswalAssuranceLevel
         neweoswalName
 
+
+data UpdateEosWallet = UpdateEosWallet
+    { ueowalAssuranceLevel :: !AssuranceLevel
+    , ueowalName           :: !Text
+    , ueowalAddressPoolGap :: !AddressPoolGap
+    } deriving (Eq, Show, Generic)
+
+deriveJSON Aeson.defaultOptions  ''UpdateEosWallet
+
+instance ToSchema UpdateEosWallet where
+    declareNamedSchema =
+        genericSchemaDroppingPrefix "ueowal" (\(--^) props -> props
+            & ("assuranceLevel" --^ "New assurance level.")
+            & ("name"           --^ "New wallet's name.")
+            & ("addressPoolGap" --^ "New address pool gap.")
+        )
+
+instance Arbitrary UpdateEosWallet where
+    arbitrary = UpdateEosWallet
+        <$> arbitrary
+        <*> pure "My EosWallet"
+        <*> arbitrary
+
+deriveSafeBuildable ''UpdateEosWallet
+instance BuildableSafeGen UpdateEosWallet where
+    buildSafeGen sl UpdateEosWallet{..} = bprint ("{"
+        %" assuranceLevel="%buildSafe sl
+        %" name="%buildSafe sl
+        %" addressPoolGap="%build
+        %" }")
+        ueowalAssuranceLevel
+        ueowalName
+        ueowalAddressPoolGap
+
+
 -- | A type modelling the update of an existing wallet.
 data WalletUpdate = WalletUpdate {
       uwalAssuranceLevel :: !AssuranceLevel
@@ -841,32 +869,6 @@ instance Arbitrary SyncState where
                     , pure Synced
                     ]
 
--- | 'Wallet' type.
-data WalletType
-    = WalletRegular
-    -- ^ Regular Cardano wallet.
-    | WalletExternal
-    -- ^ External wallet (mobile app or hardware wallet).
-    deriving (Bounded, Enum, Eq, Ord, Show, Generic)
-
-instance Arbitrary WalletType where
-    arbitrary = elements [minBound .. maxBound]
-
--- Drops the @Wallet@ prefix.
-deriveJSON Aeson.defaultOptions { A.constructorTagModifier = drop 6 . map C.toLower
-                                   } ''WalletType
-
-instance ToSchema WalletType where
-    declareNamedSchema _ = do
-        pure $ NamedSchema (Just "WalletType") $ mempty
-            & type_ .~ SwaggerString
-            & enum_ ?~ ["regular", "external"]
-
-deriveSafeBuildable ''WalletType
-instance BuildableSafeGen WalletType where
-    buildSafeGen _ WalletRegular  = "regular"
-    buildSafeGen _ WalletExternal = "external"
-
 -- | A 'Wallet'.
 data Wallet = Wallet {
       walId                         :: !WalletId
@@ -877,16 +879,7 @@ data Wallet = Wallet {
     , walCreatedAt                  :: !WalletTimestamp
     , walAssuranceLevel             :: !AssuranceLevel
     , walSyncState                  :: !SyncState
-    , walType                       :: !WalletType
     } deriving (Eq, Ord, Show, Generic)
-
---
--- IxSet indices
---
-
-
-
-
 
 deriveJSON Aeson.defaultOptions ''Wallet
 
@@ -909,14 +902,11 @@ instance ToSchema Wallet where
             --^ "The assurance level of the wallet."
             & "syncState"
             --^ "The sync state for this wallet."
-            & "type"
-            --^ "Wallet type: regular wallet or external one (mobile app or hardware wallet)."
         )
 
 instance Arbitrary Wallet where
   arbitrary = Wallet <$> arbitrary
                      <*> pure "My wallet"
-                     <*> arbitrary
                      <*> arbitrary
                      <*> arbitrary
                      <*> arbitrary
@@ -930,12 +920,10 @@ instance BuildableSafeGen Wallet where
     %" id="%buildSafe sl
     %" name="%buildSafe sl
     %" balance="%buildSafe sl
-    %" type="%buildSafe sl
     %" }")
     walId
     walName
     walBalance
-    walType
 
 instance Buildable [Wallet] where
     build = bprint listJson
@@ -948,11 +936,12 @@ instance ToSchema PublicKey where
 
 -- | Externally-owned sequential (EOS) wallet (mobile client or hardware wallet).
 data EosWallet = EosWallet
-    { eoswalId             :: !EosWalletId
+    { eoswalId             :: !WalletId
     , eoswalName           :: !WalletName
     , eoswalAddressPoolGap :: !AddressPoolGap
     , eoswalBalance        :: !WalletCoin
     , eoswalAssuranceLevel :: !AssuranceLevel
+    , eoswalCreatedAt      :: !WalletTimestamp
     } deriving (Eq, Ord, Show, Generic)
 
 deriveJSON Aeson.defaultOptions ''EosWallet
@@ -964,11 +953,13 @@ instance ToSchema EosWallet where
             & ("addressPoolGap"     --^ "Address pool gap for this wallet.")
             & ("balance"            --^ "Current balance, in Lovelaces.")
             & ("assuranceLevel"     --^ "The assurance level of the wallet.")
+            & ("createdAt"           --^ "The timestamp that the wallet was created.")
         )
 
 instance Arbitrary EosWallet where
     arbitrary = EosWallet <$> arbitrary
                           <*> pure "My EOS-wallet"
+                          <*> arbitrary
                           <*> arbitrary
                           <*> arbitrary
                           <*> arbitrary
@@ -985,6 +976,9 @@ instance BuildableSafeGen EosWallet where
     eoswalName
     eoswalAddressPoolGap
     eoswalBalance
+
+instance Buildable [EosWallet] where
+    build = bprint listJson
 
 --------------------------------------------------------------------------------
 -- Addresses
@@ -1952,35 +1946,6 @@ instance BuildableSafeGen SignedTransaction where
         stxTransaction
         stxAddrsWithProofs
 
--- | We use it for external wallets: if it's already presented in wallet db,
--- we return a wallet info and complete transactions history as well.
-data WalletAndTxHistory = WalletAndTxHistory
-    { waltxsWallet       :: !Wallet
-    , waltxsTransactions :: ![Transaction]
-    } deriving (Eq, Ord, Show, Generic)
-
-deriveJSON Aeson.defaultOptions ''WalletAndTxHistory
-
-instance ToSchema WalletAndTxHistory where
-    declareNamedSchema =
-        genericSchemaDroppingPrefix "waltxs" (\(--^) props -> props
-            & ("wallet"       --^ "Wallet information.")
-            & ("transactions" --^ "List of all transactions related to this wallet.")
-        )
-
-instance Arbitrary WalletAndTxHistory where
-    arbitrary = WalletAndTxHistory <$> arbitrary
-                                   <*> arbitrary
-
-deriveSafeBuildable ''WalletAndTxHistory
-instance BuildableSafeGen WalletAndTxHistory where
-    buildSafeGen sl WalletAndTxHistory{..} = bprint ("{"
-        %" wallet="%buildSafe sl
-        %" transactions="%buildSafe sl
-        %" }")
-        waltxsWallet
-        waltxsTransactions
-
 newtype WalletSoftwareVersion = WalletSoftwareVersion SoftwareVersion
     deriving (Eq, Generic, Show)
 
@@ -2207,6 +2172,7 @@ instance Example PaymentDistribution
 instance Example AccountUpdate
 instance Example Wallet
 instance Example EosWallet
+instance Example UpdateEosWallet
 instance Example WalletUpdate
 instance Example WalletOperation
 instance Example PasswordUpdate
@@ -2220,6 +2186,7 @@ instance Example NewAddress
 instance Example ShieldedRedemptionCode
 instance Example WalletPassPhrase
 instance Example WalletCoin
+instance Example PublicKey
 
 -- | We have a specific 'Example' instance for @'V1' 'Address'@ because we want
 -- to control the length of the examples. It is possible for the encoded length
@@ -2271,20 +2238,6 @@ instance Example TransactionSignatureAsBase16 where
     example = TransactionSignatureAsBase16Unsafe <$> pure
         "5840709cc240ac9ad78cbf47c3eec76df917423943e34339277593e8e2b8c9f9f2e59583023bfbd8e26c40dff6a7fa424600f9b942819533d8afee37a5ac6d813207"
 
-instance Example PublicKey where
-    example = PublicKey <$> pure xpub
-      where
-        xpub = rights
-            [ CC.xpub
-            . fromJust
-            . decodeBase58 bitcoinAlphabet
-            . encodeUtf8 $ encodedPublicKey
-            ] !! 0
-
-        encodedPublicKey :: Text
-        encodedPublicKey =
-            "bNfWjshJG9xxy6VkpV2KurwGah3jQWjGb4QveDGZteaCwupdKWAi371r8uS5yFCny5i5EQuSNSLKqvRHmWEoHe45pZ"
-
 instance Example NewEosWallet where
     example = NewEosWallet <$> example
                            <*> example
@@ -2315,10 +2268,6 @@ instance Example AddressAndPath where
 instance Example UnsignedTransaction where
     example = UnsignedTransaction <$> example
                                   <*> example
-
-instance Example WalletAndTxHistory where
-    example = WalletAndTxHistory <$> example
-                                 <*> example
 
 instance Example AddressWithProof where
     example = AddressWithProof <$> example

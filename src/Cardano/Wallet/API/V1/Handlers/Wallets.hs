@@ -15,14 +15,28 @@ import           Pos.Core.Common (Coin (..))
 
 
 -- | All the @Servant@ handlers for wallet-specific operations.
-handlers :: PassiveWalletLayer IO -> ServerT Wallets.API Handler
-handlers pwl =  newWallet pwl
-           :<|> listWallets pwl
-           :<|> updatePassword pwl
-           :<|> deleteWallet pwl
-           :<|> getWallet pwl
-           :<|> updateWallet pwl
-           :<|> getUtxoStatistics pwl
+fullyOwnedHandlers :: PassiveWalletLayer IO -> ServerT Wallets.FullyOwnedAPI Handler
+fullyOwnedHandlers pwl =
+        newWallet pwl
+   :<|> listWallets pwl
+   :<|> updatePassword pwl
+   :<|> deleteWallet pwl
+   :<|> getWallet pwl
+   :<|> updateWallet pwl
+   :<|> getUtxoStatistics pwl
+
+externallyOwnedHandlers :: PassiveWalletLayer IO -> ServerT Wallets.ExternallyOwnedAPI Handler
+externallyOwnedHandlers pwl =
+         createEosWallets pwl
+    :<|> readEosWallets pwl
+    :<|> updateEosWallets pwl
+    :<|> deleteEosWallets pwl
+    :<|> listEosWallets pwl
+
+
+--------------------------------------------------------------------------------
+-- FULLY OWNED WALLETS
+--------------------------------------------------------------------------------
 
 -- | Creates a new or restores an existing @wallet@ given a 'NewWallet' payload.
 -- Returns to the client the representation of the created or restored
@@ -102,3 +116,49 @@ getUtxoStatistics pwl wid = do
          Left e  -> throwM e
          Right w ->
             return $ single $ V1.computeUtxoStatistics V1.log10 (map snd w)
+
+
+--------------------------------------------------------------------------------
+-- EXTERNALLY OWNED WALLETS
+--------------------------------------------------------------------------------
+
+createEosWallets
+    :: PassiveWalletLayer IO
+    -> NewEosWallet
+    -> Handler (APIResponse EosWallet)
+createEosWallets pwl req = do
+    res <- liftIO $ WalletLayer.createEosWallet pwl req
+    case res of
+        Left e  -> throwM e
+        Right w -> return $ single w
+
+readEosWallets
+    :: PassiveWalletLayer IO
+    -> WalletId
+    -> Handler (APIResponse EosWallet)
+readEosWallets _ _ = do
+    throwM $ err501 { errBody = "Not Implemented" }
+
+updateEosWallets
+    :: PassiveWalletLayer IO
+    -> WalletId
+    -> UpdateEosWallet
+    -> Handler (APIResponse EosWallet)
+updateEosWallets _ _ _ = do
+    throwM $ err501 { errBody = "Not Implemented" }
+
+deleteEosWallets
+    :: PassiveWalletLayer IO
+    -> WalletId
+    -> Handler NoContent
+deleteEosWallets _ _ = do
+    throwM $ err501 { errBody = "Not Implemented" }
+
+listEosWallets
+    :: PassiveWalletLayer IO
+    -> RequestParams
+    -> FilterOperations '[WalletId, Coin] EosWallet
+    -> SortOperations EosWallet
+    -> Handler (APIResponse [EosWallet])
+listEosWallets _ _ _ _ = do
+    throwM $ err501 { errBody = "Not Implemented" }

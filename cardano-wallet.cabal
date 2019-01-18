@@ -172,8 +172,6 @@ library
       Cardano.Wallet.API.V1.Transactions
       Cardano.Wallet.API.V1.Types
       Cardano.Wallet.API.V1.Wallets
-      Cardano.Wallet.API.WIP
-      Cardano.Wallet.API.WIP.Handlers
       Cardano.Wallet.Action
       Cardano.Wallet.Client
       Cardano.Wallet.Client.Http
