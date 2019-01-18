@@ -43,15 +43,16 @@ import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
                      (CoinSelectionOptions (..), ExpenseRegulation (..),
                      InputGrouping (..), newOptions)
 import           Cardano.Wallet.Kernel.DB.AcidState
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, decodeHdRootId,
+                     eskToHdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel (..),
                      HasSpendingPassword (..), HdAccountId (..),
                      HdAccountIx (..), HdAddressIx (..), HdRoot (..),
-                     HdRootId (..), WalletName (..), eskToHdRootId,
-                     hdAccountIdIx)
+                     WalletName (..), hdAccountIdIx)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Create (initHdRoot)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
                      (HardeningMode (..), deriveIndex)
-import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
+import           Cardano.Wallet.Kernel.DB.InDb (InDb (..))
 import           Cardano.Wallet.Kernel.DB.TxMeta
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import           Cardano.Wallet.Kernel.Internal
@@ -215,15 +216,14 @@ spec = do
                 pm          <- pick arbitrary
                 Addresses.withFixture pm $ \keystore layer pwallet Addresses.Fixture{..} -> do
                     liftIO $ Keystore.insert fixtureHdRootId fixtureESK keystore
-                    let (HdRootId hdRoot) = fixtureHdRootId
-                        wId = sformat build (view fromDb hdRoot)
+                    let wId = sformat build fixtureHdRootId
                         accIdx = fixtureAccountId ^. hdAccountIdIx . to getHdAccountIx
                         hdl = (pwallet ^. Kernel.walletMeta)
                         testMeta = unSTB testMetaSTB
-                    case decodeTextAddress wId of
-                        Left _         -> expectationFailure "decodeTextAddress failed"
-                        Right rootAddr -> do
-                            let meta = testMeta {_txMetaWalletId = rootAddr, _txMetaAccountIx = accIdx}
+                    case decodeHdRootId wId of
+                        Nothing     -> expectationFailure "decodeHdRootId failed"
+                        Just rootId -> do
+                            let meta = testMeta {_txMetaWalletId = rootId, _txMetaAccountIx = accIdx}
                             _ <- liftIO $ WalletLayer.createAddress layer
                                     (V1.NewAddress
                                         Nothing
@@ -264,8 +264,7 @@ spec = do
                 pm <- pick arbitrary
                 NewPayment.withFixture @IO pm (InitialADA 10000) (PayLovelace 25) $ \keystore activeLayer aw NewPayment.Fixture{..} -> do
                     liftIO $ Keystore.insert fixtureHdRootId fixtureESK keystore
-                    let (HdRootId (InDb rootAddress)) = fixtureHdRootId
-                    let sourceWallet = V1.WalletId (sformat build rootAddress)
+                    let sourceWallet = V1.WalletId (sformat build fixtureHdRootId)
                     let accountIndex = Kernel.Conv.toAccountId fixtureAccountId
                     let destinations =
                             fmap (\(addr, coin) -> V1.PaymentDistribution (V1.WalAddress addr) (V1.WalletCoin coin)
@@ -287,8 +286,7 @@ spec = do
                             let txid = _txMetaId meta
                                 pw = Kernel.walletPassive aw
                                 layer = walletPassiveLayer activeLayer
-                                (HdRootId hdRoot) = fixtureHdRootId
-                                wId = sformat build (view fromDb hdRoot)
+                                wId = sformat build fixtureHdRootId
                                 accIdx = Kernel.Conv.toAccountId fixtureAccountId
                                 hdl = (pw ^. Kernel.walletMeta)
                             db <- Kernel.getWalletSnapshot pw

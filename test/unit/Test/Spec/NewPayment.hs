@@ -41,10 +41,11 @@ import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
                      (CoinSelectionOptions (..), ExpenseRegulation (..),
                      InputGrouping (..), newOptions)
 import           Cardano.Wallet.Kernel.DB.AcidState
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, eskToHdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel (..),
                      HasSpendingPassword (..), HdAccountId (..),
-                     HdAccountIx (..), HdAddressIx (..), HdRootId (..),
-                     WalletName (..), eskToHdRootId, hdAccountIdIx)
+                     HdAccountIx (..), HdAddressIx (..), WalletName (..),
+                     hdAccountIdIx)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Create (initHdRoot)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
                      (HardeningMode (..), deriveIndex)
@@ -162,8 +163,7 @@ withPayment :: MonadIO n
 withPayment pm initialBalance toPay action = do
     withFixture pm initialBalance toPay $ \keystore activeLayer _ Fixture{..} -> do
         liftIO $ Keystore.insert fixtureHdRootId fixtureESK keystore
-        let (HdRootId (InDb rootAddress)) = fixtureHdRootId
-        let sourceWallet = V1.WalletId (sformat build rootAddress)
+        let sourceWallet = V1.WalletId (sformat build fixtureHdRootId)
         let accountIndex = Kernel.Conv.toAccountId fixtureAccountId
         let destinations =
                 fmap (\(addr, coin) -> V1.PaymentDistribution (V1.WalAddress addr) (V1.WalletCoin coin)

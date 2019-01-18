@@ -21,9 +21,10 @@ import           Pos.Crypto (EncryptedSecretKey, PassPhrase)
 
 import           Cardano.Wallet.Kernel.DB.AcidState (CreateHdAccount (..), DB,
                      DeleteHdAccount (..), UpdateHdAccountName (..))
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (AccountName (..),
                      HdAccount (..), HdAccountId (..), HdAccountIx (..),
-                     HdAccountState (..), HdAccountUpToDate (..), HdRootId,
+                     HdAccountState (..), HdAccountUpToDate (..),
                      UnknownHdAccount (..), hdAccountName)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Create
                      (CreateHdAccountError (..), initHdAccount)

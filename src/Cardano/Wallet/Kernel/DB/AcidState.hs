@@ -71,6 +71,7 @@ import           Pos.Crypto (PublicKey)
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.EosHdWallet
 import qualified Cardano.Wallet.Kernel.DB.EosHdWallet.Create as EosHD
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Delete as HD

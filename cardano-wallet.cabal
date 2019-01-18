@@ -200,6 +200,7 @@ library
       Cardano.Wallet.Kernel.DB.EosHdWallet
       Cardano.Wallet.Kernel.DB.EosHdWallet.Create
       Cardano.Wallet.Kernel.DB.HdWallet
+      Cardano.Wallet.Kernel.DB.HdRootId
       Cardano.Wallet.Kernel.DB.HdWallet.Create
       Cardano.Wallet.Kernel.DB.HdWallet.Delete
       Cardano.Wallet.Kernel.DB.HdWallet.Derivation

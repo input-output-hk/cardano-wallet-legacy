@@ -35,6 +35,7 @@ import           Cardano.Wallet.Kernel.DB.AcidState (ApplyHistoricalBlocks (..),
                      RestorationComplete (..), RestoreHdWallet (..),
                      dbHdWallets)
 import           Cardano.Wallet.Kernel.DB.BlockContext
+import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.HdWallet.Create (CreateHdRootError)
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD

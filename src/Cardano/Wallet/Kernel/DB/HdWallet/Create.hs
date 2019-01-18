@@ -26,6 +26,7 @@ import qualified Formatting.Buildable
 
 import qualified Pos.Core as Core
 
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.Util.AcidState

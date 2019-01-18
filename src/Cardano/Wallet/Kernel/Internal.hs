@@ -59,7 +59,7 @@ import           Pos.Util.Wlog (Severity (..))
 import           Cardano.Wallet.API.Types.UnitOfMeasure (MeasuredIn (..),
                      UnitOfMeasure (..))
 import           Cardano.Wallet.Kernel.DB.AcidState (DB)
-import           Cardano.Wallet.Kernel.DB.HdWallet (HdRootId)
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.TxMeta
 import           Cardano.Wallet.Kernel.Diffusion (WalletDiffusion (..))
 import           Cardano.Wallet.Kernel.Keystore (Keystore)

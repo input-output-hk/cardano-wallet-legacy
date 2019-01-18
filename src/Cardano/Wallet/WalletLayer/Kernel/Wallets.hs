@@ -29,6 +29,7 @@ import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (dbHdWallets)
 import qualified Cardano.Wallet.Kernel.DB.EosHdWallet as EosHD
+import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import qualified Cardano.Wallet.Kernel.DB.TxMeta.Types as Kernel
@@ -220,9 +221,8 @@ deleteWallet wallet wId = runExceptT $ do
     rootId <- withExceptT DeleteWalletWalletIdDecodingFailed $ fromRootId wId
     withExceptT DeleteWalletError $ ExceptT $ liftIO $ do
         let nm = makeNetworkMagic (wallet ^. walletProtocolMagic)
-        let walletId = HD.getHdRootId rootId ^. fromDb
         Kernel.removeRestoration wallet rootId
-        Kernel.deleteTxMetas (wallet ^. walletMeta) walletId Nothing
+        Kernel.deleteTxMetas (wallet ^. walletMeta) rootId Nothing
         Kernel.deleteHdWallet nm wallet rootId
 
 -- | Deletes external wallets. Please note that there's no actions in the

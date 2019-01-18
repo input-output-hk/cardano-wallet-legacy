@@ -22,6 +22,7 @@ import           Pos.Crypto (EncryptedSecretKey)
 import           Cardano.Wallet.Kernel.DB.AcidState (CancelPending (..),
                      NewForeign (..), NewForeignError (..), NewPending (..),
                      NewPendingError (..))
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.InDb
 import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending

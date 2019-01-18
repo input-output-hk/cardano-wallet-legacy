@@ -61,6 +61,8 @@ import           Test.QuickCheck (Arbitrary (..), Gen)
 import qualified Pos.Chain.Txp as Txp
 import qualified Pos.Core as Core
 
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
+
 import           Test.Pos.Core.Arbitrary ()
 
 {-------------------------------------------------------------------------------
@@ -100,7 +102,7 @@ data TxMeta = TxMeta {
     , _txMetaIsOutgoing :: Bool
 
       -- The Wallet that added this Tx.
-    , _txMetaWalletId   :: Core.Address
+    , _txMetaWalletId   :: HdRootId
 
       -- The account index that added this Tx
     , _txMetaAccountIx  :: Word32
@@ -150,7 +152,7 @@ txIdIsomorphic t1 t2 =
         ]
 
 type AccountIx = Word32
-type WalletId = Core.Address
+type WalletId = HdRootId
 -- | Filter Operations on Accounts. This is hiererchical: you can`t have AccountIx without WalletId.
 data AccountFops = Everything | AccountFops WalletId (Maybe AccountIx)
 
@@ -292,8 +294,8 @@ data MetaDBHandle = MetaDBHandle {
       closeMetaDB   :: IO ()
     , migrateMetaDB :: IO ()
     , clearMetaDB   :: IO ()
-    , deleteTxMetas :: Core.Address -> Maybe Word32 -> IO ()
-    , getTxMeta     :: Txp.TxId -> Core.Address -> Word32 -> IO (Maybe TxMeta)
+    , deleteTxMetas :: HdRootId -> Maybe Word32 -> IO ()
+    , getTxMeta     :: Txp.TxId -> HdRootId -> Word32 -> IO (Maybe TxMeta)
     , putTxMeta     :: TxMeta -> IO ()
     , putTxMetaT    :: TxMeta -> IO PutReturn
     , getAllTxMetas :: IO [TxMeta]

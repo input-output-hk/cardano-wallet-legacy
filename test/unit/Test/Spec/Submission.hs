@@ -7,8 +7,9 @@ module Test.Spec.Submission (
 
 import           Universum hiding (elems)
 
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, eskToHdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (HdAccountId (..),
-                     HdAccountIx (..), HdRootId (..), eskToHdRootId)
+                     HdAccountIx (..))
 import           Cardano.Wallet.Kernel.DB.Spec.Pending (Pending)
 import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending
 import           Cardano.Wallet.Kernel.Submission
