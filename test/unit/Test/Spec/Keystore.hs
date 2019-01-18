@@ -19,8 +19,7 @@ import           Test.QuickCheck.Monadic (forAllM, monadicIO, pick, run)
 import           Pos.Core.NetworkMagic (NetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, hash, safeKeyGen)
 
-import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId,
-                     mkHdRootIdForFOWallet)
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, eskToHdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet ()
 import           Cardano.Wallet.Kernel.Keystore (DeletePolicy (..), Keystore)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
@@ -40,7 +39,7 @@ genKeypair :: NetworkMagic
                   )
 genKeypair nm = do
     (_, esk) <- arbitrary >>= safeKeyGen
-    return $ bimap STB STB (mkHdRootIdForFOWallet nm esk, esk)
+    return $ bimap STB STB (eskToHdRootId nm esk, esk)
 
 genKeys :: NetworkMagic
         -> Gen ( ShowThroughBuild HdRootId

@@ -35,7 +35,7 @@ import qualified Cardano.Wallet.Kernel.Addresses as Kernel
 import qualified Cardano.Wallet.Kernel.BListener as Kernel
 import qualified Cardano.Wallet.Kernel.DB.AcidState as DB
 import qualified Cardano.Wallet.Kernel.DB.BlockContext as DB
-import           Cardano.Wallet.Kernel.DB.HdRootId (mkHdRootIdForFOWallet)
+import           Cardano.Wallet.Kernel.DB.HdRootId (eskToHdRootId)
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
 import qualified Cardano.Wallet.Kernel.DB.Resolved as DB
@@ -228,7 +228,7 @@ equivalentT useWW activeWallet esk = \mkWallet w ->
                 -> Utxo
                 -> TranslateT EquivalenceViolation m HD.HdAccountId
     walletBootT ctxt utxo = do
-        let newRootId = mkHdRootIdForFOWallet nm esk
+        let newRootId = eskToHdRootId nm esk
         let (Just defaultAddress) = Kernel.newHdAddress nm
                                                         esk
                                                         emptyPassphrase
@@ -261,7 +261,7 @@ equivalentT useWW activeWallet esk = \mkWallet w ->
 
             utxoByAccount = prefilterUtxo rootId esk utxo
             accountIds    = Map.keys utxoByAccount
-            rootId        = mkHdRootIdForFOWallet nm esk
+            rootId        = eskToHdRootId nm esk
 
             createWalletErr e =
                 error $ "ERROR: could not create the HdWallet due to " <> show e

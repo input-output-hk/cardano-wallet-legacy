@@ -338,8 +338,8 @@ instance FromField HdRootId where
     fromField f = do
         rootId <- decodeHdRootId <$> fromField f
         case rootId of
-           Left _  -> returnError Sqlite.ConversionFailed f "not a valid HdRootId"
-           Right a -> pure a
+           Nothing -> returnError Sqlite.ConversionFailed f "not a valid HdRootId"
+           Just a  -> pure a
 
 instance FromBackendRow Sqlite Core.Address
 

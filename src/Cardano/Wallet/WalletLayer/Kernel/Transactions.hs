@@ -112,8 +112,8 @@ castAccountFiltering mbWalletId mbAccountIndex =
         -- AccountIndex doesn`t uniquely identify an Account, so we shouldn`t continue without a WalletId.
         (Just (V1.WalletId wId), _) ->
             case HD.decodeHdRootId wId of
-                Left _       -> throwError $ GetTxAddressDecodingFailed wId
-                Right rootId -> return $ TxMeta.AccountFops rootId (V1.getAccIndex <$> mbAccountIndex)
+                Nothing     -> throwError $ GetTxAddressDecodingFailed wId
+                Just rootId -> return $ TxMeta.AccountFops rootId (V1.getAccIndex <$> mbAccountIndex)
 
 -- This function reads at most the head of the SortOperations and expects to find "created_at".
 castSorting :: Monad m => S.SortOperations V1.Transaction -> ExceptT GetTxError m (Maybe TxMeta.Sorting)

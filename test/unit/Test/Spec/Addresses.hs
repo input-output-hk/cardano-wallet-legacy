@@ -30,8 +30,7 @@ import           Cardano.Wallet.API.V1.Handlers.Addresses as Handlers
 import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel.Addresses as Kernel
 import           Cardano.Wallet.Kernel.DB.AcidState
-import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId,
-                     mkHdRootIdForFOWallet)
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, eskToHdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel (..),
                      HasSpendingPassword (..), HdAccountId (..),
                      HdAccountIx (..), WalletName (..))
@@ -75,7 +74,7 @@ data AddressFixture = AddressFixture {
 prepareFixtures :: NetworkMagic -> Fixture.GenPassiveWalletFixture Fixture
 prepareFixtures nm = do
     let (_, esk) = safeDeterministicKeyGen (B.pack $ replicate 32 0x42) mempty
-    let newRootId = mkHdRootIdForFOWallet nm esk
+    let newRootId = eskToHdRootId nm esk
     now <- getCurrentTimestamp
     newRoot <- initHdRoot <$> pure newRootId
                           <*> pure (WalletName "A wallet")

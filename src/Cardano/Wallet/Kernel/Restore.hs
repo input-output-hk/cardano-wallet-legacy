@@ -140,7 +140,7 @@ restoreWallet pw hasSpendingPassword defaultCardanoAddress name assurance esk = 
 
   where
     nm = makeNetworkMagic (pw ^. walletProtocolMagic)
-    creds = (HD.mkHdRootIdForFOWallet nm esk, esk)
+    creds = (HD.eskToHdRootId nm esk, esk)
 
     prefilter :: Blund -> IO (PrefilteredBlock, [TxMeta])
     prefilter = mkPrefilter pw creds

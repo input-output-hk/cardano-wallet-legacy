@@ -69,8 +69,10 @@ import           UTxO.Util (exceptT)
 -------------------------------------------------------------------------------}
 
 fromRootId :: Monad m => V1.WalletId -> ExceptT Text m HD.HdRootId
-fromRootId (V1.WalletId wId) =
-    exceptT (HD.decodeHdRootId wId)
+fromRootId (V1.WalletId wId) = exceptT $ maybe
+    (Left $ "fromRootId: can't decode given Text to HdRootId: " <> wId)
+    Right
+    (HD.decodeHdRootId wId)
 
 fromAccountId :: Monad m
               => V1.WalletId -> V1.AccountIndex -> ExceptT Text m HD.HdAccountId

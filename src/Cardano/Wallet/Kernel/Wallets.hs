@@ -183,7 +183,7 @@ createHdWallet pw mnemonic spendingPassword assuranceLevel walletName = do
     -- (We got interrupted before inserting it) causing a system panic.
     -- We can fix this properly as part of [CBR-404].
     let nm = makeNetworkMagic (pw ^. walletProtocolMagic)
-        newRootId = HD.mkHdRootIdForFOWallet nm esk
+        newRootId = HD.eskToHdRootId nm esk
     Keystore.insert newRootId esk (pw ^. walletKeystore)
 
     -- STEP 2.5: Generate the fresh Cardano Address which will be used for the
@@ -299,7 +299,7 @@ createWalletHdRnd :: PassiveWallet
 createWalletHdRnd pw hasSpendingPassword defaultCardanoAddress name assuranceLevel esk createWallet = do
     created <- InDb <$> getCurrentTimestamp
     let nm      = makeNetworkMagic (pw ^. walletProtocolMagic)
-        rootId  = HD.mkHdRootIdForFOWallet nm esk
+        rootId  = HD.eskToHdRootId nm esk
         newRoot = HD.initHdRoot rootId
                                 name
                                 (hdSpendingPassword created)

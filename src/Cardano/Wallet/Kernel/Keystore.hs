@@ -44,8 +44,7 @@ import           Pos.Util.UserSecret (UserSecret, getUSPath, isEmptyUserSecret,
                      writeRaw, writeUserSecretRelease, _wusRootKey)
 import           Pos.Util.Wlog (addLoggerName)
 
-import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId,
-                     mkHdRootIdForFOWallet)
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, eskToHdRootId)
 import qualified Cardano.Wallet.Kernel.Util.Strict as Strict
 
 -- Internal storage necessary to smooth out the legacy 'UserSecret' API.
@@ -267,7 +266,7 @@ lookup nm wId (Keystore ks) =
 -- | Lookup a key directly inside the 'UserSecret'.
 lookupKey :: NetworkMagic -> UserSecret -> HdRootId -> Maybe EncryptedSecretKey
 lookupKey nm us walletId =
-    Data.List.find (\k -> mkHdRootIdForFOWallet nm k == walletId) (us ^. usKeys)
+    Data.List.find (\k -> eskToHdRootId nm k == walletId) (us ^. usKeys)
 
 -- | Return all Keystore 'usKeys'
 getKeys :: Keystore -> IO [EncryptedSecretKey]

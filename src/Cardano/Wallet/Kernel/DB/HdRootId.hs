@@ -4,96 +4,100 @@
 module Cardano.Wallet.Kernel.DB.HdRootId (
       HdRootId
     , decodeHdRootId
-    , mkHdRootIdForEOWallet
-    , mkHdRootIdForFOWallet
+    , genHdRootId
+    , eskToHdRootId
     ) where
 
 import           Universum
 
+import qualified Data.ByteString as BS
 import           Data.ByteString.Base58 (bitcoinAlphabet, decodeBase58,
                      encodeBase58)
 import           Data.SafeCopy (base, deriveSafeCopy)
-import qualified Data.UUID as Uuid
-import           Data.UUID.V4 (nextRandom)
-
-import           Test.QuickCheck (Arbitrary (..))
-import           Test.QuickCheck.Gen (oneof)
-
+import qualified Data.UUID as UUID
+import qualified Data.UUID.V4 as UUID
 import           Formatting (bprint, build)
 import qualified Formatting.Buildable
+import           Test.QuickCheck (Arbitrary (..))
+import           Test.QuickCheck.Gen (chooseAny, oneof, vectorOf)
 
 import qualified Pos.Binary.Class as Bi
-import qualified Pos.Core as Core
+import           Pos.Core (Address, addrToBase58, makePubKeyAddressBoot)
 import           Pos.Core.NetworkMagic (NetworkMagic (..))
-import           Pos.Crypto (EncryptedSecretKey, encToPublic)
+import           Pos.Crypto (EncryptedSecretKey, encToPublic,
+                     safeDeterministicKeyGen)
+import           Test.Pos.Core.Arbitrary ()
+
 
 -- | Unified identifier for wallets (both FO and EO ones).
 -- Technically it contains a text, but actually it contains one from two options:
 --
--- 1. for FO-wallets - 'Core.Address' made from wallet's root public key, in Base58-format.
+-- 1. for FO-wallets - 'Address' made from wallet's root public key, in Base58-format.
 -- 2. for EO-wallets - 'UUID', in Base58-format.
 --
--- Please note that using 'Core.Address' as wallet's identifier is a bad decision,
--- but since exchanges and users may have wallets' ids stored on their side we
--- have to keep backward-compatibility for existing ids.
+-- Using 'Address' for HdRootId was an arbitrary decision which turns out to
+-- yield confusion and interrogations. There's no particular relationship
+-- between an HdRootId and an actual Address. At that time, we needed an ID that
+-- can be unique and determinically computed from a root encrypted secret key.
+-- Addresses have that property, and therefore, were picked as root ids.
+--
+-- Since users of the API may have wallets' ids stored on their side, we can't
+-- really change that for existing wallets in order to keep backward
+-- compatibility.
 newtype HdRootId = HdRootId { getHdRootId :: Text }
     deriving (Eq, Ord, Show, Generic)
+deriveSafeCopy 1 'base ''HdRootId
 
 instance NFData HdRootId
 
--- | TODO: It is not very arbitrary, maybe we should improve it.
 instance Arbitrary HdRootId where
-    arbitrary = oneof
-        [ pure $ HdRootId "Ae2tdPwUPEZ18ZjTLnLVr9CEvUEUX4eW1LBHbxxxJgxdAYHrDeSCSbCxrvx"
-        , pure $ HdRootId "J7rQqaLLHBFPrgJXwpktaMB1B1kQBXAyc2uRSfRPzNVGiv6TdxBzkPNBUWysZZZdhFG9gRy3sQFfX5wfpLbi4XTFGFxTg"
-        , pure $ HdRootId "kKyjp8hUCYDK1UhU8Wg5sBu3Ud2TqFDCbTWCo9ySDGjaLLk73"
-        , pure $ HdRootId "QxUZbMEK9Vg6V9UWQ1BRLwrBoQQuYt2RjnEW4vRmXBtsT9WKk"
-        , pure $ HdRootId "maKVJgoL6c65NfUJDGeyQhcK6b9rynpEdwKe4T1wn3jfEZZRv"
-        , pure $ HdRootId "SC6jKYB9gFnNhvZNuQW6e7MnWM59pwcyNp1ayp9n9iEiucYWr"
-        , pure $ HdRootId "RqTmjdzemFRaZzu4TZH9qwS5NefKgTZ6fp2bELoX8hwJPSuBw"
-        ]
+    arbitrary = oneof [ arbitraryFO , arbitraryEO ]
+      where
+        arbitraryFO = do
+            (_, esk) <- safeDeterministicKeyGen
+                <$> (BS.pack <$> vectorOf 32 arbitrary)
+                <*> pure mempty
+            nm <- arbitrary
+            pure (eskToHdRootId nm esk)
+
+        arbitraryEO =
+            HdRootId
+            . decodeUtf8
+            . encodeBase58 bitcoinAlphabet
+            . UUID.toASCIIBytes
+            <$> chooseAny
 
 instance Buildable HdRootId where
     build (HdRootId uniqueId) = bprint build uniqueId
 
-deriveSafeCopy 1 'base ''HdRootId
 
--- | Decodes 'HdRootId' from the text.
-decodeHdRootId :: Text -> Either Text HdRootId
-decodeHdRootId rawId = decodeFromBS . encodeUtf8 $ rawId
+decodeHdRootId :: Text -> Maybe HdRootId
+decodeHdRootId txt = do
+    bs <- decodeBase58 bitcoinAlphabet (encodeUtf8 txt)
+    decodeAddr bs <|> decodeUUID bs
   where
-    decodeFromBS :: ByteString -> Either Text HdRootId
-    decodeFromBS bs = do
-        let base58Err = "Invalid Base58 representation of HdRootId"
-        decodedBS <- maybeToRight base58Err $ decodeBase58 bitcoinAlphabet bs
-        let probablyUUID = decodeUUID decodedBS
-            probablyAddress = decodeAddress decodedBS
-        if isRight probablyUUID
-            then probablyUUID
-            else probablyAddress
+    decodeAddr :: ByteString -> Maybe HdRootId
+    decodeAddr bs = do
+        void $ either (\_ -> Nothing) Just $ Bi.decodeFull' @Address bs
+        pure $ HdRootId txt
+    decodeUUID :: ByteString -> Maybe HdRootId
+    decodeUUID bs = do
+        void $ UUID.fromASCIIBytes $ bs
+        pure $ HdRootId txt
 
-    decodeUUID bs = maybe
-        (Left ("HdRootId is not a UUID" :: Text))
-        (\_ -> Right $ HdRootId rawId)
-        $ Uuid.fromASCIIBytes bs
-
-    decodeAddress bs = either
-        (\_ -> Left "Invalid HdRootId (it's not an Address nor UUID)")
-        (\(_addr :: Core.Address) -> Right $ HdRootId rawId)
-        $ Bi.decodeFull' bs
-
-mkHdRootIdForEOWallet :: IO HdRootId
-mkHdRootIdForEOWallet = HdRootId
+genHdRootId :: IO HdRootId
+genHdRootId = HdRootId
     . decodeUtf8
     . encodeBase58 bitcoinAlphabet
-    . Uuid.toASCIIBytes <$> nextRandom
+    . UUID.toASCIIBytes
+    <$> UUID.nextRandom
 
-mkHdRootIdForFOWallet
+eskToHdRootId
     :: NetworkMagic
     -> EncryptedSecretKey
     -> HdRootId
-mkHdRootIdForFOWallet nm esk = HdRootId
+eskToHdRootId nm esk = HdRootId
     . decodeUtf8
-    . Core.addrToBase58
-    . (Core.makePubKeyAddressBoot nm)
+    . addrToBase58
+    . (makePubKeyAddressBoot nm)
     . encToPublic $ esk

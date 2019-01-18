@@ -43,8 +43,8 @@ import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
                      (CoinSelectionOptions (..), ExpenseRegulation (..),
                      InputGrouping (..), newOptions)
 import           Cardano.Wallet.Kernel.DB.AcidState
-import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, decodeHdRootId)
-import           Cardano.Wallet.Kernel.DB.HdRootId (mkHdRootIdForFOWallet)
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, decodeHdRootId,
+                     eskToHdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel (..),
                      HasSpendingPassword (..), HdAccountId (..),
                      HdAccountIx (..), HdAddressIx (..), HdRoot (..),
@@ -100,7 +100,7 @@ prepareFixtures :: NetworkMagic
 prepareFixtures nm initialBalance = do
     fixt <- forM [0x11, 0x22] $ \b -> do
         let (_, esk) = safeDeterministicKeyGen (B.pack $ replicate 32 b) mempty
-        let newRootId = mkHdRootIdForFOWallet nm esk
+        let newRootId = eskToHdRootId nm esk
         now <- getCurrentTimestamp
         newRoot <- initHdRoot <$> pure newRootId
                             <*> pure (WalletName "A wallet")
@@ -221,8 +221,8 @@ spec = do
                         hdl = (pwallet ^. Kernel.walletMeta)
                         testMeta = unSTB testMetaSTB
                     case decodeHdRootId wId of
-                        Left _       -> expectationFailure "decodeHdRootId failed"
-                        Right rootId -> do
+                        Nothing     -> expectationFailure "decodeHdRootId failed"
+                        Just rootId -> do
                             let meta = testMeta {_txMetaWalletId = rootId, _txMetaAccountIx = accIdx}
                             _ <- liftIO $ WalletLayer.createAddress layer
                                     (V1.NewAddress

@@ -41,8 +41,7 @@ import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
                      (CoinSelectionOptions (..), ExpenseRegulation (..),
                      InputGrouping (..), newOptions)
 import           Cardano.Wallet.Kernel.DB.AcidState
-import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId,
-                     mkHdRootIdForFOWallet)
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, eskToHdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel (..),
                      HasSpendingPassword (..), HdAccountId (..),
                      HdAccountIx (..), HdAddressIx (..), WalletName (..),
@@ -89,7 +88,7 @@ prepareFixtures :: NetworkMagic
                 -> Fixture.GenActiveWalletFixture Fixture
 prepareFixtures nm initialBalance toPay = do
     let (_, esk) = safeDeterministicKeyGen (B.pack $ replicate 32 0x42) mempty
-    let newRootId = mkHdRootIdForFOWallet nm esk
+    let newRootId = eskToHdRootId nm esk
     now <- getCurrentTimestamp
     newRoot <- initHdRoot <$> pure newRootId
                           <*> pure (WalletName "A wallet")

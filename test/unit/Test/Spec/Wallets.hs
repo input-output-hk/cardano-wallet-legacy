@@ -82,11 +82,8 @@ prepareFixtures = do
              Right v1Wallet -> do
                  let (V1.WalletId wId) = V1.walId v1Wallet
                  case decodeHdRootId wId of
-                      Left e -> error $  "Error decoding HdRootId "
-                                      <> show wId
-                                      <> ": "
-                                      <> show e
-                      Right rootId -> do
+                      Nothing -> error $ "Error decoding HdRootId " <> show wId
+                      Just rootId -> do
                           return (Fixture spendingPassword v1Wallet rootId)
 
 -- | A 'Fixture' where we already have a new 'Wallet' in scope.

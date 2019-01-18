@@ -7,8 +7,7 @@ module Test.Spec.Submission (
 
 import           Universum hiding (elems)
 
-import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId,
-                     mkHdRootIdForFOWallet)
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, eskToHdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (HdAccountId (..),
                      HdAccountIx (..))
 import           Cardano.Wallet.Kernel.DB.Spec.Pending (Pending)
@@ -65,7 +64,7 @@ myAccountId = HdAccountId {
     }
     where
         myHdRootId :: HdRootId
-        myHdRootId = (mkHdRootIdForFOWallet NetworkMainOrStage) .
+        myHdRootId = (eskToHdRootId NetworkMainOrStage) .
                                snd .
                                safeDeterministicKeyGen (BS.pack (replicate 32 0)) $ mempty
 

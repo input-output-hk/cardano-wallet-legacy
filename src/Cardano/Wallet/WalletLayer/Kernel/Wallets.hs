@@ -99,7 +99,7 @@ createWallet wallet newWalletRequest = liftIO $ do
                    -> HD.AssuranceLevel
                    -> IO (Either CreateWalletError V1.Wallet)
     restoreFromESK nm esk pwd walletName hdAssuranceLevel = runExceptT $ do
-        let rootId = HD.mkHdRootIdForFOWallet nm esk
+        let rootId = HD.eskToHdRootId nm esk
 
         -- Insert the 'EncryptedSecretKey' into the 'Keystore'
         liftIO $ Keystore.insert rootId esk (wallet ^. walletKeystore)
