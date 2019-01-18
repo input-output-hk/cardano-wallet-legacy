@@ -46,6 +46,10 @@ module Cardano.Wallet.Kernel.NodeStateAdaptor (
   , mockNodeState
   , mockNodeStateDef
   , defMockNodeStateParams
+
+  -- for dev
+  , cached
+  , Cache (..)
   ) where
 
 import           Universum
@@ -682,3 +686,21 @@ instance Buildable MissingBlock where
 instance Buildable UnknownEpoch where
   build (UnknownEpoch slotId) =
     bprint ("UnknownEpoch " % build) slotId
+
+
+data Cache k v = Cache (TVar (Maybe v)) (v -> IO Bool)
+
+-- |Cache an IO action in a cache with a capacity of one.
+cached :: Cache k a -> IO a -> IO a
+cached (Cache tvar validator) a =
+    readTVarIO tvar >>= \case
+        Just a' -> do
+            valid <- validator a'
+            if valid
+            then return a'
+            else a >>= saveAndReturn
+        Nothing -> a >>= saveAndReturn
+  where
+    saveAndReturn v = do
+        atomically $ writeTVar tvar (Just v)
+        return v
