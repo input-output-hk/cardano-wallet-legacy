@@ -94,15 +94,14 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , assumeHdAccountExists
     -- * IsOurs
   , IsOurs(..)
-  , ourAddresses
   ) where
 
 import           Universum hiding ((:|))
 
 import           Control.Lens (Getter, at, lazy, to, (+~), (?~), _Wrapped)
 import           Control.Lens.TH (makeLenses)
-import qualified Data.Map as Map
 import qualified Data.IxSet.Typed as IxSet (Indexable (..))
+import qualified Data.Map as Map
 import           Data.SafeCopy (base, deriveSafeCopy)
 
 import           Test.QuickCheck (Arbitrary (..), oneof)
@@ -111,14 +110,14 @@ import           Formatting (bprint, build, (%))
 import qualified Formatting.Buildable
 import           Serokell.Util (listJson)
 
-import           Pos.Chain.Txp (TxOut (..), TxOutAux (..))
 import qualified Pos.Core as Core
 import           Pos.Core.Chrono (NewestFirst (..))
 import           Pos.Crypto (HDPassphrase)
 import qualified Pos.Crypto as Core
 
 import           Cardano.Wallet.API.V1.Types (WalAddress (..))
-import           Cardano.Wallet.Kernel.AddressPool (AddressPool, lookupAddressPool)
+import           Cardano.Wallet.Kernel.AddressPool (AddressPool,
+                     lookupAddressPool)
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.InDb
@@ -506,15 +505,6 @@ instance IsOurs [(HdRootId, Core.EncryptedSecretKey)] where
         let addrId = HdAddressId accId addressIx
         return $ HdAddress addrId (InDb addr)
 
--- TODO @uroboros Delete or generalise?
--- | Extract our addresses from block outputs.
-ourAddresses
-    :: [TxOutAux]
-    -> [(HdRootId, Core.EncryptedSecretKey)]
-    -> [HdAddress]
-ourAddresses outs = evalState $
-    fmap catMaybes $ mapM (state . isOurs . txOutAddress . toaOut) outs
-
 decryptHdLvl2DerivationPath
     :: Core.HDPassphrase
     -> Core.Address
@@ -532,7 +522,7 @@ decryptHdLvl2DerivationPath hdPass addr = do
 
 -- | Search for an address in a map of AddressPools indexed by HdAccountId.
 --  This map represents the State context.
---  If an Address is found, we update the state with a p ossibly updated AddressPool
+--  If an Address is found, we update the state with a possibly updated AddressPool
 --  (since the address pool may have been extended in response to the address discovery)
 --  Otherwise if we don't find the address, we return the state unchanged.
 instance IsOurs (Map HdAccountId (AddressPool Core.Address)) where
@@ -541,7 +531,6 @@ instance IsOurs (Map HdAccountId (AddressPool Core.Address)) where
             (Just hdAddr, pools & at (accountId hdAddr) ?~ pool')
         Nothing ->
             (Nothing,pools)
-
         where
             addrMatch
                 = foldl' (<|>) Nothing $ map lookupAddressInPool' (Map.toList pools)
@@ -553,7 +542,7 @@ instance IsOurs (Map HdAccountId (AddressPool Core.Address)) where
                 -> Maybe (HdAddress, AddressPool Core.Address)
             lookupAddressInPool' (accId, pool)
                 = case lookupAddressPool addr pool of
-                    (Nothing, _) ->  Nothing
+                    (Nothing, _) -> Nothing
                     (Just (_, ix), pool') -> (Just (mkHdAddress accId ix, pool'))
 
             mkHdAddress :: HdAccountId -> Word -> HdAddress
