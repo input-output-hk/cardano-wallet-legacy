@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module Cardano.Wallet.Action (actionWithWallet) where
 
 import           Universum
@@ -68,7 +69,7 @@ actionWithWallet
             genesisConfig
             nodeRes
             ntpStatus
-            eta
+            NodeStateAdaptor.toMonadIO
             nodeClient
 
     liftIO $ Keystore.bracketLegacyKeystore userSecret $ \keystore -> do
@@ -93,14 +94,6 @@ actionWithWallet
                 walletLayer
                 (runNode genesisConfig txpConfig nodeRes plugs)
   where
-
-    -- TODO(@anviking #87): proper error handling
-    eta :: MonadIO m => Show e => ExceptT e m a -> m a
-    eta e = do
-        x <- runExceptT e
-        case x of
-            Right a   -> return a
-            Left  err -> error $ "Error talking to the Node: " <> (show err)
 
     plugins :: (PassiveWalletLayer IO, PassiveWallet)
             -> NodeHttpClient
@@ -140,3 +133,4 @@ actionWithWallet
       where
         loggerName :: LoggerName
         loggerName = lpDefaultName . bpLoggingParams . npBaseParams $ nodeParams
+
