@@ -4,7 +4,7 @@ packages:
 
 extra-deps:
 - git: https://github.com/input-output-hk/cardano-sl
-  commit: d705192d962fbe2ce4db8faf748b93666b35ad7b
+  commit: e8595ce910677c74aba6aeb1bd2f0077a186b7ee
   subdirs:
     - acid-state-exts
     - binary

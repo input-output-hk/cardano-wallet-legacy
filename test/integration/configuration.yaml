@@ -52,6 +52,11 @@ default: &default
     requiresNetworkMagic: RequiresNoMagic
     dbSerializeVersion: 0
 
+  txValidationRules:
+    attribResrictEpoch: 2
+    addrAttribSize: 128
+    txAttribSize: 128
+
   ntp: &default_ntp
     # NTP
     responseTimeout: 30000000 # 30 sec
