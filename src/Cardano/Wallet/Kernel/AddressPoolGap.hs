@@ -14,6 +14,7 @@ import           Universum
 import qualified Data.Aeson.Options as Aeson
 import           Data.Aeson.TH
 import           Data.Default (Default (..))
+import           Data.SafeCopy (base, deriveSafeCopy)
 import           Data.Swagger (ToSchema (..), defaultSchemaOptions,
                      genericDeclareNamedSchema)
 import           Data.Text.Read (decimal)
@@ -77,3 +78,5 @@ mkAddressPoolGap gap
     | otherwise = Left $ GapOutOfRange gap
 
 deriveJSON Aeson.defaultOptions ''AddressPoolGap
+
+deriveSafeCopy 1 'base ''AddressPoolGap

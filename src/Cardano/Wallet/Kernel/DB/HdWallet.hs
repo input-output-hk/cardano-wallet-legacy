@@ -35,6 +35,8 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
     -- ** Lenses
     -- *** Wallet collection
   , hdWalletsRoots
+  , hdWalletsAddressPoolGaps
+  , hdWalletsAccountsPublicKeys
   , hdWalletsAccounts
   , hdWalletsAddresses
     -- *** Account ID
@@ -118,6 +120,7 @@ import qualified Pos.Crypto as Core
 import           Cardano.Wallet.API.V1.Types (WalAddress (..))
 import           Cardano.Wallet.Kernel.AddressPool (AddressPool,
                      lookupAddressPool)
+import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.InDb
@@ -654,6 +657,50 @@ instance IxSet.Indexable (HdAddressId ': SecondaryIndexedHdAddressIxs)
                 (ixFun ((:[]) . view (ixedIndexed . hdAddressAccountId)))
                 (ixFun ((:[]) . WalAddress . view (ixedIndexed . hdAddressAddress . fromDb)))
 
+--------------------------------------------------------------------------------
+
+-- | For each EOS-wallet we store its address pool gap,
+-- because we receive it during EOS-wallet creation.
+data HdRootAddressPoolGap = HdRootAddressPoolGap {
+      _hdRootAddressPoolGapId :: !HdRootId
+    , _hdRootAddressPoolGap   :: !AddressPoolGap
+    } deriving (Eq, Ord, Show, Generic)
+
+deriveSafeCopy 1 'base ''HdRootAddressPoolGap
+
+instance HasPrimKey HdRootAddressPoolGap where
+    type PrimKey HdRootAddressPoolGap = HdRootId
+    primKey = _hdRootAddressPoolGapId
+
+type SecondaryHdRootAddressPoolGapIxs = '[]
+type instance IndicesOf HdRootAddressPoolGap = SecondaryHdRootAddressPoolGapIxs
+
+instance IxSet.Indexable (HdRootId ': SecondaryHdRootAddressPoolGapIxs)
+                         (OrdByPrimKey HdRootAddressPoolGap) where
+    indices = ixList
+
+--------------------------------------------------------------------------------
+
+-- | For each account in EOS-wallet we store its public key,
+-- because we receive it during EOS-wallet creation.
+data HdAccountPublicKey = HdAccountPublicKey {
+      _hdAccountPublicKeyId :: !HdAccountId
+    , _hdAccountPublicKey   :: !Core.PublicKey
+    } deriving (Eq, Ord, Generic)
+
+deriveSafeCopy 1 'base ''HdAccountPublicKey
+
+instance HasPrimKey HdAccountPublicKey where
+    type PrimKey HdAccountPublicKey = HdAccountId
+    primKey = _hdAccountPublicKeyId
+
+type SecondaryHdAccountPublicKey = '[]
+type instance IndicesOf HdAccountPublicKey = SecondaryHdAccountPublicKey
+
+instance IxSet.Indexable (HdAccountId ': SecondaryHdAccountPublicKey)
+                         (OrdByPrimKey HdAccountPublicKey) where
+    indices = ixList
+
 {-------------------------------------------------------------------------------
   Top-level HD wallet structure
 -------------------------------------------------------------------------------}
@@ -663,16 +710,23 @@ instance IxSet.Indexable (HdAddressId ': SecondaryIndexedHdAddressIxs)
 -- We use a flat "relational" structure rather than nested maps so that we can
 -- go from address to wallet just as easily as the other way around.
 data HdWallets = HdWallets {
-    _hdWalletsRoots     :: !(IxSet HdRoot)
-  , _hdWalletsAccounts  :: !(IxSet HdAccount)
-  , _hdWalletsAddresses :: !(IxSet (Indexed HdAddress))
+    _hdWalletsRoots              :: !(IxSet HdRoot)
+  , _hdWalletsAddressPoolGaps    :: !(IxSet HdRootAddressPoolGap)
+  , _hdWalletsAccountsPublicKeys :: !(IxSet HdAccountPublicKey)
+  , _hdWalletsAccounts           :: !(IxSet HdAccount)
+  , _hdWalletsAddresses          :: !(IxSet (Indexed HdAddress))
   }
 
 deriveSafeCopy 1 'base ''HdWallets
 makeLenses ''HdWallets
 
 initHdWallets :: HdWallets
-initHdWallets = HdWallets IxSet.empty IxSet.empty IxSet.empty
+initHdWallets = HdWallets
+    IxSet.empty
+    IxSet.empty
+    IxSet.empty
+    IxSet.empty
+    IxSet.empty
 
 {-------------------------------------------------------------------------------
   Zoom to existing parts of a HD wallet
