@@ -27,10 +27,9 @@ import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import           Cardano.Wallet.Kernel.Migration (migrateLegacyDataLayer)
 import qualified Cardano.Wallet.Kernel.Mode as Kernel.Mode
 import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
-import           Cardano.Wallet.Server.CLI (NewWalletBackendParams (..),
-                     WalletBackendParams (..), getFullMigrationFlag,
-                     getWalletDbOptions, walletDbPath, walletNodeAddress,
-                     walletRebuildDb)
+import           Cardano.Wallet.Server.CLI (WalletBackendParams (..),
+                     getFullMigrationFlag, getWalletDbOptions, walletDbPath,
+                     walletNodeAddress, walletRebuildDb)
 import           Cardano.Wallet.Server.Middlewares
                      (faultInjectionHandleIgnoreAPI, throttleMiddleware,
                      unsupportedMimeTypeMiddleware, withDefaultHeader)
@@ -42,7 +41,7 @@ import qualified Cardano.Wallet.WalletLayer.Kernel as WalletLayer.Kernel
 -- | The "workhorse" responsible for starting a Cardano edge node plus a number of extra plugins.
 actionWithWallet
     :: (HasConfigurations, HasCompileInfo)
-    => NewWalletBackendParams
+    => WalletBackendParams
     -> Genesis.Config
     -> WalletConfiguration
     -> TxpConfiguration
@@ -52,7 +51,7 @@ actionWithWallet
     -> NodeResources EmptyMempoolExt
     -> IO ()
 actionWithWallet
-    params@(NewWalletBackendParams (WalletBackendParams{..}))
+    params@(WalletBackendParams{..})
     genesisConfig walletConfig txpConfig ntpConfig nodeParams _ nodeRes = do
     logInfo "[Attention] Software is built with the wallet backend"
     ntpStatus <- withNtpClient (ntpClientSettings ntpConfig)

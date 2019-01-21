@@ -32,7 +32,7 @@ data WalletStartupOptions = WalletStartupOptions {
 -- | TODO: Once we get rid of the legacy wallet, remove this.
 data ChooseWalletBackend =
     WalletLegacy !WalletBackendParams
-  | WalletNew    !NewWalletBackendParams
+  | WalletNew    !WalletBackendParams
   deriving Show
 
 -- | DB-specific options.
@@ -83,18 +83,12 @@ data WalletBackendParams = WalletBackendParams
     -- API.
     } deriving Show
 
--- | Start up parameters for the new wallet backend
---
--- TODO: This just wraps the legacy parameters at the moment.
-data NewWalletBackendParams = NewWalletBackendParams WalletBackendParams
-    deriving (Show)
-
-getWalletDbOptions :: NewWalletBackendParams -> WalletDBOptions
-getWalletDbOptions (NewWalletBackendParams WalletBackendParams{..}) =
+getWalletDbOptions :: WalletBackendParams -> WalletDBOptions
+getWalletDbOptions WalletBackendParams{..} =
     walletDbOptions
 
-getFullMigrationFlag :: NewWalletBackendParams -> Bool
-getFullMigrationFlag (NewWalletBackendParams WalletBackendParams{..}) =
+getFullMigrationFlag :: WalletBackendParams -> Bool
+getFullMigrationFlag WalletBackendParams{..} =
     forceFullMigration
 
 -- | A richer type to specify in which mode we are running this node.
@@ -150,7 +144,7 @@ chooseWalletBackendParser = choose
           ])
   where
     choose opts True  = WalletLegacy $ opts
-    choose opts False = WalletNew    $ NewWalletBackendParams opts
+    choose opts False = WalletNew    $ opts
 
 -- | The @Parser@ for the @WalletBackendParams@.
 walletBackendParamsParser :: Parser WalletBackendParams
