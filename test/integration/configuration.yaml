@@ -22,7 +22,7 @@ default: &default
           seed: 0
         blockVersionData: &default_core_genesis_spec_blockVersionData
           scriptVersion:     0
-          slotDuration:      5000
+          slotDuration:      10000
           maxBlockSize:      2000000
           maxHeaderSize:     2000000
           maxTxSize:         4096 # 4 Kb
@@ -101,7 +101,7 @@ default: &default
     networkConnectionTimeout: 15000 # ms
     conversationEstablishTimeout: 30000
     blockRetrievalQueueSize: 100
-    pendingTxResubmissionPeriod: 7 # seconds
+    pendingTxResubmissionPeriod: 60 # seconds
     walletProductionApi: false
     walletTxCreationDisabled: false
     explorerExtendedApi: false

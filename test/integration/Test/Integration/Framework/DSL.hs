@@ -449,7 +449,7 @@ expectTxStatusEventually
 expectTxStatusEventually statuses = \case
     Left e    -> wantedSuccessButError e
     Right txn -> do
-        result <- ask >>= \ctx -> timeout (60 * second) (waitForTxStatus ctx statuses txn)
+        result <- ask >>= \ctx -> timeout (120 * second) (waitForTxStatus ctx statuses txn)
         case result of
             Nothing -> fail "expectTxStatusEventually: waited too long for statuses."
             Just _  -> return ()
@@ -465,7 +465,7 @@ expectTxStatusNever
 expectTxStatusNever statuses = \case
     Left e    -> wantedSuccessButError e
     Right txn -> do
-        result <- ask >>= \ctx -> timeout (60 * second) (waitForTxStatus ctx statuses txn)
+        result <- ask >>= \ctx -> timeout (120 * second) (waitForTxStatus ctx statuses txn)
         case result of
             Nothing -> return ()
             Just _  -> fail "expectTxStatusNever: reached one of the provided statuses."
@@ -479,7 +479,7 @@ expectWalletEventuallyRestored
 expectWalletEventuallyRestored = \case
     Left e -> wantedSuccessButError e
     Right w -> do
-        result <- ask >>= \ctx -> timeout (60 * second) (waitForRestored ctx w)
+        result <- ask >>= \ctx -> timeout (120 * second) (waitForRestored ctx w)
         case result of
             Nothing -> fail "expectWalletEventuallyRestored: waited too long for restoration."
             Just _  -> return ()
