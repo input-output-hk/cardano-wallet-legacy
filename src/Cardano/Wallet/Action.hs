@@ -27,6 +27,7 @@ import qualified Cardano.Wallet.Kernel.Internal as Kernel.Internal
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import           Cardano.Wallet.Kernel.Migration (migrateLegacyDataLayer)
 import qualified Cardano.Wallet.Kernel.Mode as Kernel.Mode
+import           Cardano.Wallet.Kernel.NodeStateAdaptor (newNodeStateAdaptor)
 import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
 import           Cardano.Wallet.Server.CLI (WalletBackendParams (..),
                      getFullMigrationFlag, getWalletDbOptions, walletDbPath,
@@ -65,7 +66,7 @@ actionWithWallet
          walletNodeTlsCaCertPath
          walletNodeTlsPrivKey
 
-    let nodeState = NodeStateAdaptor.newNodeStateAdaptor
+    let nodeState = newNodeStateAdaptor
             genesisConfig
             nodeRes
             ntpStatus
