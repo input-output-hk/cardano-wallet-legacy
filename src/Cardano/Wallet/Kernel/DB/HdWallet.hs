@@ -19,6 +19,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , HdWallets(..)
   , HdAccountId(..)
   , HdAddressId(..)
+  , HdRootBase(..)
   , HdRoot(..)
   , HdAccount(..)
   , HdAddress(..)
@@ -46,6 +47,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , hdAddressIdIx
     -- *** Root
   , hdRootId
+  , hdRootBase
   , hdRootName
   , hdRootHasPassword
   , hdRootAssurance
@@ -98,7 +100,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
 
 import           Universum hiding ((:|))
 
-import           Control.Lens (Getter, at, lazy, to, (+~), (?~), _Wrapped)
+import           Control.Lens (Getter, at, lazy, lens, to, (+~), (?~), _Wrapped)
 import           Control.Lens.TH (makeLenses)
 import qualified Data.IxSet.Typed as IxSet (Indexable (..))
 import qualified Data.Map as Map
@@ -250,6 +252,23 @@ instance Ord HdAddressId where
 instance Arbitrary HdAddressId where
   arbitrary = HdAddressId <$> arbitrary <*> arbitrary
 
+-- | Contains specific stuff which is related to
+-- FO-wallets or EO-wallets.
+data HdRootBase =
+      -- Branch for FO-wallets.
+      HdRootBaseFO !HdRootId
+      -- Branch for EOS-wallets.
+      -- TODO: Add new EOS-related stuff in the next PR,
+      -- please see issue #231.
+    | HdRootBaseEO !HdRootId
+    deriving (Eq, Show)
+
+instance Arbitrary HdRootBase where
+    arbitrary = oneof
+        [ HdRootBaseFO <$> arbitrary
+        , HdRootBaseEO <$> arbitrary
+        ]
+
 -- | Root of a HD wallet
 --
 -- The wallet has sequentially assigned account indices and randomly assigned
@@ -258,7 +277,7 @@ instance Arbitrary HdAddressId where
 -- NOTE: We do not store the encrypted key of the wallet.
 data HdRoot = HdRoot {
       -- | Wallet ID
-      _hdRootId          :: !HdRootId
+      _hdRootBase        :: !HdRootBase
 
       -- | Wallet name
     , _hdRootName        :: !WalletName
@@ -430,6 +449,7 @@ makeLenses ''HdAddress
 deriveSafeCopy 1 'base ''HdAccountId
 deriveSafeCopy 1 'base ''HdAddressId
 
+deriveSafeCopy 1 'base ''HdRootBase
 deriveSafeCopy 1 'base ''HdRoot
 deriveSafeCopy 1 'base ''HdAccount
 deriveSafeCopy 1 'base ''HdAddress
@@ -441,6 +461,15 @@ deriveSafeCopy 1 'base ''HdAccountIncomplete
 {-------------------------------------------------------------------------------
   Derived lenses
 -------------------------------------------------------------------------------}
+
+hdRootId :: Lens' HdRoot HdRootId
+hdRootId = hdRootBase . lens getHdRootId setHdRootId
+  where
+    getHdRootId (HdRootBaseFO rootId) = rootId
+    getHdRootId (HdRootBaseEO rootId) = rootId
+
+    setHdRootId (HdRootBaseFO _) newId = HdRootBaseFO newId
+    setHdRootId (HdRootBaseEO _) newId = HdRootBaseEO newId
 
 hdAccountRootId :: Lens' HdAccount HdRootId
 hdAccountRootId = hdAccountId . hdAccountIdParent
@@ -619,7 +648,7 @@ deriveSafeCopy 1 'base ''UnknownHdAccount
 
 instance HasPrimKey HdRoot where
     type PrimKey HdRoot = HdRootId
-    primKey = _hdRootId
+    primKey = view hdRootId
 
 instance HasPrimKey HdAccount where
     type PrimKey HdAccount = HdAccountId
@@ -901,8 +930,22 @@ instance Buildable HasSpendingPassword where
     build (HasSpendingPassword (InDb lastUpdate)) =
         bprint ("updated " % build) lastUpdate
 
+instance Buildable HdRootBase where
+    build (HdRootBaseFO rootId) = bprint
+      ( "HdRootBaseFO "
+      % "{ id: " % build
+      % "}"
+      )
+      rootId
+    build (HdRootBaseEO rootId) = bprint
+      ( "HdRootBaseEO "
+      % "{ id: " % build
+      % "}"
+      )
+      rootId
+
 instance Buildable HdRoot where
-    build HdRoot{..} = bprint
+    build root@HdRoot{..} = bprint
       ( "HdRoot "
       % "{ id:          " % build
       % ", name:        " % build
@@ -911,7 +954,7 @@ instance Buildable HdRoot where
       % ", createdAt:   " % build
       % "}"
       )
-      _hdRootId
+      (root ^. hdRootId)
       _hdRootName
       _hdRootHasPassword
       _hdRootAssurance
