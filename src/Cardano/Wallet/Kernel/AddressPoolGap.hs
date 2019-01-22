@@ -11,11 +11,11 @@ module Cardano.Wallet.Kernel.AddressPoolGap (
 
 import           Universum
 
-import qualified Data.Aeson.Options as Aeson
-import           Data.Aeson.TH
+import           Control.Lens ((?~))
+import           Data.Aeson (FromJSON (..), ToJSON)
 import           Data.Default (Default (..))
-import           Data.Swagger (ToSchema (..), defaultSchemaOptions,
-                     genericDeclareNamedSchema)
+import           Data.Swagger (NamedSchema (..), ToSchema (..), maximum_,
+                     minimum_)
 import           Data.Text.Read (decimal)
 
 import           Formatting (bprint, build, int, sformat, (%))
@@ -27,7 +27,12 @@ import qualified Test.QuickCheck.Gen as Gen
 
 newtype AddressPoolGap = AddressPoolGap { getAddressPoolGap :: Word8 }
     deriving (Eq, Enum, Generic, Num, Ord, Real, Show)
-    deriving newtype (Integral)
+    deriving newtype (Integral, ToJSON)
+
+instance FromJSON AddressPoolGap where
+    parseJSON = parseJSON >=> \gap -> case mkAddressPoolGap gap of
+        Left err -> fail $ toString $ sformat build err
+        Right x  -> pure x
 
 instance Bounded AddressPoolGap where
     -- NOTE: these values may change in the future.
@@ -57,7 +62,11 @@ instance Buildable AddressPoolGap where
         bprint ("Address pool gap "%int) gap
 
 instance ToSchema AddressPoolGap where
-    declareNamedSchema = genericDeclareNamedSchema defaultSchemaOptions
+    declareNamedSchema _ = do
+        NamedSchema _ s <- declareNamedSchema $ Proxy @Word8
+        return $ NamedSchema (Just "AddressPoolGap") $ s
+            & minimum_ ?~ fromIntegral (minBound :: AddressPoolGap)
+            & maximum_ ?~ fromIntegral (maxBound :: AddressPoolGap)
 
 instance FromHttpApiData AddressPoolGap where
     parseQueryParam rawGap = case decimal rawGap of
@@ -75,5 +84,3 @@ mkAddressPoolGap gap
     | gap >= getAddressPoolGap minBound &&
       gap <= getAddressPoolGap maxBound = Right $ AddressPoolGap gap
     | otherwise = Left $ GapOutOfRange gap
-
-deriveJSON Aeson.defaultOptions ''AddressPoolGap
