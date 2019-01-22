@@ -6,6 +6,7 @@ module Test.Integration.Framework.DSL
     -- * Scenario
       scenario
     , xscenario
+    , pendingWith
     , Scenarios
     , Context(..)
 
@@ -51,6 +52,8 @@ module Test.Integration.Framework.DSL
     , ErrNotEnoughMoney(..)
     , TransactionStatus(..)
     , expectAddressInIndexOf
+    , expectListSizeEqual
+    , expectListItemFieldEqual
     , expectEqual
     , expectError
     , expectFieldEqual
@@ -67,6 +70,7 @@ module Test.Integration.Framework.DSL
     -- * Helpers
     , ($-)
     , (</>)
+    , (!!)
     , amount
     , assuranceLevel
     , backupPhrase
@@ -92,13 +96,16 @@ import           Crypto.Hash (hash)
 import           Crypto.Hash.Algorithms (Blake2b_256)
 import           Data.Aeson.QQ (aesonQQ)
 import qualified Data.ByteArray as ByteArray
+import qualified Data.Foldable as F
 import           Data.Generics.Internal.VL.Lens (lens)
 import           Data.Generics.Product.Typed (HasType, typed)
+import           Data.List ((!!))
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import           Language.Haskell.TH.Quote (QuasiQuoter)
 import           Test.Hspec.Core.Spec (SpecM, it, xit)
+import qualified Test.Hspec.Core.Spec as H
 import           Test.Hspec.Expectations.Lifted
 import           Test.QuickCheck (arbitrary, generate)
 import           Web.HttpApiData (ToHttpApiData (..))
@@ -121,7 +128,6 @@ import           Pos.Crypto (ShouldCheckPassphrase (..),
 import           Test.Integration.Framework.Request (HasHttpClient, request,
                      request_, successfulRequest, unsafeRequest, ($-))
 import           Test.Integration.Framework.Scenario (Scenario)
-
 --
 -- SCENARIO
 --
@@ -160,6 +166,18 @@ xscenario
     -> Scenario Context IO ()
     -> Scenarios Context
 xscenario = xit
+
+-- | Lifted version of `H.pendingWith` allowing for temporarily skipping
+-- scenarios from execution with a reason, like:
+--
+--      scenario title $ do
+--          pendingWith "This test fails due to bug #213"
+--          test
+pendingWith
+    :: (MonadIO m, MonadFail m)
+    => String
+    -> m ()
+pendingWith = liftIO . H.pendingWith
 
 --
 -- TYPES
@@ -354,6 +372,39 @@ spendingPasswordLastUpdate f (Wallet v1 v2 v3 v4 spLU v6 v7 v8 v9) =
 -- EXPECTATIONS
 --
 
+
+-- | Expects data list returned by the API to be of certain length
+expectListSizeEqual
+    :: (MonadIO m, MonadFail m, Foldable xs)
+    => Int
+    -> Either ClientError (xs a)
+    -> m ()
+expectListSizeEqual l = \case
+    Left e   -> wantedSuccessButError e
+    Right xs -> length (F.toList xs) `shouldBe` l
+
+-- | Expects that returned data list's particular item field matches the expected value
+--
+--   e.g.
+--     verify response
+--          [ expectDataListItemFieldEqual 0 walletName "first"
+--          , expectDataListItemFieldEqual 1 walletName "second"
+--          ]
+expectListItemFieldEqual
+    :: (MonadIO m, MonadFail m, Show a, Eq a)
+    => Int
+    -> Lens' s a
+    -> a
+    -> Either ClientError [s]
+    -> m ()
+expectListItemFieldEqual i getter a = \case
+    Left e -> wantedSuccessButError e
+    Right s
+        | length s > i -> expectFieldEqual getter a (Right (s !! i))
+        | otherwise    -> fail $
+            "expectListItemFieldEqual: trying to access the #" <> show i <>
+            " element from a list but there's none! "
+
 -- | The type signature is more scary than it seems. This drills into a given
 --   `a` type through the provided lens and sees whether field matches.
 --
@@ -502,7 +553,6 @@ expectWalletEventuallyRestored = \case
             Nothing -> fail "expectWalletEventuallyRestored: waited too long for restoration."
             Just _  -> return ()
 
-
 expectWalletError
     :: (MonadIO m, MonadFail m, Show a)
     => WalletError
@@ -511,7 +561,6 @@ expectWalletError
 expectWalletError e' = \case
     Right a -> wantedErrorButSuccess a
     Left e  -> e `shouldBe` (ClientWalletError e')
-
 
 -- | Verifies that the response is errored from a failed JSON validation
 -- matching part of the given message.
