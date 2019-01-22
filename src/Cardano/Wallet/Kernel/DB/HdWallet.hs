@@ -31,6 +31,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , finishRestoration
     -- ** Initialiser
   , initHdWallets
+  , initHdAddress
     -- ** Lenses
     -- *** Wallet collection
   , hdWalletsRoots
@@ -93,14 +94,14 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , assumeHdAccountExists
     -- * IsOurs
   , IsOurs(..)
-  , ourAddresses
   ) where
 
 import           Universum hiding ((:|))
 
-import           Control.Lens (Getter, at, lazy, to, (+~), _Wrapped)
+import           Control.Lens (Getter, at, lazy, to, (+~), (?~), _Wrapped)
 import           Control.Lens.TH (makeLenses)
 import qualified Data.IxSet.Typed as IxSet (Indexable (..))
+import qualified Data.Map as Map
 import           Data.SafeCopy (base, deriveSafeCopy)
 
 import           Test.QuickCheck (Arbitrary (..), oneof)
@@ -109,13 +110,14 @@ import           Formatting (bprint, build, (%))
 import qualified Formatting.Buildable
 import           Serokell.Util (listJson)
 
-import           Pos.Chain.Txp (TxOut (..), TxOutAux (..))
 import qualified Pos.Core as Core
 import           Pos.Core.Chrono (NewestFirst (..))
 import           Pos.Crypto (HDPassphrase)
 import qualified Pos.Crypto as Core
 
 import           Cardano.Wallet.API.V1.Types (WalAddress (..))
+import           Cardano.Wallet.Kernel.AddressPool (AddressPool,
+                     lookupAddressPool)
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.InDb
@@ -200,44 +202,6 @@ deriveSafeCopy 1 'base ''HdAccountIx
 deriveSafeCopy 1 'base ''HdAddressIx
 deriveSafeCopy 1 'base ''AssuranceLevel
 deriveSafeCopy 1 'base ''HasSpendingPassword
-
-
-{-------------------------------------------------------------------------------
-  Address relationship: isOurs?
--------------------------------------------------------------------------------}
-
-class IsOurs s where
-    isOurs :: Core.Address -> s -> (Maybe HdAddress, s)
-
--- | NOTE: We could modify the given state here to actually store decrypted
--- addresses in a `Map` to trade a decryption against a map lookup for already
--- decrypted addresses.
-instance IsOurs [(HdRootId, Core.EncryptedSecretKey)] where
-    isOurs addr s = (,s) $ foldl' (<|>) Nothing $ flip map s $ \(rootId, esk) -> do
-        (accountIx, addressIx) <- decryptHdLvl2DerivationPath (eskToHdPassphrase esk) addr
-        let accId = HdAccountId rootId accountIx
-        let addrId = HdAddressId accId addressIx
-        return $ HdAddress addrId (InDb addr)
-
--- | Extract our addresses from block outputs.
-ourAddresses
-    :: [TxOutAux]
-    -> [(HdRootId, Core.EncryptedSecretKey)]
-    -> [HdAddress]
-ourAddresses outs = evalState $
-    fmap catMaybes $ mapM (state . isOurs . txOutAddress . toaOut) outs
-
-decryptHdLvl2DerivationPath
-    :: Core.HDPassphrase
-    -> Core.Address
-    -> Maybe (HdAccountIx, HdAddressIx)
-decryptHdLvl2DerivationPath hdPass addr = do
-    hdPayload <- Core.aaPkDerivationPath $ Core.addrAttributesUnwrapped addr
-    derPath <- Core.unpackHDAddressAttr hdPass hdPayload
-    case derPath of
-        [a,b] -> Just (HdAccountIx a, HdAddressIx b)
-        _     -> Nothing
-
 
 {-------------------------------------------------------------------------------
   General-utility functions
@@ -351,7 +315,22 @@ data HdAddress = HdAddress {
     , _hdAddressAddress :: !(InDb Core.Address)
     } deriving (Eq, Ord)
 
-
+-- | New address in the specified account
+--
+-- Since the DB does not contain the private key of the wallet, we cannot
+-- do the actual address derivation here; this will be the responsibility of
+-- the caller (which will require the use of the spending password, if
+-- one exists).
+--
+-- Similarly, it will be the responsibility of the caller to pick a random
+-- address index, as we do not have access to a random number generator here.
+initHdAddress :: HdAddressId
+              -> Core.Address
+              -> HdAddress
+initHdAddress addrId address = HdAddress {
+      _hdAddressId      = addrId
+    , _hdAddressAddress = InDb address
+    }
 
 {-------------------------------------------------------------------------------
   Account state
@@ -505,6 +484,70 @@ hdAccountRestorationState a = case a ^. hdAccountState of
       ( _hdIncompleteHistorical ^. currentCheckpoint . cpContext . lazy,
         _hdIncompleteCurrent    ^. oldestCheckpoint  . pcheckpointContext)
 
+{-------------------------------------------------------------------------------
+  Address relationship: isOurs?
+-------------------------------------------------------------------------------}
+
+class IsOurs s where
+    isOurs :: Core.Address -> s -> (Maybe HdAddress, s)
+
+{-------------------------------------------------------------------------------
+  isOurs for Hd Random wallets
+-------------------------------------------------------------------------------}
+
+-- | NOTE: We could modify the given state here to actually store decrypted
+-- addresses in a `Map` to trade a decryption against a map lookup for already
+-- decrypted addresses.
+instance IsOurs [(HdRootId, Core.EncryptedSecretKey)] where
+    isOurs addr s = (,s) $ foldl' (<|>) Nothing $ flip map s $ \(rootId, esk) -> do
+        (accountIx, addressIx) <- decryptHdLvl2DerivationPath (eskToHdPassphrase esk) addr
+        let accId = HdAccountId rootId accountIx
+        let addrId = HdAddressId accId addressIx
+        return $ HdAddress addrId (InDb addr)
+
+decryptHdLvl2DerivationPath
+    :: Core.HDPassphrase
+    -> Core.Address
+    -> Maybe (HdAccountIx, HdAddressIx)
+decryptHdLvl2DerivationPath hdPass addr = do
+    hdPayload <- Core.aaPkDerivationPath $ Core.addrAttributesUnwrapped addr
+    derPath <- Core.unpackHDAddressAttr hdPass hdPayload
+    case derPath of
+        [a,b] -> Just (HdAccountIx a, HdAddressIx b)
+        _     -> Nothing
+
+{-------------------------------------------------------------------------------
+  isOurs for Hd Sequential wallets
+-------------------------------------------------------------------------------}
+
+-- | Search for an address in a map of AddressPools indexed by HdAccountId.
+--  This map represents the State context.
+--  If an Address is found, we update the state with a possibly updated AddressPool
+--  (since the address pool may have been extended in response to the address discovery)
+--  Otherwise if we don't find the address, we return the state unchanged.
+instance IsOurs (Map HdAccountId (AddressPool Core.Address)) where
+    isOurs addr pools = case addrMatch of
+        (Just (hdAddr, pool')) ->
+            (Just hdAddr, pools & at (accountId hdAddr) ?~ pool')
+        Nothing ->
+            (Nothing,pools)
+        where
+            addrMatch
+                = foldl' (<|>) Nothing $ map lookupAddressInPool' (Map.toList pools)
+
+            accountId a = a ^. hdAddressId . hdAddressIdParent
+
+            lookupAddressInPool'
+                :: (HdAccountId, AddressPool Core.Address)
+                -> Maybe (HdAddress, AddressPool Core.Address)
+            lookupAddressInPool' (accId, pool)
+                = case lookupAddressPool addr pool of
+                    (Nothing, _) -> Nothing
+                    (Just (_, ix), pool') -> (Just (mkHdAddress accId ix, pool'))
+
+            mkHdAddress :: HdAccountId -> Word -> HdAddress
+            mkHdAddress accId_ ix_
+                = initHdAddress (HdAddressId accId_ (HdAddressIx (fromIntegral ix_))) addr
 
 {-------------------------------------------------------------------------------
   Unknown identifiers

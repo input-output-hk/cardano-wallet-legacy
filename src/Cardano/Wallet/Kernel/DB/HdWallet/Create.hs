@@ -13,7 +13,6 @@ module Cardano.Wallet.Kernel.DB.HdWallet.Create (
     -- * Initial values
   , initHdRoot
   , initHdAccount
-  , initHdAddress
   ) where
 
 import           Universum
@@ -160,23 +159,6 @@ initHdAccount accountId st = HdAccount {
   where
     defName = AccountName $ sformat ("Account: " % build)
                                     (accountId ^. hdAccountIdIx)
-
--- | New address in the specified account
---
--- Since the DB does not contain the private key of the wallet, we cannot
--- do the actual address derivation here; this will be the responsibility of
--- the caller (which will require the use of the spending password, if
--- one exists).
---
--- Similarly, it will be the responsibility of the caller to pick a random
--- address index, as we do not have access to a random number generator here.
-initHdAddress :: HdAddressId
-              -> Core.Address
-              -> HdAddress
-initHdAddress addrId address = HdAddress {
-      _hdAddressId      = addrId
-    , _hdAddressAddress = InDb address
-    }
 
 {-------------------------------------------------------------------------------
   Pretty printing

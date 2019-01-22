@@ -25,9 +25,9 @@ import           Cardano.Wallet.Kernel.DB.AcidState (CreateHdAddress (..))
 import           Cardano.Wallet.Kernel.DB.HdWallet (HdAccountId,
                      HdAccountIx (..), HdAddress, HdAddressId (..),
                      HdAddressIx (..), hdAccountIdIx, hdAccountIdParent,
-                     hdAddressIdIx)
+                     hdAddressIdIx, initHdAddress)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Create
-                     (CreateHdAddressError (..), initHdAddress)
+                     (CreateHdAddressError (..))
 import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
                      (HardeningMode (..), deriveIndex)
 import           Cardano.Wallet.Kernel.Internal (PassiveWallet, walletKeystore,
