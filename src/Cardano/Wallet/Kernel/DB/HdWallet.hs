@@ -108,7 +108,7 @@ import           Data.SafeCopy (base, deriveSafeCopy)
 
 import           Test.QuickCheck (Arbitrary (..), oneof)
 
-import           Formatting (bprint, build, (%))
+import           Formatting (bprint, build, int, (%))
 import qualified Formatting.Buildable
 import           Serokell.Util (listJson)
 
@@ -252,21 +252,36 @@ instance Ord HdAddressId where
 instance Arbitrary HdAddressId where
   arbitrary = HdAddressId <$> arbitrary <*> arbitrary
 
+type CoreAddressPool = AddressPool Core.Address
+
 -- | Contains specific stuff which is related to
 -- FO-wallets or EO-wallets.
 data HdRootBase =
       -- Branch for FO-wallets.
       HdRootBaseFO !HdRootId
       -- Branch for EOS-wallets.
-      -- TODO: Add new EOS-related stuff in the next PR,
-      -- please see issue #231.
-    | HdRootBaseEO !HdRootId
-    deriving (Eq, Show)
+    | HdRootBaseEO {
+          _hdRootBaseEOId           :: !HdRootId
+        , _hdRootBaseEOAccountsKeys :: !(Map HdAccountId Core.PublicKey)
+        , _hdRootBaseEOAddressPools :: !(Map HdAccountId CoreAddressPool)
+      }
+
+instance Buildable (Map HdAccountId Core.PublicKey) where
+    build m = bprint
+        ("Accounts' public keys (total: "%int%") "%listJson)
+        (Map.size m)
+        (map (uncurry $ bprint (build%": "%build)) $ Map.toList m)
+
+instance Buildable (Map HdAccountId CoreAddressPool) where
+    build m = bprint
+        ("Accounts' address pools (total: "%int%") "%listJson)
+        (Map.size m)
+        (map (uncurry $ bprint (build%": "%build)) $ Map.toList m)
 
 instance Arbitrary HdRootBase where
     arbitrary = oneof
         [ HdRootBaseFO <$> arbitrary
-        , HdRootBaseEO <$> arbitrary
+        , HdRootBaseEO <$> arbitrary <*> arbitrary <*> arbitrary
         ]
 
 -- | Root of a HD wallet
@@ -294,7 +309,7 @@ data HdRoot = HdRoot {
 
       -- | When was this wallet created?
     , _hdRootCreatedAt   :: !(InDb Core.Timestamp)
-    } deriving (Eq, Show)
+    }
 
 instance Arbitrary HdRoot where
     arbitrary = HdRoot <$> arbitrary
@@ -465,11 +480,11 @@ deriveSafeCopy 1 'base ''HdAccountIncomplete
 hdRootId :: Lens' HdRoot HdRootId
 hdRootId = hdRootBase . lens getHdRootId setHdRootId
   where
-    getHdRootId (HdRootBaseFO rootId) = rootId
-    getHdRootId (HdRootBaseEO rootId) = rootId
+    getHdRootId (HdRootBaseFO rootId)     = rootId
+    getHdRootId (HdRootBaseEO rootId _ _) = rootId
 
-    setHdRootId (HdRootBaseFO _) newId = HdRootBaseFO newId
-    setHdRootId (HdRootBaseEO _) newId = HdRootBaseEO newId
+    setHdRootId (HdRootBaseFO _) newId     = HdRootBaseFO newId
+    setHdRootId (HdRootBaseEO _ pKeys pools) newId = HdRootBaseEO newId pKeys pools
 
 hdAccountRootId :: Lens' HdAccount HdRootId
 hdAccountRootId = hdAccountId . hdAccountIdParent
@@ -937,12 +952,16 @@ instance Buildable HdRootBase where
       % "}"
       )
       rootId
-    build (HdRootBaseEO rootId) = bprint
+    build (HdRootBaseEO rootId pKeys pools) = bprint
       ( "HdRootBaseEO "
       % "{ id: " % build
+      % ", accounts' public keys: " % build
+      % ", address pools: " % build
       % "}"
       )
       rootId
+      pKeys
+      pools
 
 instance Buildable HdRoot where
     build root@HdRoot{..} = bprint

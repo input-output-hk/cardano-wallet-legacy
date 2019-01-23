@@ -26,9 +26,12 @@ import           Universum
 
 import           Control.Lens (at, makeLenses)
 import qualified Data.Map as Map
+import           Data.SafeCopy (SafeCopy (..), contain, safeGet, safePut)
 import           Formatting (bprint, build, int, (%))
 import qualified Formatting.Buildable
 import           Serokell.Util (listJson)
+
+import           Test.QuickCheck (Arbitrary (..))
 
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 
@@ -58,6 +61,23 @@ instance Buildable address => Buildable (AddressPool address) where
         (Map.size $ pool ^. addresses)
         (map (uncurry $ bprint (build%":"%build)) $ Map.toList $ pool ^. addresses)
 
+instance (SafeCopy address, Ord address) => SafeCopy (AddressPool address) where
+    putCopy pool = contain $ do
+        safePut $ Map.toList (pool ^. addresses)
+        safePut (pool ^. gap)
+        -- | Please note that 'nextAddresses' is missing, because it'a a function
+        -- and we cannot serialize it.
+    getCopy = contain $ AddressPool
+        <$> (Map.fromList <$> safeGet)
+        <*> safeGet
+        -- Dummy function, because we didn't store a real function.
+        <*> pure (\_ -> Map.empty)
+
+instance (Arbitrary address, Ord address) => Arbitrary (AddressPool address) where
+    arbitrary = AddressPool
+        <$> arbitrary
+        <*> arbitrary
+        <*> arbitrary
 
 {-------------------------------------------------------------------------------
   Usage
