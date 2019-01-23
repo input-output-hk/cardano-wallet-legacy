@@ -136,7 +136,7 @@ initHdRoot :: HdRootId
            -> InDb Core.Timestamp
            -> HdRoot
 initHdRoot rootId name hasPass assurance created = HdRoot {
-      _hdRootBase        = HdRootBaseFO rootId
+      _hdRootId          = rootId
     , _hdRootName        = name
     , _hdRootHasPassword = hasPass
     , _hdRootAssurance   = assurance
@@ -151,7 +151,7 @@ initHdAccount :: HdAccountId
               -> HdAccountState
               -> HdAccount
 initHdAccount accountId st = HdAccount {
-      _hdAccountId    = accountId
+      _hdAccountBase  = HdAccountBaseFO accountId
     , _hdAccountName  = defName
     , _hdAccountState = st
     , _hdAccountAutoPkCounter = AutoIncrementKey 0

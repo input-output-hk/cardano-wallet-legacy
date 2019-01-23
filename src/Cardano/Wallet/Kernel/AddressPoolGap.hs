@@ -14,6 +14,7 @@ import           Universum
 import           Control.Lens ((?~))
 import           Data.Aeson (FromJSON (..), ToJSON)
 import           Data.Default (Default (..))
+import           Data.SafeCopy (base, deriveSafeCopy)
 import           Data.Swagger (NamedSchema (..), ToSchema (..), maximum_,
                      minimum_)
 import           Data.Text.Read (decimal)
@@ -84,3 +85,5 @@ mkAddressPoolGap gap
     | gap >= getAddressPoolGap minBound &&
       gap <= getAddressPoolGap maxBound = Right $ AddressPoolGap gap
     | otherwise = Left $ GapOutOfRange gap
+
+deriveSafeCopy 1 'base ''AddressPoolGap

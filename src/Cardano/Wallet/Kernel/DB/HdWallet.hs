@@ -19,8 +19,8 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , HdWallets(..)
   , HdAccountId(..)
   , HdAddressId(..)
-  , HdRootBase(..)
   , HdRoot(..)
+  , HdAccountBase(..)
   , HdAccount(..)
   , HdAddress(..)
     -- * HD Wallet state
@@ -47,13 +47,13 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , hdAddressIdIx
     -- *** Root
   , hdRootId
-  , hdRootBase
   , hdRootName
   , hdRootHasPassword
   , hdRootAssurance
   , hdRootCreatedAt
     -- *** Account
   , hdAccountId
+  , hdAccountBase
   , hdAccountName
   , hdAccountState
   , hdAccountStateCurrent
@@ -120,6 +120,7 @@ import qualified Pos.Crypto as Core
 import           Cardano.Wallet.API.V1.Types (WalAddress (..))
 import           Cardano.Wallet.Kernel.AddressPool (AddressPool,
                      lookupAddressPool)
+import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.InDb
@@ -252,23 +253,6 @@ instance Ord HdAddressId where
 instance Arbitrary HdAddressId where
   arbitrary = HdAddressId <$> arbitrary <*> arbitrary
 
--- | Contains specific stuff which is related to
--- FO-wallets or EO-wallets.
-data HdRootBase =
-      -- Branch for FO-wallets.
-      HdRootBaseFO !HdRootId
-      -- Branch for EOS-wallets.
-      -- TODO: Add new EOS-related stuff in the next PR,
-      -- please see issue #231.
-    | HdRootBaseEO !HdRootId
-    deriving (Eq, Show)
-
-instance Arbitrary HdRootBase where
-    arbitrary = oneof
-        [ HdRootBaseFO <$> arbitrary
-        , HdRootBaseEO <$> arbitrary
-        ]
-
 -- | Root of a HD wallet
 --
 -- The wallet has sequentially assigned account indices and randomly assigned
@@ -277,7 +261,7 @@ instance Arbitrary HdRootBase where
 -- NOTE: We do not store the encrypted key of the wallet.
 data HdRoot = HdRoot {
       -- | Wallet ID
-      _hdRootBase        :: !HdRootBase
+      _hdRootId          :: !HdRootId
 
       -- | Wallet name
     , _hdRootName        :: !WalletName
@@ -303,12 +287,30 @@ instance Arbitrary HdRoot where
                        <*> arbitrary
                        <*> (fmap InDb arbitrary)
 
+-- | Contains specific stuff which is related to
+-- FO-wallets or EO-wallets.
+data HdAccountBase =
+      -- Branch for FO-wallets.
+      HdAccountBaseFO !HdAccountId
+      -- Branch for EOS-wallets.
+    | HdAccountBaseEO {
+          _hdAccountBaseEOId             :: !HdAccountId
+        , _hdAccountBaseEOAccountKey     :: !Core.PublicKey
+        , _hdAccountBaseEOAddressPoolGap :: !AddressPoolGap
+      }
+
+instance Arbitrary HdAccountBase where
+    arbitrary = oneof
+        [ HdAccountBaseFO <$> arbitrary
+        , HdAccountBaseEO <$> arbitrary <*> arbitrary <*> arbitrary
+        ]
+
 -- | Account in a HD wallet
 --
 -- Key derivation is cheap
 data HdAccount = HdAccount {
       -- | Account index
-      _hdAccountId            :: !HdAccountId
+      _hdAccountBase          :: !HdAccountBase
 
       -- | Account name
     , _hdAccountName          :: !AccountName
@@ -449,8 +451,8 @@ makeLenses ''HdAddress
 deriveSafeCopy 1 'base ''HdAccountId
 deriveSafeCopy 1 'base ''HdAddressId
 
-deriveSafeCopy 1 'base ''HdRootBase
 deriveSafeCopy 1 'base ''HdRoot
+deriveSafeCopy 1 'base ''HdAccountBase
 deriveSafeCopy 1 'base ''HdAccount
 deriveSafeCopy 1 'base ''HdAddress
 
@@ -462,17 +464,19 @@ deriveSafeCopy 1 'base ''HdAccountIncomplete
   Derived lenses
 -------------------------------------------------------------------------------}
 
-hdRootId :: Lens' HdRoot HdRootId
-hdRootId = hdRootBase . lens getHdRootId setHdRootId
-  where
-    getHdRootId (HdRootBaseFO rootId) = rootId
-    getHdRootId (HdRootBaseEO rootId) = rootId
+getHdAccountId :: HdAccountBase -> HdAccountId
+getHdAccountId (HdAccountBaseFO accountId)     = accountId
+getHdAccountId (HdAccountBaseEO accountId _ _) = accountId
 
-    setHdRootId (HdRootBaseFO _) newId = HdRootBaseFO newId
-    setHdRootId (HdRootBaseEO _) newId = HdRootBaseEO newId
+setHdAccountId :: HdAccountBase -> HdAccountId -> HdAccountBase
+setHdAccountId (HdAccountBaseFO _) newAccountId = HdAccountBaseFO newAccountId
+setHdAccountId (HdAccountBaseEO _ pKey gap) newAccountId = HdAccountBaseEO newAccountId pKey gap
+
+hdAccountId :: Lens' HdAccount HdAccountId
+hdAccountId = hdAccountBase . lens getHdAccountId setHdAccountId
 
 hdAccountRootId :: Lens' HdAccount HdRootId
-hdAccountRootId = hdAccountId . hdAccountIdParent
+hdAccountRootId = hdAccountBase . lens getHdAccountId setHdAccountId . hdAccountIdParent
 
 hdAddressAccountId :: Lens' HdAddress HdAccountId
 hdAddressAccountId = hdAddressId . hdAddressIdParent
@@ -648,11 +652,11 @@ deriveSafeCopy 1 'base ''UnknownHdAccount
 
 instance HasPrimKey HdRoot where
     type PrimKey HdRoot = HdRootId
-    primKey = view hdRootId
+    primKey = _hdRootId
 
 instance HasPrimKey HdAccount where
     type PrimKey HdAccount = HdAccountId
-    primKey = _hdAccountId
+    primKey = view hdAccountId
 
 instance HasPrimKey (Indexed HdAddress) where
     type PrimKey (Indexed HdAddress) = HdAddressId
@@ -930,20 +934,6 @@ instance Buildable HasSpendingPassword where
     build (HasSpendingPassword (InDb lastUpdate)) =
         bprint ("updated " % build) lastUpdate
 
-instance Buildable HdRootBase where
-    build (HdRootBaseFO rootId) = bprint
-      ( "HdRootBaseFO "
-      % "{ id: " % build
-      % "}"
-      )
-      rootId
-    build (HdRootBaseEO rootId) = bprint
-      ( "HdRootBaseEO "
-      % "{ id: " % build
-      % "}"
-      )
-      rootId
-
 instance Buildable HdRoot where
     build root@HdRoot{..} = bprint
       ( "HdRoot "
@@ -960,16 +950,34 @@ instance Buildable HdRoot where
       _hdRootAssurance
       (_fromDb _hdRootCreatedAt)
 
+instance Buildable HdAccountBase where
+    build (HdAccountBaseFO accountId) = bprint
+      ( "HdAccountBaseFO "
+      % "{ id: " % build
+      % "}"
+      )
+      accountId
+    build (HdAccountBaseEO accountId pKey gap) = bprint
+      ( "HdAccountBaseEO "
+      % "{ id: " % build
+      % "{ public key: " % build
+      % "{ gap: " % build
+      % "}"
+      )
+      accountId
+      pKey
+      gap
+
 instance Buildable HdAccount where
     build HdAccount{..} = bprint
       ( "HdAccount "
-      % "{ id            " % build
+      % "{ base          " % build
       % ", name          " % build
       % ", state         " % build
       % ", autoPkCounter " % build
       % "}"
       )
-      _hdAccountId
+      _hdAccountBase
       _hdAccountName
       _hdAccountState
       _hdAccountAutoPkCounter
