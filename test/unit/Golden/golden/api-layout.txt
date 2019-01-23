@@ -14,7 +14,11 @@
 ├─ transactions/
 │  ├─ certificates/
 │  │  └─•
+│  ├─ externally-signed/
+│  │  └─•
 │  ├─ fees/
+│  │  └─•
+│  ├─ unsigned/
 │  │  └─•
 │  ├─•
 │  ┆
@@ -34,6 +38,19 @@
    │  ├─•
    │  ┆
    │  ├─•
+   │  ┆
+   │  └─•
+   ┆
+   ├─ externally-owned/
+   │  ├─•
+   │  ┆
+   │  ┆
+   │  ├─ <capture>/
+   │  │  ├─•
+   │  │  ┆
+   │  │  ├─•
+   │  │  ┆
+   │  │  └─•
    │  ┆
    │  └─•
    ┆

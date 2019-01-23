@@ -26,9 +26,6 @@ packages:
 - token-bucket-0.1.0.1
 - wai-middleware-throttle-0.3.0.0
 
-- git: https://github.com/avieth/plutus-prototype
-  commit: d094be301195fcd8ab864d793f114970426a4478
-
 - git: https://github.com/input-output-hk/cardano-report-server.git
   commit: 93f2246c54436e7f98cc363b4e0f8f1cb5e78717
 
@@ -42,13 +39,13 @@ packages:
   commit: 6c3747c1ac794f952de996dd7ba8a2f6d63bf132
 
 - git: https://github.com/serokell/kademlia.git
-  commit: 7120bb4d28e708acd52dfd61d3dca7914fac7d7f
+  commit: 7120bb4d28e708acd52dfd61d3dca7914fac7d7f # master
 
 - git: https://github.com/serokell/network-transport
   commit: 018a50b9042c2115c3ec9c9fd5ca5f28737dd29c
 
 - git: https://github.com/serokell/network-transport-tcp
-  commit: 3d56652123bd296dc759cd31947eb2a17924e68a
+  commit: 3d56652123bd296dc759cd31947eb2a17924e68a # csl-0.6.0
 
 - git: https://github.com/avieth/network-transport-inmemory
   commit: 5d8ff2b07b9df35cf61329a3d975e2c8cf95c12a
@@ -88,3 +85,6 @@ packages:
 
 - git: https://github.com/input-output-hk/serokell-util.git
   commit: 4ead9809e119483e7832da5f8224b0c4d4a2d5d6
+
+- git: https://github.com/primetype/inspector.git
+  commit: c975f4329365f0379c04358138e616fb96fb0b79

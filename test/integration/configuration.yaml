@@ -52,6 +52,11 @@ default: &default
     requiresNetworkMagic: RequiresNoMagic
     dbSerializeVersion: 0
 
+  txValidationRules:
+    attribResrictEpoch: 2
+    addrAttribSize: 128
+    txAttribSize: 128
+
   ntp: &default_ntp
     # NTP
     responseTimeout: 30000000 # 30 sec
@@ -98,7 +103,7 @@ default: &default
                     # of seconds.
 
   node: &default_node
-    networkConnectionTimeout: 15000 # ms
+    networkConnectionTimeout: 30000 # ms
     conversationEstablishTimeout: 30000
     blockRetrievalQueueSize: 100
     pendingTxResubmissionPeriod: 60 # seconds
