@@ -27,9 +27,6 @@ module Cardano.Wallet.Kernel.NodeStateAdaptor (
   , getFeePolicy
   , getSlotCount
   , getCoreConfig
-  , getSlotStart
-  , getNextEpochSlotDuration
-  , getNodeSyncProgress
   , curSoftwareVersion
   , compileInfo
   , getNtpDrift
@@ -41,7 +38,6 @@ module Cardano.Wallet.Kernel.NodeStateAdaptor (
   , waitForUpdate
   , defaultGetSlotStart
     -- * Support for tests
-  , NodeStateUnavailable(..)
   , MockNodeStateParams(..)
   , mockNodeState
   , mockNodeStateDef
@@ -53,10 +49,10 @@ module Cardano.Wallet.Kernel.NodeStateAdaptor (
 
 import           Universum
 
-import           Control.Lens (lens, to)
+import           Control.Lens (lens)
 import           Control.Monad.IO.Unlift (MonadUnliftIO, UnliftIO (UnliftIO),
                      askUnliftIO, unliftIO, withUnliftIO)
-import           Control.Monad.STM (orElse, retry)
+import           Control.Monad.STM (retry)
 import           Control.Retry (RetryPolicyM, RetryStatus, fullJitterBackoff,
                      limitRetries, retrying)
 import           Data.Conduit (mapOutputMaybe, runConduitRes, (.|))
@@ -83,8 +79,7 @@ import           Pos.Chain.Update (ConfirmedProposalState,
                      bvdTxFeePolicy)
 import qualified Pos.Chain.Update as Upd
 import           Pos.Context (NodeContext (..))
-import           Pos.Core (BlockCount, SlotCount, Timestamp (..), TxFeePolicy,
-                     difficultyL, getChainDifficulty)
+import           Pos.Core (BlockCount, SlotCount, Timestamp (..), TxFeePolicy)
 import qualified Pos.Core as Core
 import           Pos.Core.Slotting (HasSlottingVar (..), MonadSlots (..),
                      SlotId (..))
@@ -267,27 +262,6 @@ data NodeStateAdaptor m = Adaptor {
     -- | Get the @Genesis.Config@
     , getCoreConfig :: m Genesis.Config
 
-      -- | Get the start of a slot
-      --
-      -- When looking up data for past of the current epochs, the value should
-      -- be known.
-    , getSlotStart :: SlotId -> m (Either UnknownEpoch Timestamp)
-
-      -- | Get last known slot duration.
-    , getNextEpochSlotDuration :: m Millisecond
-
-      -- | Get the "sync progress". This term is desperately overloaded but
-      -- in this context we need something very simple: a tuple containing the
-      -- "global blockchain height" and the "node blockchain height". The
-      -- former is the maximum between the biggest height we observed from an
-      -- unsolicited block we received and the current local tip:
-      --
-      -- global_height = max (last_known_header, node_local_tip)
-      --
-      -- The latter is simply the node local tip, i.e. "how far we went into
-      -- chasing the global blockchain height during syncing".
-    , getNodeSyncProgress :: LockContext -> m (Maybe BlockCount, BlockCount)
-
       -- | Version of application (code running)
     , curSoftwareVersion :: m SoftwareVersion
 
@@ -393,16 +367,13 @@ newNodeStateAdaptor genesisConfig nr ntpStatus eta client = Adaptor
     , getTipSlotId             = eta $ API.unV1 . API.setSlotId <$> getNodeSettings client
     , getMaxTxSize             = eta $ fromIntegral . unMaxTxSize . API.setMaxTxSize <$> getNodeSettings client
     , getFeePolicy             = eta $ toCoreFeePolicy . API.setFeePolicy <$> getNodeSettings client
-    , getSlotStart             = \slotId -> run $ \_lock -> defaultGetSlotStart slotId
-    , getNextEpochSlotDuration =            run $ \_lock -> defaultGetNextEpochSlotDuration
-    , getNodeSyncProgress      = \lockCtx -> run $ defaultSyncProgress lockCtx
     , getSecurityParameter     = eta $ API.setSecurityParameter <$> getNodeSettings client
     , getSlotCount             = eta $ API.unV1 . API.setSlotCount <$> getNodeSettings client
     , getCoreConfig            = return genesisConfig
     , curSoftwareVersion       = return $ Upd.curSoftwareVersion Upd.updateConfiguration
     , compileInfo              = return $ Util.compileInfo
     , getNtpDrift              = defaultGetNtpDrift ntpStatus
-    , getCreationTimestamp     =             run $ \_lock -> defaultGetCreationTimestamp
+    , getCreationTimestamp     = defaultGetCreationTimestamp
     }
   where
     run :: forall a.
@@ -441,27 +412,8 @@ defaultGetSlotStart :: MonadIO m
 defaultGetSlotStart slotId =
     maybe (Left (UnknownEpoch slotId)) Right <$> Slotting.getSlotStart slotId
 
-defaultGetNextEpochSlotDuration :: MonadIO m => WithNodeState m Millisecond
-defaultGetNextEpochSlotDuration = Slotting.getNextEpochSlotDuration
-
-defaultSyncProgress :: (MonadIO m, MonadMask m, NodeConstraints)
-                    => LockContext
-                    -> Lock (WithNodeState m)
-                    -> WithNodeState m (Maybe BlockCount, BlockCount)
-defaultSyncProgress lockContext lock = do
-    (globalHeight, localHeight) <- lock lockContext $ \_localTipHash -> do
-        -- We need to grab the localTip again as '_localTip' has type
-        -- 'HeaderHash' but we cannot grab the difficulty out of it.
-        headerRef <- view (lensOf @LastKnownHeaderTag)
-        localTip  <- getTipHeader
-        mbHeader <- atomically $ readTVar headerRef `orElse` pure Nothing
-        pure (view (difficultyL . to getChainDifficulty) <$> mbHeader
-             ,view (difficultyL . to getChainDifficulty) localTip
-             )
-    return (max localHeight <$> globalHeight, localHeight)
-
-defaultGetCreationTimestamp :: MonadIO m => WithNodeState m Timestamp
-defaultGetCreationTimestamp = liftIO $ Util.getCurrentTimestamp
+defaultGetCreationTimestamp :: MonadIO m => m Timestamp
+defaultGetCreationTimestamp = liftIO $ Util.getCurrentTimestamp
 
 {-------------------------------------------------------------------------------
   Non-mockable functions
@@ -541,6 +493,9 @@ blockingLookupNtpOffset = \case
     NtpSyncUnavailable -> pure Nothing
 
 
+
+-- TODO: Remove use of WithNodeState
+
 -- | Get the most recent main block starting at the specified header
 --
 -- Returns nothing if there are no (regular) blocks on the blockchain yet.
@@ -590,7 +545,7 @@ instance Exception NodeStateUnavailable
 --
 -- See 'NodeStateAdaptor' for an explanation about what is and what is not
 -- mockable.
-mockNodeState :: (HasCallStack, MonadThrow m)
+mockNodeState :: MonadThrow m
               => MockNodeStateParams -> NodeStateAdaptor m
 mockNodeState MockNodeStateParams{..} =
     withDefConfiguration $ \genesisConfig ->
@@ -600,9 +555,6 @@ mockNodeState MockNodeStateParams{..} =
           withNodeState            = \_ -> throwM $ NodeStateUnavailable callStack
         , getTipSlotId             = return mockNodeStateTipSlotId
         , getSecurityParameter     = return mockNodeStateSecurityParameter
-        , getNextEpochSlotDuration = return mockNodeStateNextEpochSlotDuration
-        , getNodeSyncProgress      = \_ -> return mockNodeStateSyncProgress
-        , getSlotStart             = return . mockNodeStateSlotStart
         , getMaxTxSize             = return $ bvdMaxTxSize genesisBvd
         , getFeePolicy             = return $ bvdTxFeePolicy genesisBvd
         , getSlotCount             = return $ configEpochSlots genesisConfig
@@ -614,7 +566,7 @@ mockNodeState MockNodeStateParams{..} =
         }
 
 -- | Variation on 'mockNodeState' that uses the default params
-mockNodeStateDef :: (HasCallStack, MonadThrow m) => NodeStateAdaptor m
+mockNodeStateDef :: MonadThrow m => NodeStateAdaptor m
 mockNodeStateDef = mockNodeState defMockNodeStateParams
 
 -- | Parameters for 'mockNodeState'
