@@ -275,8 +275,7 @@ spec = do
                                 , pmtGroupingPolicy   = Nothing
                                 , pmtSpendingPassword = Nothing
                                 }
-                    res <- liftIO ((WalletLayer.pay activeLayer) mempty
-                                                                 IgnoreGrouping
+                    res <- liftIO ((WalletLayer.pay activeLayer) IgnoreGrouping
                                                                  SenderPaysFee
                                                                  newPayment
                                   )

@@ -185,8 +185,7 @@ spec = describe "NewPayment" $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withPayment pm (InitialADA 10000) (PayLovelace 10) $ \activeLayer newPayment -> do
-                    res <- liftIO ((WalletLayer.pay activeLayer) mempty
-                                                                 IgnoreGrouping
+                    res <- liftIO ((WalletLayer.pay activeLayer) IgnoreGrouping
                                                                  SenderPaysFee
                                                                  newPayment
                                   )
