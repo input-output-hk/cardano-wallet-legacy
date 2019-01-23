@@ -136,7 +136,7 @@ initHdRoot :: HdRootId
            -> InDb Core.Timestamp
            -> HdRoot
 initHdRoot rootId name hasPass assurance created = HdRoot {
-      _hdRootId          = rootId
+      _hdRootBase        = HdRootBaseFO rootId
     , _hdRootName        = name
     , _hdRootHasPassword = hasPass
     , _hdRootAssurance   = assurance
