@@ -93,7 +93,6 @@ makeLenses ''EosHdRoot
 makeLenses ''EosHdAccount
 makeLenses ''EosHdWallets
 
-deriveSafeCopy 1 'base ''AddressPoolGap
 deriveSafeCopy 1 'base ''EosHdRoot
 deriveSafeCopy 1 'base ''EosHdAccount
 deriveSafeCopy 1 'base ''EosHdWallets
