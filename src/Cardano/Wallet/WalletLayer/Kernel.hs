@@ -120,6 +120,7 @@ bracketPassiveWallet pm mode logFunction keystore node fInjects f = do
         , updateAccount        = Accounts.updateAccount       w
         , deleteAccount        = Accounts.deleteAccount       w
         , createAddress        = Addresses.createAddress      w
+        , importAddresses      = Addresses.importAddresses    w
         , resetWalletState     = Internal.resetWalletState    w
         , importWallet         = Internal.importWallet        w
         , applyBlocks          = invokeIO . Actions.ApplyBlocks
