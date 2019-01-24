@@ -1,9 +1,9 @@
 module Cardano.Wallet.Client.HttpsSettings
-  ( mkHttpsManagerSettings
-  , mkHttpManagerSettings
-  , ServerId
-  , AuthenticateServer(..)
-  ) where
+    ( mkHttpsManagerSettings
+    , mkHttpManagerSettings
+    , ServerId
+    , AuthenticateServer(..)
+    ) where
 
 import           Data.Default (def)
 import           Data.X509 (SignedCertificate)

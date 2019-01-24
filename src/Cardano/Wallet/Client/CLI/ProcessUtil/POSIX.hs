@@ -1,9 +1,9 @@
 module Cardano.Wallet.Client.CLI.ProcessUtil.POSIX
-  ( checkProcessExists'
-  , ProcessID
-  , cancelOnExit
-  , interruptSelf
-  ) where
+    ( checkProcessExists'
+    , ProcessID
+    , cancelOnExit
+    , interruptSelf
+    ) where
 
 import           Universum
 

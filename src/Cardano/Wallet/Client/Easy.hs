@@ -2,29 +2,29 @@
 {-# LANGUAGE LambdaCase    #-}
 
 module Cardano.Wallet.Client.Easy
-  ( -- * Setting up a WalletClient
-    ConnectConfig(..)
-  , AuthenticateServer(..)
-  , ClientAuthConfig(..)
-  , normalConnectConfig
-  , stateDirConnectConfig
-  , walletClientFromConfig
+    ( -- * Setting up a WalletClient
+      ConnectConfig(..)
+    , AuthenticateServer(..)
+    , ClientAuthConfig(..)
+    , normalConnectConfig
+    , stateDirConnectConfig
+    , walletClientFromConfig
 
-  -- * Higher level functions
-  , waitForSync
-  , waitForRestore
-  , SyncResult(..)
-  , SyncError(..)
-  , WaitOptions(..)
-  , waitOptionsPID
+    -- * Higher level functions
+    , waitForSync
+    , waitForRestore
+    , SyncResult(..)
+    , SyncError(..)
+    , WaitOptions(..)
+    , waitOptionsPID
 
-  -- * Util
-  , keyFromPEM, certFromPEM
+    -- * Util
+    , keyFromPEM, certFromPEM
 
-  -- * Reexports
-  , module Cardano.Wallet.Client
-  , module Cardano.Wallet.API.V1.Types
-  ) where
+    -- * Reexports
+    , module Cardano.Wallet.Client
+    , module Cardano.Wallet.API.V1.Types
+    ) where
 
 import qualified Data.ByteString.Char8 as B8
 import           Data.PEM (PEM (..), pemParseBS)
@@ -48,24 +48,25 @@ import           Cardano.Wallet.Client.Wait
 
 -- | Parameters for connecting to a wallet API backend.
 data ConnectConfig = ConnectConfig
-  { cfgClientAuth         :: Maybe ClientAuthConfig
+    { cfgClientAuth         :: Maybe ClientAuthConfig
     -- ^ Optional client certificates
-  , cfgCACertFile         :: Maybe FilePath
+    , cfgCACertFile         :: Maybe FilePath
     -- ^ Optional file containing CA certificate chain
-  , cfgAuthenticateServer :: AuthenticateServer
+    , cfgAuthenticateServer :: AuthenticateServer
     -- ^ Whether to verify the server certificate
-  , cfgBaseUrl            :: BaseUrl
+    , cfgBaseUrl            :: BaseUrl
     -- ^ API hostname, port, and web root
-  } deriving (Show)
+    } deriving (Show)
 
 data ClientAuthConfig = ClientAuthConfig
-  { cfgCertFile    :: FilePath
-  , cfgPrivKeyFile :: FilePath
-  } deriving (Show)
+    { cfgCertFile    :: FilePath
+    , cfgPrivKeyFile :: FilePath
+    } deriving (Show)
 
-data ConfigError = ConfigCredentialsError Text
-                 | ConfigCertificateError FilePath Text
-                 deriving (Show, Typeable)
+data ConfigError
+    = ConfigCredentialsError Text
+    | ConfigCertificateError FilePath Text
+    deriving (Show, Typeable)
 
 instance Exception ConfigError
 
@@ -74,7 +75,7 @@ normalConnectConfig :: FilePath -- ^ Wallet state path -- contains 'tls' directo
                     -> Int -- ^ API listen port
                     -> ConnectConfig
 normalConnectConfig stateDir port = stateDirConnectConfig stateDir AuthenticateServer baseUrl
-  where baseUrl = BaseUrl Https "localhost" port ""
+    where baseUrl = BaseUrl Https "localhost" port ""
 
 -- | Construct a connect config based on a wallet state path.
 stateDirConnectConfig :: FilePath -- ^ Wallet state path -- contains 'tls' directory
@@ -89,15 +90,15 @@ stateDirConnectConfig stateDir = ConnectConfig (Just cl) (Just ca)
 
 walletClientFromConfig :: ConnectConfig -> IO (WalletClient IO)
 walletClientFromConfig cfg = do
-  ca <- case cfgCACertFile cfg of
-    Just caCertFile -> either throwM return =<< loadCACert caCertFile
-    Nothing         -> pure []
-  mcred <- case cfgClientAuth cfg of
-    Just auth -> either throwM (pure . Just) =<< loadClientAuth auth
-    Nothing   -> pure Nothing
-  let settings = mkHttpsManagerSettings (cfgServerId cfg) ca mcred (cfgAuthenticateServer cfg)
-  manager <- newManager settings
-  pure $ mkHttpClient (cfgBaseUrl cfg) manager
+    ca <- case cfgCACertFile cfg of
+        Just caCertFile -> either throwM return =<< loadCACert caCertFile
+        Nothing         -> pure []
+    mcred <- case cfgClientAuth cfg of
+        Just auth -> either throwM (pure . Just) =<< loadClientAuth auth
+        Nothing   -> pure Nothing
+    let settings = mkHttpsManagerSettings (cfgServerId cfg) ca mcred (cfgAuthenticateServer cfg)
+    manager <- newManager settings
+    pure $ mkHttpClient (cfgBaseUrl cfg) manager
 
 loadClientAuth :: ClientAuthConfig -> IO (Either ConfigError Credential)
 loadClientAuth ClientAuthConfig{..} = first errmsg <$> load
@@ -109,17 +110,17 @@ loadCACert :: FilePath -> IO (Either ConfigError [SignedCertificate])
 loadCACert f = parse <$> B8.readFile f
   where
     parse certText = case pemParseBS certText of
-      Right pem -> case certFromPEM pem of
-        Just bs -> case decodeSignedCertificate bs of
-          Right sc -> Right [sc]
-          Left err -> Left (ConfigCertificateError f $ sformat ("Couldn't decode certificate: "%shown) err)
-        Nothing -> Left (ConfigCertificateError f "Could not find certificate in PEM file")
-      Left err -> Left (ConfigCertificateError f $ sformat ("could not parse as pem file: "%shown) err)
+        Right pem -> case certFromPEM pem of
+            Just bs -> case decodeSignedCertificate bs of
+                Right sc -> Right [sc]
+                Left err -> Left (ConfigCertificateError f $ sformat ("Couldn't decode certificate: "%shown) err)
+            Nothing -> Left (ConfigCertificateError f "Could not find certificate in PEM file")
+        Left err -> Left (ConfigCertificateError f $ sformat ("could not parse as pem file: "%shown) err)
 
 -- | Get http-client connection tuple from 'ConnectConfig'.
 cfgServerId :: ConnectConfig -> ServerId
 cfgServerId = hostPort . cfgBaseUrl
-  where hostPort b = (baseUrlHost b, B8.pack $ show $ baseUrlPort b)
+    where hostPort b = (baseUrlHost b, B8.pack $ show $ baseUrlPort b)
 
 -- | Gets the private key or certificate sections out of a parsed PEM file.
 keyFromPEM, certFromPEM :: [PEM] -> Maybe ByteString

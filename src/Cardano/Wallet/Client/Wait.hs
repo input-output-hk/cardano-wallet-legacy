@@ -81,12 +81,12 @@ instance ToJSON SyncError where
 -- | Really basic timing information.
 time :: ((IO Double) -> IO a) -> IO (UTCTime, Double, a)
 time act = do
-  initializeTime
-  startUTC <- getCurrentTime
-  start <- getTime
-  res <- act (fmap (\t -> t - start) getTime)
-  finish <- getTime
-  pure (startUTC, finish - start, res)
+    initializeTime
+    startUTC <- getCurrentTime
+    start <- getTime
+    res <- act (fmap (\t -> t - start) getTime)
+    finish <- getTime
+    pure (startUTC, finish - start, res)
 
 waitOptionsPID :: Maybe ProcessID -> WaitOptions
 waitOptionsPID pid = def { waitProcessID = pid }
@@ -97,25 +97,25 @@ waitForSomething :: (WalletClient IO -> Resp IO a) -- ^ Action to run on wallet
                  -> WalletClient IO -- ^ Wallet client
                  -> IO (SyncResult r)
 waitForSomething req check WaitOptions{..} wc = do
-  rv <- atomically $ newTVar DList.empty
-  (start, dur, res) <- time $ \getElapsed -> do
-    withAsync (timeoutSleep waitTimeoutSeconds) $ \sleep ->
-      withAsync (retrying policy (check' rv getElapsed) action) $ \poll -> cancelOnExit poll $
-        waitEitherCatchCancel sleep poll
+    rv <- atomically $ newTVar DList.empty
+    (start, dur, res) <- time $ \getElapsed -> do
+        withAsync (timeoutSleep waitTimeoutSeconds) $ \sleep ->
+            withAsync (retrying policy (check' rv getElapsed) action) $ \poll -> cancelOnExit poll $
+                waitEitherCatchCancel sleep poll
 
-  rs <- readTVarIO rv
+    rs <- readTVarIO rv
 
-  -- Unwrap layers of error handling and convert to Maybe SyncError
-  let e = case res of
-            Left _ -> SyncErrorTimedOut <$> waitTimeoutSeconds
-            Right (Left err) -> case fromException err of
-              Just AsyncCancelled -> Just SyncErrorInterrupted
-              Nothing             -> Just (SyncErrorException err)
-            Right (Right (False, _)) -> (SyncErrorProcessDied <$> waitProcessID)
-            Right (Right (_, Left err)) -> (Just (SyncErrorClient err))
-            Right _ -> Nothing
+    -- Unwrap layers of error handling and convert to Maybe SyncError
+    let e = case res of
+                Left _ -> SyncErrorTimedOut <$> waitTimeoutSeconds
+                Right (Left err) -> case fromException err of
+                  Just AsyncCancelled -> Just SyncErrorInterrupted
+                  Nothing             -> Just (SyncErrorException err)
+                Right (Right (False, _)) -> (SyncErrorProcessDied <$> waitProcessID)
+                Right (Right (_, Left err)) -> (Just (SyncErrorClient err))
+                Right _ -> Nothing
 
-  pure $ SyncResult e start dur (DList.toList rs)
+    pure $ SyncResult e start dur (DList.toList rs)
 
   where
     policy = constantDelay (toMicroseconds waitIntervalSeconds)
@@ -125,18 +125,18 @@ waitForSomething req check WaitOptions{..} wc = do
 
     -- Interpret result of action, log some info, decide whether to continue
     check' _ _ _st (False, _) = do
-      logStatus $ sformat "Wallet is no longer running"
-      pure False
+        logStatus $ sformat "Wallet is no longer running"
+        pure False
     check' rv getElapsed _st (_, Right resp) = do
-      (unfinished, msg, res) <- check (wrData resp)
-      elapsed <- getElapsed
-      atomically $ modifyTVar' rv (flip DList.snoc (elapsed, res))
-      when unfinished $
-        logStatus $ sformat (fixed 2%" "%stext) elapsed msg
-      pure unfinished
+        (unfinished, msg, res) <- check (wrData resp)
+        elapsed <- getElapsed
+        atomically $ modifyTVar' rv (flip DList.snoc (elapsed, res))
+        when unfinished $
+          logStatus $ sformat (fixed 2%" "%stext) elapsed msg
+        pure unfinished
     check' _ _ _st (True, Left err) = do
-      logStatus $ sformat ("Error connecting to wallet: "%shown) err
-      pure True
+        logStatus $ sformat ("Error connecting to wallet: "%shown) err
+        pure True
 
     logStatus = putStrLn
 
