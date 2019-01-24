@@ -578,9 +578,9 @@ instance IsOurs (Map HdAccountId (AddressPool Core.Address)) where
                     (Nothing, _) -> Nothing
                     (Just (_, ix), pool') -> (Just (mkHdAddress accId ix, pool'))
 
-            mkHdAddress :: HdAccountId -> Word -> HdAddress
+            mkHdAddress :: HdAccountId -> Word32 -> HdAddress
             mkHdAddress accId_ ix_
-                = initHdAddress (HdAddressId accId_ (HdAddressIx (fromIntegral ix_))) addr
+                = initHdAddress (HdAddressId accId_ (HdAddressIx ix_)) addr
 
 {-------------------------------------------------------------------------------
   Unknown identifiers
