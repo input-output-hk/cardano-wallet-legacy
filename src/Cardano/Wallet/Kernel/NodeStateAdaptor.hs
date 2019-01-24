@@ -34,8 +34,6 @@ module Cardano.Wallet.Kernel.NodeStateAdaptor (
     -- * Non-mockable
   , filterUtxo
   , mostRecentMainBlock
-  , triggerShutdown
-  , waitForUpdate
   , defaultGetSlotStart
     -- * Support for tests
   , MockNodeStateParams(..)
@@ -74,9 +72,8 @@ import           Pos.Chain.Block (Block, HeaderHash, LastKnownHeader,
 import           Pos.Chain.Genesis as Genesis (Config (..), GenesisHash (..),
                      configBlockVersionData, configEpochSlots)
 import           Pos.Chain.Txp (TxIn, TxOutAux)
-import           Pos.Chain.Update (ConfirmedProposalState,
-                     HasUpdateConfiguration, SoftwareVersion, bvdMaxTxSize,
-                     bvdTxFeePolicy)
+import           Pos.Chain.Update (HasUpdateConfiguration, SoftwareVersion,
+                     bvdMaxTxSize, bvdTxFeePolicy)
 import qualified Pos.Chain.Update as Upd
 import           Pos.Context (NodeContext (..))
 import           Pos.Core (BlockCount, SlotCount, Timestamp (..), TxFeePolicy)
@@ -89,9 +86,7 @@ import           Pos.DB.Class (MonadDBRead (..), getBlock)
 import           Pos.DB.GState.Lock (StateLock, withStateLockNoMetrics)
 import           Pos.DB.Rocks (NodeDBs, dbGetDefault, dbIterSourceDefault)
 import           Pos.DB.Txp.Utxo (utxoSource)
-import           Pos.DB.Update (UpdateContext, ucDownloadedUpdate)
 import           Pos.Infra.Shutdown.Class (HasShutdownContext (..))
-import qualified Pos.Infra.Shutdown.Logic as Shutdown
 import qualified Pos.Infra.Slotting.Impl.Simple as S
 import qualified Pos.Infra.Slotting.Util as Slotting
 import           Pos.Launcher.Resource (NodeResources (..))
@@ -305,9 +300,6 @@ instance HasLens StateLock Res StateLock where
 instance HasLens S.SimpleSlottingStateVar Res S.SimpleSlottingStateVar where
     lensOf = mkResLens (nrContextLens . lensOf')
 
-instance HasLens UpdateContext Res UpdateContext where
-    lensOf = mkResLens (nrContextLens . lensOf')
-
 instance HasLens LastKnownHeaderTag Res LastKnownHeader where
     lensOf = mkResLens (nrContextLens . lensOf @LastKnownHeaderTag)
 
@@ -423,20 +415,6 @@ filterUtxo :: (NodeConstraints, MonadCatch m, MonadUnliftIO m)
            => ((TxIn, TxOutAux) -> Maybe a) -> WithNodeState m [a]
 filterUtxo p = runConduitRes $ mapOutputMaybe p utxoSource
                             .| Conduit.fold (flip (:)) []
-
-triggerShutdown :: MonadIO m => WithNodeState m ()
-triggerShutdown = Shutdown.triggerShutdown
-
--- | Wait for an update
---
--- NOTE: This is adopted from 'waitForUpdateWebWallet'. In particular, that
--- function too uses 'takeMVar'. I guess the assumption is that there is only
--- one listener on this 'MVar'?
-waitForUpdate :: forall m. MonadIO m => WithNodeState m ConfirmedProposalState
-waitForUpdate = liftIO . takeMVar =<< asks l
-  where
-    l :: Res -> MVar ConfirmedProposalState
-    l = ucDownloadedUpdate . view lensOf'
 
 
 -- | Get the difference between NTP time and local system time, nothing if the

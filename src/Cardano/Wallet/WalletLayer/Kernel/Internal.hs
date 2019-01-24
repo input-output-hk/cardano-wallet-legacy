@@ -1,12 +1,6 @@
 module Cardano.Wallet.WalletLayer.Kernel.Internal (
-    nextUpdate
-  , applyUpdate
-  , postponeUpdate
-  , resetWalletState
+    resetWalletState
   , importWallet
-
-  , waitForUpdate
-  , addUpdate
   ) where
 
 import           Universum
@@ -15,74 +9,16 @@ import           Control.Concurrent.MVar (modifyMVar_)
 import           Data.Acid.Advanced (update')
 import           System.IO.Error (isDoesNotExistError)
 
-import           Pos.Chain.Update (ConfirmedProposalState, SoftwareVersion)
-import           Pos.Infra.InjectFail (FInject (..), testLogFInject)
-
-import           Cardano.Wallet.API.V1.Types (Wallet, WalletImport (..),
-                     WalletSoftwareVersion (..))
-import           Cardano.Wallet.Kernel.DB.AcidState (AddUpdate (..),
-                     ClearDB (..), GetNextUpdate (..), RemoveNextUpdate (..))
-import           Cardano.Wallet.Kernel.DB.InDb
+import           Cardano.Wallet.API.V1.Types (Wallet, WalletImport (..))
+import           Cardano.Wallet.Kernel.DB.AcidState (ClearDB (..))
 import           Cardano.Wallet.Kernel.DB.TxMeta
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
-import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
 import qualified Cardano.Wallet.Kernel.Submission as Submission
 import           Cardano.Wallet.WalletLayer (CreateWallet (..),
                      ImportWalletError (..))
 import           Cardano.Wallet.WalletLayer.Kernel.Wallets (createWallet)
 
--- | Get next update (if any)
---
--- NOTE (legacy): 'nextUpdate", "Pos.Wallet.Web.Methods.Misc"
--- Most of the behaviour of the legacy 'nextUpdate' is now actually implemented
--- directly in the AcidState 'getNextUpdate' update.
-nextUpdate :: MonadIO m
-           => Kernel.PassiveWallet -> m (Maybe WalletSoftwareVersion)
-nextUpdate w = liftIO $ do
-    current <- Node.curSoftwareVersion (w ^. Kernel.walletNode)
-    fmap (fmap (WalletSoftwareVersion . _fromDb)) $
-      update' (w ^. Kernel.wallets) $ GetNextUpdate (InDb current)
-
--- | Apply an update
---
--- NOTE (legacy): 'applyUpdate', "Pos.Wallet.Web.Methods.Misc".
---
--- The legacy implementation does two things:
---
--- 1. Remove the update from the wallet's list of updates
--- 2. Call 'applyLastUpdate' from 'MonadUpdates'
---
--- The latter is implemented in 'applyLastUpdateWebWallet', which literally just
--- a call to 'triggerShutdown'.
---
--- TODO: The other side of the story is 'launchNotifier', where the wallet
--- is /notified/ of updates.
-applyUpdate :: MonadIO m => Kernel.PassiveWallet -> m ()
-applyUpdate w = liftIO $ do
-    update' (w ^. Kernel.wallets) $ RemoveNextUpdate
-    Node.withNodeState (w ^. Kernel.walletNode) $ \_lock -> do
-      doFail <- liftIO $ testLogFInject (w ^. Kernel.walletFInjects) FInjApplyUpdateNoExit
-      unless doFail
-        Node.triggerShutdown
-
--- | Postpone update
---
--- NOTE (legacy): 'postponeUpdate', "Pos.Wallet.Web.Methods.Misc".
-postponeUpdate :: MonadIO m => Kernel.PassiveWallet -> m ()
-postponeUpdate w = update' (w ^. Kernel.wallets) $ RemoveNextUpdate
-
--- | Wait for an update notification
-waitForUpdate :: MonadIO m => Kernel.PassiveWallet -> m ConfirmedProposalState
-waitForUpdate w = liftIO $
-    Node.withNodeState (w ^. Kernel.walletNode) $ \_lock ->
-        Node.waitForUpdate
-
--- | Add an update in the DB, this is triggered by the notifier once getting
--- a new proposal from the blockchain
-addUpdate :: MonadIO m => Kernel.PassiveWallet -> SoftwareVersion -> m ()
-addUpdate w v = liftIO $
-    update' (w ^. Kernel.wallets) $ AddUpdate (InDb v)
 
 -- | Reset wallet state
 resetWalletState :: MonadIO m => Kernel.PassiveWallet -> m ()

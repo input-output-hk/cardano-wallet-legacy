@@ -112,9 +112,6 @@ actionWithWallet
 
             -- Periodically compact & snapshot the acid-state database.
             , ("acid state cleanup", Plugins.acidStateSnapshots (view Kernel.Internal.wallets (snd w)) params dbMode)
-
-            -- A @Plugin@ to watch and store incoming update proposals
-            , ("update watcher", Plugins.updateWatcher)
             ]
         -- The corresponding wallet documention, served as a different
         -- server which doesn't require client x509 certificates to
