@@ -42,7 +42,7 @@ import           Pos.Core (Coin)
 import qualified Pos.Core as Core
 import           Pos.Core.Chrono (NE, NewestFirst (..), OldestFirst (..))
 import           Pos.Core.NetworkMagic (NetworkMagic)
-import           Pos.Crypto (EncryptedSecretKey, PassPhrase)
+import           Pos.Crypto (EncryptedSecretKey)
 
 import           Cardano.Wallet.API.Request (RequestParams (..))
 import           Cardano.Wallet.API.Request.Filter (FilterOperations (..))
@@ -500,9 +500,7 @@ data ActiveWalletLayer m = ActiveWalletLayer {
       walletPassiveLayer :: PassiveWalletLayer m
 
       -- | Performs a payment.
-    , pay :: PassPhrase
-          -- The \"spending password\" to decrypt the 'EncryptedSecretKey'.
-          -> InputGrouping
+    , pay :: InputGrouping
           -- An preference on how to group inputs during coin selection.
           -> ExpenseRegulation
           -- Who pays the fee, if the sender or the receivers.

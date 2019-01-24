@@ -14,8 +14,6 @@ import           Universum
 
 import           Servant
 
-import           Data.Coerce (coerce)
-
 import           Pos.Client.Txp.Util (defaultInputSelectionPolicy)
 
 import           Cardano.Wallet.API.Request
@@ -51,10 +49,7 @@ newTransaction aw payment@Payment{..} = liftIO $ do
     -- of CBR-291.
     let inputGrouping = toInputGrouping $ fromMaybe (WalletInputSelectionPolicy defaultInputSelectionPolicy)
                                                     pmtGroupingPolicy
-    res <- liftIO $ (WalletLayer.pay aw) (maybe mempty coerce pmtSpendingPassword)
-                                         inputGrouping
-                                         SenderPaysFee
-                                         payment
+    res <- liftIO $ (WalletLayer.pay aw) inputGrouping SenderPaysFee payment
     case res of
          Left err        -> throwM err
          Right (_, meta) -> txFromMeta aw NewPaymentUnknownAccountId meta
