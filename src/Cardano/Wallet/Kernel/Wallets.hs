@@ -10,7 +10,6 @@ module Cardano.Wallet.Kernel.Wallets (
     , defaultHdAddress
       -- * Errors
     , CreateWalletError(..)
-    , CreateEosWalletError(..)
     , UpdateWalletPasswordError(..)
     -- * Internal & testing use only
     , createWalletHdRnd
@@ -38,8 +37,6 @@ import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (CreateEosHdWallet (..),
                      CreateHdWallet (..), DeleteHdRoot (..), RestoreHdWallet,
                      UpdateHdRootPassword (..), UpdateHdWallet (..))
-import           Cardano.Wallet.Kernel.DB.EosHdWallet (EosHdRoot (..))
-import qualified Cardano.Wallet.Kernel.DB.EosHdWallet.Create as EosHD
 import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel,
                      HdAccountId (..), HdAccountIx (..), HdAddress,
@@ -47,7 +44,6 @@ import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel,
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
-import           Cardano.Wallet.Kernel.EosWalletId (genEosWalletId)
 import           Cardano.Wallet.Kernel.Internal (PassiveWallet, walletKeystore,
                      walletProtocolMagic, wallets)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
@@ -81,22 +77,6 @@ instance Buildable CreateWalletError where
         bprint "CreateWalletDefaultAddressDerivationFailed"
 
 instance Show CreateWalletError where
-    show = formatToString build
-
-data CreateEosWalletError =
-      CreateEosWalletFailed EosHD.CreateEosHdRootError
-      -- ^ When trying to create the 'EosWallet', the DB operation failed.
-
-instance Arbitrary CreateEosWalletError where
-    arbitrary = oneof
-        [ CreateEosWalletFailed . EosHD.CreateEosHdRootExists <$> arbitrary
-        ]
-
-instance Buildable CreateEosWalletError where
-    build (CreateEosWalletFailed dbOperation) =
-        bprint ("CreateEosWalletFailed " % F.build) dbOperation
-
-instance Show CreateEosWalletError where
     show = formatToString build
 
 data UpdateWalletPasswordError =
@@ -252,25 +232,28 @@ createEosHdWallet :: PassiveWallet
                   -- range (@low@, @medium@, @high@).
                   -> WalletName
                   -- ^ The name for this wallet.
-                  -> IO (Either CreateEosWalletError EosHdRoot)
+                  -> IO (Either CreateWalletError HdRoot)
 createEosHdWallet pw accountsPKsWithIxs addressPoolGap assuranceLevel walletName = do
     -- Here, we review the definition of a wallet down to a list of account public keys with
     -- no relationship whatsoever from the wallet's point of view. New addresses can be derived
     -- for each account at will and discovered using the address pool discovery algorithm
     -- described in BIP-44. Public keys are managed and provided from an external sources.
-    -- TODO: Temporary solution, will be fixed soon, see #231.
-    let accountsPKs = map fst accountsPKsWithIxs
-    newEosWalletId <- genEosWalletId
-    let newEosRoot = EosHdRoot newEosWalletId
-                               walletName
-                               assuranceLevel
-                               addressPoolGap
-    res <- update' (pw ^. wallets) $ CreateEosHdWallet newEosRoot accountsPKs
+    rootId <- HD.genHdRootId
+    created <- InDb <$> getCurrentTimestamp
+    let newRoot = HD.initHdRoot rootId
+                                walletName
+                                (HD.NoSpendingPassword created)
+                                assuranceLevel
+                                created
+    res <- update' (pw ^. wallets) $ CreateEosHdWallet newRoot accountsPKsWithIxs addressPoolGap
     return $ case res of
-        Left e@(EosHD.CreateEosHdRootExists _) ->
-            Left $ CreateEosWalletFailed e
+        Left e@(HD.CreateHdRootExists _) ->
+            Left $ CreateWalletFailed e
+        Left e@(HD.CreateHdRootDefaultAddressDerivationFailed) ->
+            Left $ CreateWalletFailed e
         Right _ ->
-            Right newEosRoot
+            Right newRoot
+
 
 -- | Creates an HD wallet where new accounts and addresses are generated
 -- via random index derivation.
