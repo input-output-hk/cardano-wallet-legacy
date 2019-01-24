@@ -16,6 +16,7 @@ module Cardano.Wallet.Server.Plugins
     , monitoringServer
     , acidStateSnapshots
     , updateWatcher
+    , setupNodeClient
     ) where
 
 import           Universum
@@ -48,7 +49,7 @@ import           Cardano.Wallet.Kernel (DatabaseMode (..), PassiveWallet)
 import qualified Cardano.Wallet.Kernel.Diffusion as Kernel
 import qualified Cardano.Wallet.Kernel.Mode as Kernel
 import qualified Cardano.Wallet.Server as Server
-import           Cardano.Wallet.Server.CLI (NewWalletBackendParams (..),
+import           Cardano.Wallet.Server.CLI (WalletBackendParams (..),
                      WalletBackendParams (..), getWalletDbOptions, isDebugMode,
                      walletAcidInterval)
 import           Cardano.Wallet.Server.Middlewares (withMiddlewares)
@@ -81,23 +82,20 @@ defaultSettings = Warp.defaultSettings
 
 -- | A @Plugin@ to start the wallet REST server
 apiServer
-    :: NewWalletBackendParams
+    :: WalletBackendParams
+    -> NodeHttpClient
     -> (PassiveWalletLayer IO, PassiveWallet)
     -> [Middleware]
     -> Plugin Kernel.WalletMode
 apiServer
-    (NewWalletBackendParams WalletBackendParams{..})
+    WalletBackendParams{..}
+    nodeClient
     (passiveLayer, passiveWallet)
     middlewares
     diffusion
   = do
     env <- ask
     let diffusion' = Kernel.fromDiffusion (lower env) diffusion
-    nodeClient <- setupNodeClient
-        (BS8.unpack nodeIp, fromIntegral nodePort)
-        walletNodeTlsClientCert
-        walletNodeTlsCaCertPath
-        walletNodeTlsPrivKey
     logInfo "Testing node client connection"
     eresp <- liftIO . runExceptT $ NodeClient.getNodeSettings nodeClient
     case eresp of
@@ -110,7 +108,7 @@ apiServer
     WalletLayer.Kernel.bracketActiveWallet passiveLayer passiveWallet diffusion' $ \active _ -> do
         ctx <- view shutdownContext
         serveImpl
-            (getApplication nodeClient active)
+            (getApplication active)
             (BS8.unpack ip)
             port
             (if isDebugMode walletRunMode then Nothing else walletTLSParams)
@@ -118,8 +116,6 @@ apiServer
             (Just $ portCallback ctx)
   where
     (ip, port) = walletAddress
-
-    (nodeIp, nodePort) = walletNodeAddress
 
     exceptionHandler :: SomeException -> Response
     exceptionHandler se = case translateWalletLayerErrors se of
@@ -141,10 +137,9 @@ apiServer
             defWalletError = V1.UnknownError $ T.pack . show $ typeOf se
 
     getApplication
-        :: NodeHttpClient
-        -> ActiveWalletLayer IO
+        :: ActiveWalletLayer IO
         -> Kernel.WalletMode Application
-    getApplication nodeClient active = do
+    getApplication active = do
         logInfo "New wallet API has STARTED!"
         return
             $ withMiddlewares middlewares
@@ -161,10 +156,10 @@ apiServer
 -- | A @Plugin@ to serve the wallet documentation
 docServer
     :: (HasConfigurations, HasCompileInfo)
-    => NewWalletBackendParams
+    => WalletBackendParams
     -> Maybe (Plugin Kernel.WalletMode)
-docServer (NewWalletBackendParams WalletBackendParams{walletDocAddress = Nothing}) = Nothing
-docServer (NewWalletBackendParams WalletBackendParams{walletDocAddress = Just (ip, port), walletRunMode, walletTLSParams}) = Just (const $ makeWalletServer)
+docServer WalletBackendParams{walletDocAddress = Nothing} = Nothing
+docServer WalletBackendParams{walletDocAddress = Just (ip, port), walletRunMode, walletTLSParams} = Just (const $ makeWalletServer)
   where
     makeWalletServer = serveDocImpl
         application
@@ -180,9 +175,9 @@ docServer (NewWalletBackendParams WalletBackendParams{walletDocAddress = Just (i
 
 -- | A @Plugin@ to serve the node monitoring API.
 monitoringServer :: HasConfigurations
-                 => NewWalletBackendParams
+                 => WalletBackendParams
                  -> [ (Text, Plugin Kernel.WalletMode) ]
-monitoringServer (NewWalletBackendParams WalletBackendParams{..}) =
+monitoringServer WalletBackendParams{..} =
     case enableMonitoringApi of
          True  -> [ ("monitoring worker", const worker) ]
          False -> []
@@ -196,7 +191,7 @@ monitoringServer (NewWalletBackendParams WalletBackendParams{..}) =
 
 -- | A @Plugin@ to periodically compact & snapshot the acid-state database.
 acidStateSnapshots :: AcidState db
-                   -> NewWalletBackendParams
+                   -> WalletBackendParams
                    -> DatabaseMode
                    -> Plugin Kernel.WalletMode
 acidStateSnapshots dbRef params dbMode = const worker

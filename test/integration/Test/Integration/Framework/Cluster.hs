@@ -25,8 +25,7 @@ import           Cardano.Wallet.Action (actionWithWallet)
 import           Cardano.Wallet.Client.Http (ClientError (..), Manager,
                      ServantError (..), WalletClient (getNodeInfo),
                      WalletHttpClient)
-import           Cardano.Wallet.Server.CLI (NewWalletBackendParams (..),
-                     walletBackendParamsParser)
+import           Cardano.Wallet.Server.CLI (walletBackendParamsParser)
 import           Pos.Chain.Genesis (GeneratedSecrets (..),
                      configGeneratedSecretsThrow)
 import           Pos.Client.CLI.NodeOptions (commonNodeArgsParser,
@@ -144,7 +143,7 @@ startWallet (NodeName nodeIdT, _) env = do
     parseWalletArgs = do
         let wVars = varFromParser walletBackendParamsParser
         let wInfo = info walletBackendParamsParser mempty
-        NewWalletBackendParams <$> handleParseResult (execParserEnv env wVars wInfo)
+        handleParseResult (execParserEnv env wVars wInfo)
 
     getLoggingArgs cArgs =
         (loggingParams (fromString $ T.unpack nodeIdT) cArgs)
