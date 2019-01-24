@@ -57,6 +57,7 @@ module Cardano.Wallet.API.V1.Types (
   , AccountIndex
   , AccountAddresses (..)
   , AccountBalance (..)
+  , AccountPublicKeyWithIx (..)
   , getAccIndex
   , mkAccountIndex
   , mkAccountIndexM
@@ -583,44 +584,6 @@ mkTransactionSignatureAsBase16 (Core.Signature txSig) =
 instance Buildable [PublicKey] where
     build = bprint listJson
 
--- | A type modelling the request for a new 'EosWallet',
--- on the mobile client or hardware wallet.
-data NewEosWallet = NewEosWallet
-    { neweoswalAccountsPublicKeys :: ![PublicKey]
-    , neweoswalAddressPoolGap     :: !(Maybe AddressPoolGap)
-    , neweoswalAssuranceLevel     :: !AssuranceLevel
-    , neweoswalName               :: !WalletName
-    } deriving (Eq, Show, Generic)
-
-deriveJSON Aeson.defaultOptions ''NewEosWallet
-instance Arbitrary NewEosWallet where
-    arbitrary = NewEosWallet <$> arbitrary
-                             <*> arbitrary
-                             <*> arbitrary
-                             <*> pure "My EOS-wallet"
-
-instance ToSchema NewEosWallet where
-    declareNamedSchema =
-        genericSchemaDroppingPrefix "neweoswal" (\(--^) props -> props
-            & ("accountsPublicKeys" --^ "External wallet's accounts public keys.")
-            & ("addressPoolGap"     --^ "Address pool gap for this wallet.")
-            & ("assuranceLevel"     --^ "Desired assurance level based on the number of confirmations counter of each transaction.")
-            & ("name"               --^ "External wallet's name.")
-        )
-
-deriveSafeBuildable ''NewEosWallet
-instance BuildableSafeGen NewEosWallet where
-    buildSafeGen sl NewEosWallet{..} = bprint ("{"
-        %" accountsPublicKeys="%build
-        %" addressPoolGap="%build
-        %" assuranceLevel="%buildSafe sl
-        %" name="%buildSafe sl
-        %" }")
-        neweoswalAccountsPublicKeys
-        neweoswalAddressPoolGap
-        neweoswalAssuranceLevel
-        neweoswalName
-
 
 data UpdateEosWallet = UpdateEosWallet
     { ueowalAssuranceLevel :: !AssuranceLevel
@@ -1138,6 +1101,73 @@ instance ToHttpApiData AccountIndex where
     toQueryParam =
         fromString . show . getAccIndex
 
+data AccountPublicKeyWithIx = AccountPublicKeyWithIx
+    { accpubkeywithixPublicKey :: !PublicKey
+    , accpubkeywithixIndex     :: !AccountIndex
+    } deriving (Show, Ord, Eq, Generic)
+
+deriveJSON Aeson.defaultOptions ''AccountPublicKeyWithIx
+
+instance Arbitrary AccountPublicKeyWithIx where
+    arbitrary = AccountPublicKeyWithIx <$> arbitrary
+                                       <*> arbitrary
+
+instance ToSchema AccountPublicKeyWithIx where
+    declareNamedSchema =
+        genericSchemaDroppingPrefix "accpubkeywithix" (\(--^) props -> props
+            & ("publicKey" --^ "Public key of account in EOS-wallet.")
+            & ("index"     --^ "Index of account in EOS-wallet.")
+        )
+
+deriveSafeBuildable ''AccountPublicKeyWithIx
+instance BuildableSafeGen AccountPublicKeyWithIx where
+    buildSafeGen _ AccountPublicKeyWithIx{..} = bprint ("{"
+        %" publicKey="%build
+        %" index="%build
+        %" }")
+        accpubkeywithixPublicKey
+        accpubkeywithixIndex
+
+instance Buildable [AccountPublicKeyWithIx] where
+    build = bprint listJson
+
+-- | A type modelling the request for a new 'EosWallet',
+-- on the mobile client or hardware wallet.
+data NewEosWallet = NewEosWallet
+    { neweoswalAccounts       :: ![AccountPublicKeyWithIx]
+    , neweoswalAddressPoolGap :: !(Maybe AddressPoolGap)
+    , neweoswalAssuranceLevel :: !AssuranceLevel
+    , neweoswalName           :: !WalletName
+    } deriving (Eq, Show, Generic)
+
+deriveJSON Aeson.defaultOptions ''NewEosWallet
+instance Arbitrary NewEosWallet where
+    arbitrary = NewEosWallet <$> arbitrary
+                             <*> arbitrary
+                             <*> arbitrary
+                             <*> pure "My EOS-wallet"
+
+instance ToSchema NewEosWallet where
+    declareNamedSchema =
+        genericSchemaDroppingPrefix "neweoswal" (\(--^) props -> props
+            & ("accounts"       --^ "External wallet's accounts public keys with indexes.")
+            & ("addressPoolGap" --^ "Address pool gap for this wallet.")
+            & ("assuranceLevel" --^ "Desired assurance level based on the number of confirmations counter of each transaction.")
+            & ("name"           --^ "External wallet's name.")
+        )
+
+deriveSafeBuildable ''NewEosWallet
+instance BuildableSafeGen NewEosWallet where
+    buildSafeGen sl NewEosWallet{..} = bprint ("{"
+        %" accounts="%build
+        %" addressPoolGap="%build
+        %" assuranceLevel="%buildSafe sl
+        %" name="%buildSafe sl
+        %" }")
+        neweoswalAccounts
+        neweoswalAddressPoolGap
+        neweoswalAssuranceLevel
+        neweoswalName
 
 -- | A wallet 'Account'.
 data Account = Account
@@ -2237,6 +2267,10 @@ instance Example TransactionAsBase16 where
 instance Example TransactionSignatureAsBase16 where
     example = TransactionSignatureAsBase16Unsafe <$> pure
         "5840709cc240ac9ad78cbf47c3eec76df917423943e34339277593e8e2b8c9f9f2e59583023bfbd8e26c40dff6a7fa424600f9b942819533d8afee37a5ac6d813207"
+
+instance Example AccountPublicKeyWithIx where
+    example = AccountPublicKeyWithIx <$> example
+                                     <*> example
 
 instance Example NewEosWallet where
     example = NewEosWallet <$> example
