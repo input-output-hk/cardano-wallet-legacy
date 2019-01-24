@@ -21,7 +21,7 @@ spec = do
             coinAmountParser "12345 ada" `shouldBe` Right (Coin 12345000000)
 
         it "won't return an amount greater than the max" $
-            coinAmountParser (take 15 (repeat '9') ++ "ada") `shouldSatisfy` isLeft
+            coinAmountParser (replicate 15 '9') ++ "ada") `shouldSatisfy` isLeft
 
         it "consumes all input" $
             coinAmountParser "56787xx" `shouldSatisfy` isLeft
