@@ -151,8 +151,11 @@ deleteEosWallets
     :: PassiveWalletLayer IO
     -> WalletId
     -> Handler NoContent
-deleteEosWallets _ _ = do
-    throwM $ err501 { errBody = "Not Implemented" }
+deleteEosWallets pwl wid = do
+    res <- liftIO $ WalletLayer.deleteEosWallet pwl wid
+    case res of
+         Left e   -> throwM e
+         Right () -> return NoContent
 
 listEosWallets
     :: PassiveWalletLayer IO
