@@ -26,9 +26,35 @@ let
     src = iohkLib.cleanSourceHaskell ./.;
   };
 
+  cardano-sl-src = haskellPackages._config.packages.cardano-sl.src;
+
+  cardano-sl-config = pkgs.runCommand "cardano-sl-config" {} ''
+    mkdir -p $out/lib
+    cp ${cardano-sl-src}/lib/configuration.yaml $out/lib
+    cp ${cardano-sl-src}/lib/*.json $out/lib
+    cp -R ${cardano-sl-src}/log-configs $out
+  '';
+
 in {
   inherit haskellPackages;
 
   inherit (haskellPackages.cardano-wallet.components)
-    benchmarks exes library tests;
+    benchmarks exes library;
+
+  tests = haskellPackages.cardano-wallet.components.tests // (let
+    acceptanceTestDeps = {
+      inherit (haskellPackages.cardano-wallet.components.exes)
+        cardano-wallet-server
+        cardano-wallet-client
+        cardano-wallet-acceptance-tests
+        cardano-wallet-connect-script
+        cardano-wallet-sync-plot;
+      inherit (haskellPackages.cardano-sl-tools.components.exes)
+        cardano-x509-certificates;
+      inherit cardano-sl-config;
+    };
+  in {
+    acceptance = pkgs.callPackage ./nix/acceptance-tests acceptanceTestDeps;
+    acceptance-windows = pkgs.callPackage ./nix/acceptance-tests/windows.nix acceptanceTestDeps;
+  });
 }

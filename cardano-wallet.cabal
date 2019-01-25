@@ -703,3 +703,38 @@ executable cardano-wallet-sync-plot
   default-extensions: NoImplicitPrelude
                       OverloadedStrings
                       RecordWildCards
+
+executable cardano-wallet-acceptance-tests
+  hs-source-dirs:      app/acceptance-tests
+  main-is:             acceptance-tests.hs
+  ghc-options:         -threaded -rtsopts
+                       -Wall
+                       -O2
+
+  build-depends:       base
+                     , turtle
+                     , text
+                     , process
+                     , async
+                     , system-filepath
+
+  default-language:    Haskell2010
+  default-extensions: NoImplicitPrelude
+                      OverloadedStrings
+
+executable cardano-wallet-connect-script
+  hs-source-dirs:      app/acceptance-tests
+  main-is:             connect-script.hs
+  ghc-options:         -threaded -rtsopts
+                       -Wall
+                       -O2
+
+  build-depends:       base
+                     , turtle
+                     , text
+                     , optparse-applicative
+                     , system-filepath
+
+  default-language:    Haskell2010
+  default-extensions: NoImplicitPrelude
+                      OverloadedStrings
