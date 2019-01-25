@@ -17,28 +17,28 @@ import           Test.Hspec.QuickCheck (prop)
 import           Test.QuickCheck (arbitrary, choose, withMaxSuccess)
 import           Test.QuickCheck.Monadic (PropertyM, monadicIO, pick)
 
-import qualified Data.ByteString as B
 import qualified Data.Map.Strict as M
 
 import           Data.Acid (update)
 import           Formatting (build, formatToString, sformat)
 
-import           Pos.Chain.Txp (TxOut (..), TxOutAux (..), VTxContext (..))
+import           Pos.Chain.Txp (TxOut (..), TxOutAux (..))
 import           Pos.Core (Address, Coin (..), IsBootstrapEraAddr (..),
                      deriveLvl2KeyPair, getCurrentTimestamp,
                      makePubKeyAddressBoot, mkCoin)
 import           Pos.Core.NetworkMagic (NetworkMagic (..), makeNetworkMagic)
-import           Pos.Crypto (EncryptedSecretKey, ProtocolMagic,
-                     ShouldCheckPassphrase (..), emptyPassphrase,
-                     safeDeterministicKeyGen)
+import           Pos.Crypto (EncryptedSecretKey, PassPhrase, ProtocolMagic,
+                     ShouldCheckPassphrase (..), safeDeterministicKeyGen)
 
 import           Test.Spec.CoinSelection.Generators (InitialBalance (..),
                      Pay (..), genPayeeWithNM, genUtxoWithAtLeast)
 
+import           Cardano.Mnemonic (Mnemonic, mnemonicToSeed)
 import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel as Kernel
 import           Cardano.Wallet.Kernel.Ed25519Bip44
-                     (ChangeChain (ExternalChain), deriveAddressKeyPair)
+                     (ChangeChain (ExternalChain), deriveAddressKeyPair,
+                     genEncryptedSecretKey)
 
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
                      (CoinSelectionOptions (..), ExpenseRegulation (..),
@@ -75,11 +75,12 @@ import           Servant.Server
 {-# ANN module ("HLint: ignore Reduce duplication" :: Text) #-}
 
 data Fixture = Fixture {
-      fixtureHdRootId  :: HdRootId
-    , fixtureESK       :: EncryptedSecretKey
-    , fixtureAccountId :: HdAccountId
-    , fixturePw        :: PassiveWallet
-    , fixturePayees    :: NonEmpty (Address, Coin)
+      fixtureHdRootId   :: HdRootId
+    , fixtureESK        :: EncryptedSecretKey
+    , fixtureAccountId  :: HdAccountId
+    , fixturePw         :: PassiveWallet
+    , fixturePayees     :: NonEmpty (Address, Coin)
+    , fixturePassPhrase :: PassPhrase
     }
 
 -- | Prepare some fixtures using the 'PropertyM' context to prepare the data,
@@ -90,48 +91,54 @@ prepareFixtures :: NetworkMagic
                 -> Pay
                 -> Fixture.GenActiveWalletFixture Fixture
 prepareFixtures nm initialBalance toPay = do
-    let (_, esk) = safeDeterministicKeyGen (B.pack $ replicate 32 0x42) mempty
+    addressVersion <- return Kernel.AddressSchemeV1 -- pick arbitrary
+    passPhrase <- pick $ arbitrary @PassPhrase
+    mnemonic <- pick $ arbitrary @(Mnemonic 12)
+    let seed = mnemonicToSeed mnemonic
+    let esk =
+            case addressVersion of
+                Kernel.AddressSchemeV0 -> snd $ safeDeterministicKeyGen seed passPhrase
+                Kernel.AddressSchemeV1 -> genEncryptedSecretKey (mnemonic, mempty) passPhrase
     let newRootId = eskToHdRootId nm esk
     now <- getCurrentTimestamp
     newRoot <- initHdRoot <$> pure newRootId
                           <*> pure (WalletName "A wallet")
-                          <*> pure (NoSpendingPassword $ InDb now)
+                          <*> pure (HasSpendingPassword $ InDb now)
                           <*> pure AssuranceLevelNormal
                           <*> (InDb <$> pick arbitrary)
-    addressVersion <- pick arbitrary
     newAccountId <- HdAccountId newRootId <$> deriveIndex (pick . choose) HdAccountIx HardDerivation
     utxo   <- pick (genUtxoWithAtLeast initialBalance)
     -- Override all the addresses of the random Utxo with something meaningful,
     -- i.e. with 'Address'(es) generated in a principled way, and not random.
     utxo' <- foldlM (\acc (txIn, (TxOutAux (TxOut _ coin))) -> do
-                        newIndex <- deriveIndex (pick . choose) HdAddressIx HardDerivation
+                        newIndex <- deriveIndex (pick . choose) HdAddressIx SoftDerivation
 
                         let Just (addr, _) =
                                 case addressVersion of
                                     Kernel.AddressSchemeV0 -> deriveLvl2KeyPair nm
                                                             (IsBootstrapEraAddr True)
                                                             (ShouldCheckPassphrase True)
-                                                            mempty
+                                                            passPhrase
                                                             esk
                                                             (newAccountId ^. hdAccountIdIx . to getHdAccountIx)
                                                             (getHdAddressIx newIndex)
                                     Kernel.AddressSchemeV1 -> first (makePubKeyAddressBoot nm) <$> deriveAddressKeyPair
-                                                            mempty
+                                                            passPhrase
                                                             esk
                                                             (newAccountId ^. hdAccountIdIx . to getHdAccountIx)
                                                             ExternalChain
                                                             (getHdAddressIx newIndex)
                         return $ M.insert txIn (TxOutAux (TxOut addr coin)) acc
                     ) M.empty (M.toList utxo)
-    payees <- fmap (\(TxOut addr coin) -> (addr, coin)) <$> pick (genPayeeWithNM nm utxo toPay)
+    payees <- fmap (\(TxOut addr coin) -> (addr, coin)) <$> pick (genPayeeWithNM nm utxo' toPay) -- FIX this in the morning - generate keys for new addresses
 
     return $ \keystore aw -> do
         liftIO $ Keystore.insert newRootId esk keystore
         let pw = Kernel.walletPassive aw
 
         let accounts    = Kernel.prefilterUtxo newRootId esk utxo'
-            hdAccountId = Kernel.defaultHdAccountId newRootId
-            hdAddress   = Kernel.defaultHdAddress nm esk emptyPassphrase newRootId
+            hdAccountId = newAccountId -- Kernel.defaultHdAccountId newRootId
+            hdAddress   = Nothing -- Kernel.defaultHdAddress nm esk passPhrase newRootId
 
         void $ liftIO $ update (pw ^. wallets) (CreateHdWallet newRoot hdAccountId hdAddress accounts)
         return $ Fixture {
@@ -140,6 +147,7 @@ prepareFixtures nm initialBalance toPay = do
                          , fixtureESK = esk
                          , fixturePw  = pw
                          , fixturePayees = payees
+                         , fixturePassPhrase = passPhrase
                          }
 
 withFixture :: MonadIO m
@@ -184,7 +192,7 @@ withPayment pm initialBalance toPay action = do
                          pmtSource           = V1.PaymentSource sourceWallet accountIndex
                        , pmtDestinations     = destinations
                        , pmtGroupingPolicy   = Nothing
-                       , pmtSpendingPassword = Nothing
+                       , pmtSpendingPassword = Just (V1.WalletPassPhrase fixturePassPhrase)
                        }
         action activeLayer newPayment
 
@@ -214,7 +222,7 @@ spec = describe "NewPayment" $ do
                              , csoInputGrouping     = IgnoreGrouping
                              }
                     res <- liftIO (Kernel.newTransaction aw
-                                                         mempty
+                                                         fixturePassPhrase
                                                          opts
                                                          fixtureAccountId
                                                          fixturePayees
@@ -230,7 +238,7 @@ spec = describe "NewPayment" $ do
                              , csoInputGrouping     = IgnoreGrouping
                              }
                     res <- liftIO (Kernel.newTransaction aw
-                                                         mempty
+                                                         fixturePassPhrase
                                                          opts
                                                          fixtureAccountId
                                                          fixturePayees
