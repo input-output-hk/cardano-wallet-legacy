@@ -40,7 +40,6 @@
           (hsPkgs.formatting)
           (hsPkgs.formatting)
           (hsPkgs.hashable)
-          (hsPkgs.kademlia)
           (hsPkgs.lens)
           (hsPkgs.mtl)
           (hsPkgs.mtl)
@@ -60,20 +59,6 @@
         ];
       };
       exes = {
-        "discovery" = {
-          depends = [
-            (hsPkgs.base)
-            (hsPkgs.binary)
-            (hsPkgs.bytestring)
-            (hsPkgs.cardano-sl-networking)
-            (hsPkgs.cardano-sl-util)
-            (hsPkgs.containers)
-            (hsPkgs.contravariant)
-            (hsPkgs.network-transport)
-            (hsPkgs.network-transport-tcp)
-            (hsPkgs.random)
-          ];
-        };
         "ping-pong" = {
           depends = [
             (hsPkgs.base)
@@ -187,8 +172,8 @@
   } // {
     src = pkgs.fetchgit {
       url = "https://github.com/input-output-hk/cardano-sl";
-      rev = "f39f9b033e615af55ba352b7034d96ebb068e61f";
-      sha256 = "1v6384iy2kjp367qs6jnqm7lsa55wgh69z6dqf70vysqn9bc2iab";
+      rev = "cdc77284bde949d4b1b9ac7be81b76b906a71fc7";
+      sha256 = "1hz27007z40w7mba6hfpf3jpmh9xdbf2cnmdmiskic2msvh0rdy7";
     };
     postUnpack = "sourceRoot+=/networking; echo source root reset to \$sourceRoot";
   }

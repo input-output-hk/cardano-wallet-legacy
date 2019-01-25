@@ -219,6 +219,7 @@
           depends = [
             (hsPkgs.base)
             (hsPkgs.QuickCheck)
+            (hsPkgs.servant-client)
             (hsPkgs.aeson)
             (hsPkgs.aeson-qq)
             (hsPkgs.async)
