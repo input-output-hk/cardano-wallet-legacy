@@ -173,6 +173,25 @@
             (hsPkgs.vector)
           ];
         };
+        "cardano-wallet-acceptance-tests" = {
+          depends = [
+            (hsPkgs.base)
+            (hsPkgs.turtle)
+            (hsPkgs.text)
+            (hsPkgs.process)
+            (hsPkgs.async)
+            (hsPkgs.system-filepath)
+          ];
+        };
+        "cardano-wallet-connect-script" = {
+          depends = [
+            (hsPkgs.base)
+            (hsPkgs.turtle)
+            (hsPkgs.text)
+            (hsPkgs.optparse-applicative)
+            (hsPkgs.system-filepath)
+          ];
+        };
       };
       tests = {
         "unit" = {

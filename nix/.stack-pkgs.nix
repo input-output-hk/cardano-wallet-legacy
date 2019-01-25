@@ -48,6 +48,7 @@
         cardano-sl-networking = ./.stack.nix/cardano-sl-networking.nix;
         cardano-sl-node = ./.stack.nix/cardano-sl-node.nix;
         cardano-sl-node-ipc = ./.stack.nix/cardano-sl-node-ipc.nix;
+        cardano-sl-tools = ./.stack.nix/cardano-sl-tools.nix;
         cardano-sl-util = ./.stack.nix/cardano-sl-util.nix;
         cardano-sl-util-test = ./.stack.nix/cardano-sl-util-test.nix;
         cardano-sl-utxo = ./.stack.nix/cardano-sl-utxo.nix;

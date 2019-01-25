@@ -115,3 +115,4 @@ https://github.com/input-output-hk/cardano-sl cdc77284bde949d4b1b9ac7be81b76b906
 https://github.com/input-output-hk/cardano-sl cdc77284bde949d4b1b9ac7be81b76b906a71fc7 x509 1hz27007z40w7mba6hfpf3jpmh9xdbf2cnmdmiskic2msvh0rdy7 cardano-sl-x509 .stack.nix/cardano-sl-x509.nix
 https://github.com/input-output-hk/cardano-crypto 45e1a0eafac774c109704be44ca06fd8cae193ba . 1jyzai4sn9hi3p6r97h54f9a7an7vk38lwrbl4mds9zmdsw5f5ad cardano-crypto .stack.nix/cardano-crypto.nix
 https://github.com/primetype/inspector.git c975f4329365f0379c04358138e616fb96fb0b79 . 12q1v7a8kcw7qi4lws4j3mvxwfkhni6zmp870kmnkgbgwvrax9gs inspector .stack.nix/inspector.nix
+https://github.com/input-output-hk/cardano-sl cdc77284bde949d4b1b9ac7be81b76b906a71fc7 tools 1hz27007z40w7mba6hfpf3jpmh9xdbf2cnmdmiskic2msvh0rdy7 cardano-sl-tools .stack.nix/cardano-sl-tools.nix
