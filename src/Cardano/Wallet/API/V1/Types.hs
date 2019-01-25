@@ -66,6 +66,7 @@ module Cardano.Wallet.API.V1.Types (
   -- * Addresses
   , WalletAddress (..)
   , NewAddress (..)
+  , BatchImportResult(..)
   , AddressLevel
   , addressLevelToWord32
   , word32ToAddressLevel
@@ -303,6 +304,9 @@ instance BuildableSafeGen WalAddress where
     buildSafeGen sl (WalAddress addr) =
         bprint (plainOrSecureF sl build (fconst "<wallet address>")) addr
 
+instance Buildable [WalAddress] where
+    build = bprint listJson
+
 instance ToJSON WalAddress where
     toJSON (WalAddress c) = String $ sformat Core.addressF c
 
@@ -317,9 +321,9 @@ instance Arbitrary WalAddress where
 
 instance ToSchema WalAddress where
     declareNamedSchema _ =
-        pure $ NamedSchema (Just "Wallet Address") $ mempty
+        pure $ NamedSchema (Just "Address") $ mempty
             & type_ .~ SwaggerString
-            -- TODO: any other constraints we can have here?
+            & format ?~ "base58"
 
 instance FromHttpApiData WalAddress where
     parseQueryParam = fmap (fmap WalAddress) Core.decodeTextAddress
@@ -1011,6 +1015,45 @@ instance Buildable WAddressMeta where
 --------------------------------------------------------------------------------
 -- Accounts
 --------------------------------------------------------------------------------
+
+data BatchImportResult a = BatchImportResult
+    { aimTotalSuccess :: !Natural
+    , aimFailures     :: ![a]
+    } deriving (Show, Ord, Eq, Generic)
+
+instance Buildable (BatchImportResult a) where
+    build res = bprint
+        ("BatchImportResult (success:"%int%", failures:"%int%")")
+        (aimTotalSuccess res)
+        (length $ aimFailures res)
+
+instance ToJSON a => ToJSON (BatchImportResult a) where
+    toJSON = genericToJSON Aeson.defaultOptions
+
+instance FromJSON a => FromJSON (BatchImportResult a) where
+    parseJSON = genericParseJSON Aeson.defaultOptions
+
+instance (ToJSON a, ToSchema a, Arbitrary a) => ToSchema (BatchImportResult a) where
+    declareNamedSchema =
+        genericSchemaDroppingPrefix "aim" (\(--^) props -> props
+            & ("totalSuccess" --^ "Total number of entities successfully imported")
+            & ("failures" --^ "Entities failed to be imported, if any")
+        )
+
+instance Arbitrary a => Arbitrary (BatchImportResult a) where
+    arbitrary = BatchImportResult
+        <$> arbitrary
+        <*> scale (`mod` 3) arbitrary -- NOTE Small list
+
+instance Arbitrary a => Example (BatchImportResult a)
+
+instance Semigroup (BatchImportResult a) where
+    (BatchImportResult a0 b0) <> (BatchImportResult a1 b1) =
+        BatchImportResult (a0 + a1) (b0 <> b1)
+
+instance Monoid (BatchImportResult a) where
+    mempty = BatchImportResult 0 mempty
+
 
 -- | Summary about single address.
 data WalletAddress = WalletAddress
