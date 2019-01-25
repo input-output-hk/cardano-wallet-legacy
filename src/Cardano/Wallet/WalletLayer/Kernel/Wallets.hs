@@ -42,10 +42,9 @@ import           Cardano.Wallet.Kernel.Restore (blundToResolvedBlock,
                      restoreWallet)
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
 import           Cardano.Wallet.WalletLayer (CreateWallet (..),
-                     CreateWalletError (..), DeleteEosWalletError (..),
-                     DeleteWalletError (..), GetUtxosError (..),
-                     GetWalletError (..), UpdateWalletError (..),
-                     UpdateWalletPasswordError (..))
+                     CreateWalletError (..), DeleteWalletError (..),
+                     GetUtxosError (..), GetWalletError (..),
+                     UpdateWalletError (..), UpdateWalletPasswordError (..))
 import           Cardano.Wallet.WalletLayer.Kernel.Conv
 
 createWallet :: MonadIO m
@@ -223,11 +222,15 @@ deleteWallet wallet wId = runExceptT $ do
 
 -- | Deletes external wallets. Please note that there's no actions in the
 -- 'Keystore', because it contains only root secret keys.
-deleteEosWallet :: Kernel.PassiveWallet
+deleteEosWallet :: MonadIO m
+                => Kernel.PassiveWallet
                 -> V1.WalletId
-                -> m (Either DeleteEosWalletError ())
-deleteEosWallet _wallet _eosWalletId =
-    error "TODO: it will be implemented in https://github.com/input-output-hk/cardano-wallet/issues/36"
+                -> m (Either DeleteWalletError ())
+deleteEosWallet wallet wId = runExceptT $ do
+    rootId <- withExceptT DeleteWalletWalletIdDecodingFailed $ fromRootId wId
+    withExceptT DeleteWalletError $ ExceptT $ liftIO $ do
+        Kernel.deleteTxMetas (wallet ^. walletMeta) rootId Nothing
+        Kernel.deleteEosHdWallet wallet rootId
 
 -- | Gets a specific wallet.
 getWallet :: MonadIO m

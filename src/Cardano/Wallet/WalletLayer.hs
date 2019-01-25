@@ -9,7 +9,6 @@ module Cardano.Wallet.WalletLayer
     , UpdateWalletError(..)
     , UpdateWalletPasswordError(..)
     , DeleteWalletError(..)
-    , DeleteEosWalletError(..)
     , GetUtxosError(..)
     , NewPaymentError(..)
     , EstimateFeesError(..)
@@ -167,19 +166,6 @@ instance Buildable DeleteWalletError where
         bprint ("DeleteWalletWalletIdDecodingFailed " % build) txt
     build (DeleteWalletError kernelError) =
         bprint ("DeleteWalletError " % build) kernelError
-
-data DeleteEosWalletError =
-    DeleteEosWalletError Kernel.UnknownHdRoot
-
--- | Unsound show instance needed for the 'Exception' instance.
-instance Show DeleteEosWalletError where
-    show = formatToString build
-
-instance Exception DeleteEosWalletError
-
-instance Buildable DeleteEosWalletError where
-    build (DeleteEosWalletError kernelError) =
-        bprint ("DeleteEosWalletError " % build) kernelError
 
 data GetUtxosError =
       GetUtxosWalletIdDecodingFailed Text
@@ -439,7 +425,7 @@ data PassiveWalletLayer m = PassiveWalletLayer
     , deleteWallet         :: WalletId -> m (Either DeleteWalletError ())
     -- externally-owned wallets
     , createEosWallet      :: NewEosWallet -> m (Either CreateWalletError EosWallet)
-    , deleteEosWallet      :: WalletId -> m (Either DeleteEosWalletError ())
+    , deleteEosWallet      :: WalletId -> m (Either DeleteWalletError ())
     , getUtxos             :: WalletId
                            -> m (Either GetUtxosError [(Account, Utxo)])
     -- accounts
