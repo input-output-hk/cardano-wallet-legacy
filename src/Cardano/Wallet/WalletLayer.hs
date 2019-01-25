@@ -37,7 +37,6 @@ import           Test.QuickCheck (Arbitrary (..), oneof)
 
 import           Pos.Chain.Block (Blund)
 import           Pos.Chain.Txp (Tx, Utxo)
-import           Pos.Chain.Update (ConfirmedProposalState, SoftwareVersion)
 import           Pos.Core (Coin)
 import qualified Pos.Core as Core
 import           Pos.Core.Chrono (NE, NewestFirst (..), OldestFirst (..))
@@ -484,10 +483,6 @@ data PassiveWalletLayer m = PassiveWalletLayer
     -- internal
     , resetWalletState     :: m ()
     , importWallet         :: WalletImport -> m (Either ImportWalletError Wallet)
-
-    -- updates
-    , waitForUpdate        :: m ConfirmedProposalState
-    , addUpdate            :: SoftwareVersion -> m ()
     }
 
 ------------------------------------------------------------

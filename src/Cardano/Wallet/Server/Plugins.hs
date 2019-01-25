@@ -15,7 +15,6 @@ module Cardano.Wallet.Server.Plugins
     , docServer
     , monitoringServer
     , acidStateSnapshots
-    , updateWatcher
     , setupNodeClient
     ) where
 
@@ -57,10 +56,8 @@ import           Cardano.Wallet.Server.Plugins.AcidState
                      (createAndArchiveCheckpoints)
 import           Cardano.Wallet.WalletLayer (ActiveWalletLayer,
                      PassiveWalletLayer)
-import qualified Cardano.Wallet.WalletLayer as WalletLayer
 import qualified Cardano.Wallet.WalletLayer.Kernel as WalletLayer.Kernel
 
-import           Pos.Chain.Update (cpsSoftwareVersion)
 import           Pos.Infra.Diffusion.Types (Diffusion (..))
 import           Pos.Infra.Shutdown (HasShutdownContext (shutdownContext),
                      ShutdownContext)
@@ -203,16 +200,6 @@ acidStateSnapshots dbRef params dbMode = const worker
               dbRef
               (walletAcidInterval opts)
               dbMode
-
--- | A @Plugin@ to store updates proposal received from the blockchain
-updateWatcher :: Plugin Kernel.WalletMode
-updateWatcher = const $ do
-    modifyLoggerName (const "update-watcher-plugin") $ do
-        w <- Kernel.getWallet
-        forever $ liftIO $ do
-            newUpdate <- WalletLayer.waitForUpdate w
-            logInfo "A new update was found!"
-            WalletLayer.addUpdate w . cpsSoftwareVersion $ newUpdate
 
 instance Buildable Servant.NoContent where
     build Servant.NoContent = build ()
