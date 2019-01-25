@@ -32,11 +32,13 @@ with (import (fixedNixpkgs.path + "/pkgs/top-level/release-lib.nix") {
 let
   jobs = mapTestOn {
     exes.cardano-wallet-server = supportedSystems;
+    exes.cardano-wallet-client = supportedSystems;
     tests.unit                 = supportedSystems;
   };
 
   crossJobs = mapTestOnCross lib.systems.examples.mingwW64 {
     exes.cardano-wallet-server = [ "x86_64-linux" ];
+    exes.cardano-wallet-client = [ "x86_64-linux" ];
     tests.unit                 = [ "x86_64-linux" ];
   };
 

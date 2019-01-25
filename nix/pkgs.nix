@@ -164,6 +164,7 @@ let
          packages.diagrams-svg             = withTH;
          packages.diagrams-postscript      = withTH;
          packages.Chart-diagrams           = withTH;
+         packages.statistics               = withTH;
       })
 
       # Packages we wish to ignore version bounds of.

@@ -3,7 +3,6 @@
     {
       packages = {
         "generic-lens" = hackage.generic-lens."1.1.0.0".revisions.default;
-        "Chart" = hackage.Chart."1.9".revisions.default;
         "Chart-cairo" = hackage.Chart-cairo."1.9".revisions.default;
         "Chart" = hackage.Chart."1.9".revisions.default;
         "Chart-diagrams" = hackage.Chart-diagrams."1.9".revisions.default;

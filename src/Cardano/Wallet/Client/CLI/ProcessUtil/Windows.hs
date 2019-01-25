@@ -7,7 +7,7 @@ module Cardano.Wallet.Client.CLI.ProcessUtil.Windows
 
 import           Universum
 
-import           Control.Concurrent.Async (Async (..), cancel)
+import           Control.Concurrent.Async (Async (..))
 import           Control.Exception (IOException)
 
 import           System.Win32.Process (ProcessId, getCurrentProcessId,
