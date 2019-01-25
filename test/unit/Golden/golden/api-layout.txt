@@ -24,6 +24,12 @@
 │  ┆
 │  └─•
 └─ wallets/
+   ├─ <capture>/
+   │  └─ accounts/
+   │     └─ <capture>/
+   │        └─ addresses/
+   │           └─•
+   ┆
    ├─•
    ┆
    ├─•
