@@ -153,7 +153,9 @@ createEosWallet :: MonadIO m
                 -> V1.NewEosWallet
                 -> m (Either CreateEosWalletError V1.EosWallet)
 createEosWallet wallet newEosWalletRequest = runExceptT $ do
-    let accountsPublicKeys = V1.neweoswalAccountsPublicKeys newEosWalletRequest
+    let accountsPublicKeysWithIxs =
+            map (\(V1.AccountPublicKeyWithIx pk ix) -> (pk, V1.getAccIndex ix)) $
+                V1.neweoswalAccounts newEosWalletRequest
         addressPoolGap = maybe (def :: AddressPoolGap) id $
             V1.neweoswalAddressPoolGap newEosWalletRequest
         name = V1.neweoswalName newEosWalletRequest
@@ -161,7 +163,7 @@ createEosWallet wallet newEosWalletRequest = runExceptT $ do
     _ <- withExceptT CreateEosWalletError $ ExceptT $ liftIO $
         Kernel.createEosHdWallet
             wallet
-            accountsPublicKeys
+            accountsPublicKeysWithIxs
             addressPoolGap
             (fromAssuranceLevel assuranceLevel)
             (HD.WalletName name)

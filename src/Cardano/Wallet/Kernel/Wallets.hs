@@ -241,7 +241,7 @@ createHdWallet pw mnemonic spendingPassword assuranceLevel walletName = do
 
 -- | Creates a new EOS HD 'Wallet'.
 createEosHdWallet :: PassiveWallet
-                  -> [PublicKey]
+                  -> [(PublicKey, Word32)]
                   -- ^ External wallet's accounts public keys.
                   -> AddressPoolGap
                   -- ^ Address pool gap for this wallet.
@@ -253,11 +253,13 @@ createEosHdWallet :: PassiveWallet
                   -> WalletName
                   -- ^ The name for this wallet.
                   -> IO (Either CreateEosWalletError EosHdRoot)
-createEosHdWallet pw accountsPKs addressPoolGap assuranceLevel walletName = do
+createEosHdWallet pw accountsPKsWithIxs addressPoolGap assuranceLevel walletName = do
     -- Here, we review the definition of a wallet down to a list of account public keys with
     -- no relationship whatsoever from the wallet's point of view. New addresses can be derived
     -- for each account at will and discovered using the address pool discovery algorithm
     -- described in BIP-44. Public keys are managed and provided from an external sources.
+    -- TODO: Temporary solution, will be fixed soon, see #231.
+    let accountsPKs = map fst accountsPKsWithIxs
     newEosWalletId <- genEosWalletId
     let newEosRoot = EosHdRoot newEosWalletId
                                walletName
