@@ -2,6 +2,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE ViewPatterns               #-}
+
 -- TODO: Not sure about the best way to avoid the orphan instances here
 {-# OPTIONS_GHC -fno-warn-orphans -Wno-redundant-constraints #-}
 
@@ -531,7 +533,11 @@ hdAccountRestorationState a = case a ^. hdAccountState of
 -------------------------------------------------------------------------------}
 
 class IsOurs s where
+    -- For the given state, check whether an address is "ours"
     isOurs :: Core.Address -> s -> (Maybe HdAddress, s)
+    -- Marks the state as empty and enables us to skip single or batch calls
+    -- to isOurs in the case of trivial state.
+    isOursSkip :: s -> Bool
 
 {-------------------------------------------------------------------------------
   isOurs for Hd Random wallets
@@ -540,8 +546,11 @@ class IsOurs s where
 -- | NOTE: We could modify the given state here to actually store decrypted
 -- addresses in a `Map` to trade a decryption against a map lookup for already
 -- decrypted addresses.
-instance IsOurs [(HdRootId, Core.EncryptedSecretKey)] where
-    isOurs addr s = (,s) $ foldl' (<|>) Nothing $ flip map s $ \(rootId, esk) -> do
+instance IsOurs (Map HdRootId Core.EncryptedSecretKey) where
+    isOursSkip = Map.null
+
+    isOurs _ s@(isOursSkip -> True) = (Nothing, s)
+    isOurs addr s = (,s) $ foldl' (<|>) Nothing $ flip Map.mapWithKey s $ \rootId esk -> do
         (accountIx, addressIx) <- decryptHdLvl2DerivationPath (eskToHdPassphrase esk) addr
         let accId = HdAccountId rootId accountIx
         let addrId = HdAddressId accId addressIx
@@ -584,6 +593,9 @@ mkAddressPool mkAddress accPK gap = emptyAddressPool gap newAddress
 --  (since the address pool may have been extended in response to the address discovery)
 --  Otherwise if we don't find the address, we return the state unchanged.
 instance IsOurs (Map HdAccountId (AddressPool Core.Address)) where
+    isOursSkip = Map.null
+
+    isOurs _ s@(isOursSkip -> True) = (Nothing, s)
     isOurs addr pools = case addrMatch of
         (Just (hdAddr, pool')) ->
             (Just hdAddr, pools & at (accountId hdAddr) ?~ pool')

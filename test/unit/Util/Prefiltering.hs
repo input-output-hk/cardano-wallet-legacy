@@ -17,7 +17,7 @@ prefilterUtxo
     -> EncryptedSecretKey
     -> Utxo
     -> Map HdAccountId (Utxo, [HdAddress])
-prefilterUtxo rootId esk utxo = flip evalState [(rootId, esk)] $
+prefilterUtxo rootId esk utxo = flip evalState (Map.singleton rootId esk) $
     fmap (Map.unionsWith (<>)) $ forM (Map.toList utxo) $ \(txin, txout) -> do
         let addr = txOutAddress $ toaOut txout
         state (isOurs addr) <&> \case

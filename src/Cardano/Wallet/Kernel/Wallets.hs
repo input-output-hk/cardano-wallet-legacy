@@ -24,6 +24,7 @@ import qualified Formatting as F
 import qualified Formatting.Buildable
 
 import           Data.Acid.Advanced (update')
+import qualified Data.Map.Strict as Map
 
 import           Pos.Chain.Txp (Utxo)
 import           Pos.Core (Address, Timestamp)
@@ -352,7 +353,7 @@ defaultHdAddressWith :: EncryptedSecretKey
                      -> Address
                      -> Maybe HdAddress
 defaultHdAddressWith esk rootId addr =
-    fst $ HD.isOurs addr [(rootId, esk)]
+    fst $ HD.isOurs addr (Map.singleton rootId esk)
 
 defaultHdAccountId :: HD.HdRootId -> HdAccountId
 defaultHdAccountId rootId = HdAccountId rootId (HdAccountIx firstHardened)

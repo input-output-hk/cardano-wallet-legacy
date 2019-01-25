@@ -1,5 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase   #-}
+{-# LANGUAGE ViewPatterns #-}
+
 -- | React to BListener events
 module Cardano.Wallet.Kernel.BListener (
     -- * Respond to block chain events
@@ -25,15 +27,19 @@ import qualified Formatting.Buildable
 
 import           Pos.Chain.Block (HeaderHash)
 import           Pos.Chain.Genesis (Config (..))
-import           Pos.Chain.Txp (TxId)
+import           Pos.Chain.Txp (TxId, TxIn)
+import           Pos.Core (Address)
 import           Pos.Core.Chrono (OldestFirst (..))
+import           Pos.Crypto (EncryptedSecretKey)
 import           Pos.DB.Block (getBlund)
 import           Pos.Util.Log (Severity (..))
 
-import           Cardano.Wallet.Kernel.DB.AcidState (ApplyBlock (..),
+import           Cardano.Wallet.Kernel.AddressPool (AddressPool)
+import           Cardano.Wallet.Kernel.DB.AcidState (ApplyBlock (..), DB,
                      ObservableRollbackUseInTestsOnly (..), SwitchToFork (..),
                      SwitchToForkInternalError (..))
 import           Cardano.Wallet.Kernel.DB.BlockContext
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import           Cardano.Wallet.Kernel.DB.Resolved (ResolvedBlock, rbContext,
@@ -61,24 +67,61 @@ import           Cardano.Wallet.WalletLayer.Kernel.Wallets
 
 type PrefilterResult = ((BlockContext, PrefilteredBlock), [TxMeta])
 
--- | Prefilter the block for each account. Returns 'Nothing' if the prefiltering
--- is irrelevant for this node, i.e. there are no user wallets stored, so we
--- can avoid doing work (i.e. writing into the acid-state DB log) by skipping
--- such block application.
+-- | Prefilter a list of resolved blocks for all accounts in all wallets.
+-- Since different types wallets have different prefiltering mechanisms, we need
+-- to do prefiltering seperately for each type of wallet and then combine the results.
 prefilterBlocks :: PassiveWallet
                 -> [ResolvedBlock]
                 -> IO (Maybe [PrefilterResult])
+-- Returns 'Nothing' if the prefiltering is irrelevant for this node, i.e.
+-- there are no user wallets stored, so we can avoid doing work
+-- (e.g. writing into the acid-state DB log) by skipping such block application).
+prefilterBlocks _ [] = return Nothing
 prefilterBlocks pw bs = do
-    res <- getWalletCredentials pw
-    isForeign <- fmap Pending.txIns . foreignPendingByAccount <$> getWalletSnapshot pw
-    case res of
-         [] -> return Nothing
-         xs -> fmap Just $ flip evalStateT xs $ forM bs $ \rb -> do
-            pb <- state (prefilterBlock isForeign rb)
-            metas <- state (resolvedToTxMetas rb) >>= \case
-                Left e  -> throwM e
-                Right x -> return x
-            return ((rb ^. rbContext, pb), metas)
+    db <- getWalletSnapshot pw
+    let foreigns = fmap Pending.txIns . foreignPendingByAccount $ db
+    hdRnds <- getHdRndWallets db
+    hdSeqs <- getHdSeqWallets db
+
+    listToMaybe' <$>
+        ((<>) <$> prefilter foreigns hdRnds <*> prefilter foreigns hdSeqs)
+    where
+        -- Prefilter blocks for any class of wallets for which prefiltering is
+        -- defined (that is, a type constrained by IsOurs)
+        prefilter
+          :: IsOurs s
+          => Map HdAccountId (Set TxIn)
+          -> s
+          -> IO [PrefilterResult]
+        prefilter _ (isOursSkip -> True) = return []
+        prefilter fs ws = do
+            flip evalStateT ws $ forM bs $ \rb -> do
+                pb <- state (prefilterBlock fs rb)
+                metas <- state (resolvedToTxMetas rb) >>= \case
+                   Left e  -> throwM e
+                   Right x -> return x
+                return ((rb ^. rbContext, pb), metas)
+
+        -- A variation on Map.listToMaybe
+        listToMaybe' :: [PrefilterResult] -> Maybe [PrefilterResult]
+        listToMaybe' l = if null l then Nothing else (Just l)
+
+        -- Get the data required for prefiltering of HdRnd wallets
+        getHdRndWallets
+            :: DB
+            -> IO (Map HdRootId EncryptedSecretKey)
+        getHdRndWallets db = getWalletCredentials db
+                    (pw ^. walletKeystore)
+                    (pw ^. walletProtocolMagic)
+                    (pw ^. walletLogMessage)
+
+        -- TODO @uroboros
+        -- Get the data required for prefiltering of HdSeq wallets
+        getHdSeqWallets
+            :: DB
+            -> IO (Map HdAccountId (AddressPool Address))
+        getHdSeqWallets _db
+            = return Map.empty
 
 data BackfillFailed
     = SuccessorChanged BlockContext (Maybe BlockContext)

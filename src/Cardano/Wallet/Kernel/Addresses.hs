@@ -20,6 +20,7 @@ import qualified Formatting.Buildable
 import           System.Random.MWC (GenIO, createSystemRandom, uniformR)
 
 import           Data.Acid (update)
+import qualified Data.Map.Strict as Map
 
 import           Pos.Core (Address, IsBootstrapEraAddr (..), deriveLvl2KeyPair)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
@@ -220,7 +221,7 @@ importAddresses
 importAddresses accId addrs pw = runExceptT $ do
     let rootId = accId ^. hdAccountIdParent
     esk <- lookupSecretKey rootId
-    lift $ forM addrs (flip importOneAddress [(rootId, esk)])
+    lift $ forM addrs (flip importOneAddress (Map.singleton rootId esk))
   where
     lookupSecretKey
         :: HdRootId
@@ -234,7 +235,7 @@ importAddresses accId addrs pw = runExceptT $ do
 
     importOneAddress
         :: Address
-        -> [(HdRootId, EncryptedSecretKey)]
+        -> Map HdRootId EncryptedSecretKey
         -> IO (Either Address ())
     importOneAddress addr = evalStateT $ do
         let updateLifted = fmap Just .  lift . update (pw ^. wallets)
