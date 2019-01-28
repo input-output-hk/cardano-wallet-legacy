@@ -23,9 +23,10 @@ import           Cardano.Wallet.Kernel.DB.AcidState (CreateHdAccount (..), DB,
                      DeleteHdAccount (..), UpdateHdAccountName (..))
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (AccountName (..),
-                     HdAccount (..), HdAccountId (..), HdAccountIx (..),
-                     HdAccountState (..), HdAccountUpToDate (..),
-                     UnknownHdAccount (..), hdAccountName)
+                     HdAccount (..), HdAccountBase (..), HdAccountId (..),
+                     HdAccountIx (..), HdAccountState (..),
+                     HdAccountUpToDate (..), UnknownHdAccount (..),
+                     hdAccountName)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Create
                      (CreateHdAccountError (..), initHdAccount)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
@@ -119,7 +120,7 @@ createHdRndAccount _spendingPassword accountName _esk rootId pw = do
         tryGenerateAccount gen collisions = do
             newIndex <- deriveIndex (flip uniformR gen) HdAccountIx HardDerivation
             let hdAccountId = HdAccountId rootId newIndex
-                newAccount  = initHdAccount hdAccountId initState &
+                newAccount  = initHdAccount (HdAccountBaseFO hdAccountId) initState &
                               hdAccountName .~ accountName
                 db = pw ^. wallets
             res <- update db (CreateHdAccount newAccount)

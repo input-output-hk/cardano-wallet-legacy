@@ -42,11 +42,11 @@ import qualified Cardano.Wallet.Kernel.Read as Kernel
 import           Cardano.Wallet.Kernel.Restore (blundToResolvedBlock,
                      restoreWallet)
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
-import           Cardano.Wallet.WalletLayer (CreateEosWalletError (..),
-                     CreateWallet (..), CreateWalletError (..),
-                     DeleteEosWalletError (..), DeleteWalletError (..),
-                     GetUtxosError (..), GetWalletError (..),
-                     UpdateWalletError (..), UpdateWalletPasswordError (..))
+import           Cardano.Wallet.WalletLayer (CreateWallet (..),
+                     CreateWalletError (..), DeleteEosWalletError (..),
+                     DeleteWalletError (..), GetUtxosError (..),
+                     GetWalletError (..), UpdateWalletError (..),
+                     UpdateWalletPasswordError (..))
 import           Cardano.Wallet.WalletLayer.Kernel.Conv
 
 createWallet :: MonadIO m
@@ -151,7 +151,7 @@ createWallet wallet newWalletRequest = liftIO $ do
 createEosWallet :: MonadIO m
                 => Kernel.PassiveWallet
                 -> V1.NewEosWallet
-                -> m (Either CreateEosWalletError V1.EosWallet)
+                -> m (Either CreateWalletError V1.EosWallet)
 createEosWallet wallet newEosWalletRequest = runExceptT $ do
     let accountsPublicKeysWithIxs =
             map (\(V1.AccountPublicKeyWithIx pk ix) -> (pk, V1.getAccIndex ix)) $
@@ -160,20 +160,22 @@ createEosWallet wallet newEosWalletRequest = runExceptT $ do
             V1.neweoswalAddressPoolGap newEosWalletRequest
         name = V1.neweoswalName newEosWalletRequest
         assuranceLevel = V1.neweoswalAssuranceLevel newEosWalletRequest
-    _ <- withExceptT CreateEosWalletError $ ExceptT $ liftIO $
+    hdRoot <- withExceptT CreateWalletError $ ExceptT $ liftIO $
         Kernel.createEosHdWallet
             wallet
             accountsPublicKeysWithIxs
             addressPoolGap
             (fromAssuranceLevel assuranceLevel)
             (HD.WalletName name)
+    let createdAt = hdRoot ^. HD.hdRootCreatedAt . fromDb
+        walletId  = toRootId $ hdRoot ^. HD.hdRootId
     return $ V1.EosWallet {
-          eoswalId             = error "TODO: #236"
+          eoswalId             = walletId
         , eoswalName           = name
         , eoswalAddressPoolGap = addressPoolGap
         , eoswalBalance        = V1.WalletCoin (mkCoin 0)
         , eoswalAssuranceLevel = assuranceLevel
-        , eoswalCreatedAt      = error "TODO: #236"
+        , eoswalCreatedAt      = V1.WalletTimestamp createdAt
         }
 
 -- | Updates the 'SpendingPassword' for this wallet.

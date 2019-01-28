@@ -5,7 +5,6 @@ module Cardano.Wallet.WalletLayer
     , CreateWallet(..)
     -- ** Errors
     , CreateWalletError(..)
-    , CreateEosWalletError(..)
     , GetWalletError(..)
     , UpdateWalletError(..)
     , UpdateWalletPasswordError(..)
@@ -92,23 +91,6 @@ instance Arbitrary CreateWalletError where
 instance Buildable CreateWalletError where
     build (CreateWalletError kernelError) =
         bprint ("CreateWalletError " % build) kernelError
-
-data CreateEosWalletError =
-    CreateEosWalletError Kernel.CreateEosWalletError
-
--- | Unsound show instance needed for the 'Exception' instance.
-instance Show CreateEosWalletError where
-    show = formatToString build
-
-instance Exception CreateEosWalletError
-
-instance Arbitrary CreateEosWalletError where
-    arbitrary = oneof [ CreateEosWalletError <$> arbitrary
-                      ]
-
-instance Buildable CreateEosWalletError where
-    build (CreateEosWalletError kernelError) =
-        bprint ("CreateEosWalletError " % build) kernelError
 
 data GetWalletError =
       GetWalletError Kernel.UnknownHdRoot
@@ -456,7 +438,7 @@ data PassiveWalletLayer m = PassiveWalletLayer
                            -> m (Either UpdateWalletPasswordError Wallet)
     , deleteWallet         :: WalletId -> m (Either DeleteWalletError ())
     -- externally-owned wallets
-    , createEosWallet      :: NewEosWallet -> m (Either CreateEosWalletError EosWallet)
+    , createEosWallet      :: NewEosWallet -> m (Either CreateWalletError EosWallet)
     , deleteEosWallet      :: WalletId -> m (Either DeleteEosWalletError ())
     , getUtxos             :: WalletId
                            -> m (Either GetUtxosError [(Account, Utxo)])
