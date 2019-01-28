@@ -3,10 +3,12 @@ module Cardano.Wallet.Kernel.DB.HdWallet.Update (
     updateHdRoot
   , updateHdRootPassword
   , updateHdAccountName
+  , updateHdAccountGap
   ) where
 
 import           Universum
 
+import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.Util.AcidState
@@ -38,3 +40,10 @@ updateHdAccountName :: HdAccountId
 updateHdAccountName accId name = do
     zoomHdAccountId identity accId $ do
         modifyAndGetNew $ hdAccountName .~ name
+
+updateHdAccountGap :: HdAccountId
+                   -> AddressPoolGap
+                   -> Update' UnknownHdAccount HdWallets HdAccount
+updateHdAccountGap accId gap =
+    zoomHdAccountId identity accId $
+        modifyAndGetNew $ hdAccountBaseGap .~ gap

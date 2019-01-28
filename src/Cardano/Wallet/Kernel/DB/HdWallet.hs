@@ -55,6 +55,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , hdAccountId
   , hdAccountBase
   , hdAccountBaseId
+  , hdAccountBaseGap
   , hdAccountName
   , hdAccountState
   , hdAccountStateCurrent
@@ -103,6 +104,7 @@ import           Universum hiding ((:|))
 
 import           Control.Lens (Getter, at, lazy, lens, to, (+~), (?~), _Wrapped)
 import           Control.Lens.TH (makeLenses)
+import           Data.Default (def)
 import qualified Data.IxSet.Typed as IxSet (Indexable (..))
 import qualified Data.Map as Map
 import           Data.SafeCopy (base, deriveSafeCopy)
@@ -476,6 +478,19 @@ hdAccountBaseId = lens getHdAccountId setHdAccountId
     setHdAccountId :: HdAccountBase -> HdAccountId -> HdAccountBase
     setHdAccountId (HdAccountBaseFO _) newAccountId = HdAccountBaseFO newAccountId
     setHdAccountId (HdAccountBaseEO _ pKey gap) newAccountId = HdAccountBaseEO newAccountId pKey gap
+
+hdAccountBaseGap :: Lens' HdAccount AddressPoolGap
+hdAccountBaseGap = hdAccountBase . lens getHdAccountGap setHdAccountGap
+  where
+    getHdAccountGap :: HdAccountBase -> AddressPoolGap
+    -- This lens is only for 'HdAccount' with EO-branch, so if it will apply
+    -- to 'HdAccount' woth FO-branch - just return default value of gap.
+    getHdAccountGap (HdAccountBaseFO _)       = def :: AddressPoolGap
+    getHdAccountGap (HdAccountBaseEO _ _ gap) = gap
+
+    setHdAccountGap :: HdAccountBase -> AddressPoolGap -> HdAccountBase
+    setHdAccountGap (HdAccountBaseFO accountId) _ = HdAccountBaseFO accountId
+    setHdAccountGap (HdAccountBaseEO accountId pKey _) newGap = HdAccountBaseEO accountId pKey newGap
 
 hdAccountId :: Lens' HdAccount HdAccountId
 hdAccountId = hdAccountBase . hdAccountBaseId

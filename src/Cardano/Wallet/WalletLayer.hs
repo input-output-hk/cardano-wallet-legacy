@@ -51,8 +51,9 @@ import           Cardano.Wallet.API.V1.Types (Account, AccountBalance,
                      NewAccount, NewAddress, NewEosWallet, NewWallet,
                      PasswordUpdate, Payment, Redemption, SignedTransaction,
                      SpendingPassword, Transaction, UnsignedTransaction,
-                     WalAddress, Wallet, WalletAddress, WalletId, WalletImport,
-                     WalletTimestamp, WalletTxId, WalletUpdate)
+                     UpdateEosWallet, WalAddress, Wallet, WalletAddress,
+                     WalletId, WalletImport, WalletTimestamp, WalletTxId,
+                     WalletUpdate)
 import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import qualified Cardano.Wallet.Kernel.Addresses as Kernel
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
@@ -421,6 +422,9 @@ data PassiveWalletLayer m = PassiveWalletLayer
     , updateWallet         :: WalletId
                            -> WalletUpdate
                            -> m (Either UpdateWalletError Wallet)
+    , updateEosWallet      :: WalletId
+                           -> UpdateEosWallet
+                           -> m (Either UpdateWalletError EosWallet)
     , updateWalletPassword :: WalletId
                            -> PasswordUpdate
                            -> m (Either UpdateWalletPasswordError Wallet)

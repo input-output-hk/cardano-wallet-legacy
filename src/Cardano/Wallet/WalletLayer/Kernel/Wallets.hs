@@ -3,6 +3,7 @@ module Cardano.Wallet.WalletLayer.Kernel.Wallets (
       createWallet
     , createEosWallet
     , updateWallet
+    , updateEosWallet
     , updateWalletPassword
     , deleteWallet
     , deleteEosWallet
@@ -27,6 +28,7 @@ import           Pos.Crypto.Signing
 
 import qualified Cardano.Mnemonic as Mnemonic
 import qualified Cardano.Wallet.API.V1.Types as V1
+import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (dbHdWallets)
@@ -186,6 +188,31 @@ updateWallet wallet wId (V1.WalletUpdate v1Level v1Name) = runExceptT $ do
                withExceptT UpdateWalletError $ ExceptT $ liftIO $
                  Kernel.updateHdWallet wallet rootId newLevel newName
     updateSyncState wallet rootId v1wal
+  where
+    newLevel = fromAssuranceLevel v1Level
+    newName  = HD.WalletName v1Name
+
+updateEosWallet
+    :: MonadIO m
+    => Kernel.PassiveWallet
+    -> V1.WalletId
+    -> V1.UpdateEosWallet
+    -> m (Either UpdateWalletError V1.EosWallet)
+updateEosWallet wallet wId (V1.UpdateEosWallet v1Level v1Name newGap) = runExceptT $ do
+    rootId <- withExceptT UpdateWalletWalletIdDecodingFailed $ fromRootId wId
+    (db, newHdRoot) <- withExceptT UpdateWalletError $ ExceptT $ liftIO $
+        Kernel.updateHdWallet wallet rootId newLevel newName
+    -- 'HdRoot' doesn't contain address pool gap, only corresponding 'HdAccount's contain it.
+    -- So we have to update all these accounts.
+    accountSet <- withExceptT UpdateWalletError $ exceptT $
+        return $ Kernel.accountsByRootId db rootId
+    void $ forM (IxSet.toList accountSet) $ \hdAccount -> do
+        let HD.HdAccountBaseEO accId _ _ = hdAccount ^. HD.hdAccountBase
+        result <- liftIO $ Kernel.updateAccountGap accId newGap wallet
+        case result of
+            Left _              -> error "TODO"
+            Right (_, newHdAcc) -> return newHdAcc
+    return $ toEosWallet newGap db newHdRoot
   where
     newLevel = fromAssuranceLevel v1Level
     newName  = HD.WalletName v1Name
