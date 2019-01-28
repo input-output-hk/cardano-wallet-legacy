@@ -26,6 +26,8 @@ import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Text as T
 import           Data.Typeable (typeOf)
 import           Formatting.Buildable (build)
+import           Network.HTTP.Client (managerResponseTimeout,
+                     responseTimeoutMicro)
 import           Network.HTTP.Types.Status (badRequest400)
 import           Network.Wai (Application, Middleware, Response, responseLBS)
 import           Network.Wai.Handler.Warp (setOnException,
@@ -224,7 +226,11 @@ setupNodeClient
     clientCredentials <- NodeManager.credentialLoadX509 tlsClientCertPath tlsPrivKeyPath >>= \case
         Right   a -> return a
         Left  err -> fail $ "Error decoding X509 certificates: " <> err
-    manager <- NodeManager.newManager $ NodeManager.mkHttpsManagerSettings serverId caChain clientCredentials
+    let settings = NodeManager.mkHttpsManagerSettings serverId caChain clientCredentials
+    manager <- NodeManager.newManager $ settings
+        { managerResponseTimeout =
+            responseTimeoutSeconds 60 -- force-ntp-check may take 30 s + communication delay
+        } -- TODO(anviking): Move upstream to mkHttpsManagerSettings
 
     let
         baseUrl = Servant.BaseUrl Https serverHost serverPort mempty
@@ -232,3 +238,5 @@ setupNodeClient
         walletClient = NodeClient.mkHttpClient baseUrl manager
 
     return walletClient
+  where
+    responseTimeoutSeconds a = responseTimeoutMicro (a * 1000 * 1000)
