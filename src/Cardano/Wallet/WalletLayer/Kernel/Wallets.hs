@@ -9,6 +9,7 @@ module Cardano.Wallet.WalletLayer.Kernel.Wallets (
     , getWallet
     , getEosWallet
     , getWallets
+    , getEosWallets
     , getWalletUtxos
     , blundToResolvedBlock
     ) where
@@ -272,6 +273,17 @@ getWallets wallet db =
     fmap IxSet.fromList $ forM (IxSet.toList allRoots) $ \root -> do
         let rootId = root ^. HD.hdRootId
         updateSyncState wallet rootId (toWallet db root)
+  where
+    allRoots = db ^. dbHdWallets . HD.hdWalletsRoots
+
+getEosWallets
+    :: MonadIO m
+    => Kernel.PassiveWallet
+    -> Kernel.DB
+    -> m (IxSet V1.EosWallet)
+getEosWallets _wallet db =
+    fmap IxSet.fromList $ forM (IxSet.toList allRoots) $ \root -> do
+        return $ toEosWallet db root
   where
     allRoots = db ^. dbHdWallets . HD.hdWalletsRoots
 

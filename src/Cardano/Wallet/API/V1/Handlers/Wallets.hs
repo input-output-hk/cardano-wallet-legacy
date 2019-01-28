@@ -166,5 +166,9 @@ listEosWallets
     -> FilterOperations '[WalletId, Coin] EosWallet
     -> SortOperations EosWallet
     -> Handler (APIResponse [EosWallet])
-listEosWallets _ _ _ _ = do
-    throwM $ err501 { errBody = "Not Implemented" }
+listEosWallets pwl params fops sops = do
+    wallets <- liftIO $ WalletLayer.getEosWallets pwl
+    respondWith params
+        fops
+        sops
+        (pure wallets)
