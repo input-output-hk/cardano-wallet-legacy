@@ -129,6 +129,7 @@ bracketPassiveWallet pm mode logFunction keystore node fInjects f = do
           -- Read-only operations
         , getWallets           =                   join (ro $ Wallets.getWallets w)
         , getWallet            = \wId           -> join (ro $ Wallets.getWallet w wId)
+        , getEosWallet         = \wId           -> join (ro $ Wallets.getEosWallet w wId)
         , getUtxos             = \wId           -> ro $ Wallets.getWalletUtxos wId
         , getAccounts          = \wId           -> ro $ Accounts.getAccounts         wId
         , getAccount           = \wId acc       -> ro $ Accounts.getAccount          wId acc

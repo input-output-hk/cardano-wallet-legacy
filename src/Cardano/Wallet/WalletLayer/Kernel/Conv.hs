@@ -12,6 +12,7 @@ module Cardano.Wallet.WalletLayer.Kernel.Conv (
   , toRootId
   , toAccount
   , toWallet
+  , toEosWallet
   , toAddress
   , toCardanoAddress
   , toAssuranceLevel
@@ -175,6 +176,23 @@ toWallet db hdRoot = V1.Wallet {
              HD.HasSpendingPassword lu -> (True, lu ^. fromDb)
     -- In case the wallet has no spending password, its last update
     -- matches this wallet creation time.
+    rootId           = hdRoot ^. HD.hdRootId
+    createdAt        = hdRoot ^. HD.hdRootCreatedAt . fromDb
+    walletId         = sformat build rootId
+    v1AssuranceLevel = toAssuranceLevel $ hdRoot ^. HD.hdRootAssurance
+
+-- | Converts an 'HdRoot' into a V1 'EosWallet'.
+toEosWallet :: Kernel.DB -> HD.HdRoot -> V1.EosWallet
+toEosWallet db hdRoot = V1.EosWallet {
+      eoswalId             = V1.WalletId walletId
+    , eoswalName           = hdRoot ^. HD.hdRootName
+                                     . to HD.getWalletName
+    , eoswalAddressPoolGap = error "TODO, we have to take it from one of accounts, will be done later, see issue #36"
+    , eoswalBalance        = V1.WalletCoin (Kernel.rootTotalBalance db rootId)
+    , eoswalCreatedAt      = V1.WalletTimestamp createdAt
+    , eoswalAssuranceLevel = v1AssuranceLevel
+    }
+  where
     rootId           = hdRoot ^. HD.hdRootId
     createdAt        = hdRoot ^. HD.hdRootCreatedAt . fromDb
     walletId         = sformat build rootId
