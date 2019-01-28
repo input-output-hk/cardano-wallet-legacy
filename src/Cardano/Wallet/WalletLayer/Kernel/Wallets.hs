@@ -7,6 +7,7 @@ module Cardano.Wallet.WalletLayer.Kernel.Wallets (
     , deleteWallet
     , deleteEosWallet
     , getWallet
+    , getEosWallet
     , getWallets
     , getWalletUtxos
     , blundToResolvedBlock
@@ -244,6 +245,18 @@ getWallet wallet wId db = runExceptT $ do
                 withExceptT GetWalletError $ exceptT $
                     Kernel.lookupHdRootId db rootId
     updateSyncState wallet rootId v1wal
+
+-- | Gets a specific EOS-wallet.
+getEosWallet
+    :: MonadIO m
+    => Kernel.PassiveWallet
+    -> V1.WalletId
+    -> Kernel.DB
+    -> m (Either GetWalletError V1.EosWallet)
+getEosWallet _wallet wId db = runExceptT $ do
+    rootId <- withExceptT GetWalletWalletIdDecodingFailed (fromRootId wId)
+    fmap (toEosWallet db) $ withExceptT GetWalletError $ exceptT $
+        Kernel.lookupHdRootId db rootId
 
 -- | Gets all the wallets known to this edge node.
 --

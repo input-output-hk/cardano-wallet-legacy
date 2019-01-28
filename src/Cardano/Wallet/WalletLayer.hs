@@ -416,6 +416,7 @@ data PassiveWalletLayer m = PassiveWalletLayer
       createWallet         :: CreateWallet -> m (Either CreateWalletError Wallet)
     , getWallets           :: m (IxSet Wallet)
     , getWallet            :: WalletId -> m (Either GetWalletError Wallet)
+    , getEosWallet         :: WalletId -> m (Either GetWalletError EosWallet)
     , updateWallet         :: WalletId
                            -> WalletUpdate
                            -> m (Either UpdateWalletError Wallet)
