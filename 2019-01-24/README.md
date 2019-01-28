@@ -40,8 +40,8 @@ upcoming 1.5 release.
 [===============>...............................................................] 20% (5/25)
 ```
 
-|         | Start Date | Estimated End Date |
-| -----   | -----      | -----              |
+|             | Start Date | Estimated End Date |
+| -----       | -----      | -----              |
 | ![][1.5-rc] | 2019-01-16 | 2019-01-31         |
 
 
@@ -59,7 +59,7 @@ upcoming 1.5 release.
 
 | Epic                                                                 | Description                                                                  | Status                  | Value |
 | ------                                                               | ----------------------------------------------------                         | --------                | ---   |
-| [#110](https://github.com/input-output-hk/cardano-wallet/issues/110) | `cardano-sl` Nodes Can Start an HTTP Server & Provide a Monitoring API       | In Progress :hammer:    | 14/17 |
+| [#110](https://github.com/input-output-hk/cardano-wallet/issues/110) | `cardano-sl` Nodes Can Start an HTTP Server & Provide a Monitoring API       | Done :heavy_check_mark: | 17/17 |
 | [#111](https://github.com/input-output-hk/cardano-wallet/issues/111) | We Can Consume Blocks From a Node Via The Network Using The Current Protocol | In Progress :hammer:    | 19/40 |
 
 
