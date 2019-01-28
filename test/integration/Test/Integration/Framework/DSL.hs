@@ -74,10 +74,13 @@ module Test.Integration.Framework.DSL
     , amount
     , assuranceLevel
     , backupPhrase
+    , failures
     , initialCoins
     , mnemonicWords
     , spendingPassword
+    , totalSuccess
     , rawPassword
+    , address
     , wallet
     , wallets
     , walletId
@@ -85,6 +88,7 @@ module Test.Integration.Framework.DSL
     , spendingPasswordLastUpdate
     , json
     , hasSpendingPassword
+    , mkAddress
     , mkBackupPhrase
     ) where
 
@@ -310,6 +314,11 @@ infixr 5 </>
 (</>) :: ToHttpApiData a => Text -> a -> Text
 base </> next = mconcat [base, "/", toQueryParam next]
 
+address
+    :: HasType WalAddress s
+    => Lens' s WalAddress
+address = typed
+
 amount
     :: HasType WalletCoin s
     => Lens' s Word64
@@ -326,6 +335,9 @@ assuranceLevel = typed
 
 backupPhrase :: HasType BackupPhrase s => Lens' s BackupPhrase
 backupPhrase = typed
+
+failures :: Lens' (BatchImportResult a) [a]
+failures = field @"aimFailures"
 
 faucets :: HasType [FilePath] s => Lens' s [FilePath]
 faucets = typed
@@ -352,6 +364,9 @@ rawPassword = typed
 
 spendingPassword :: HasType SpendingPassword s => Lens' s SpendingPassword
 spendingPassword = typed
+
+totalSuccess :: Lens' (BatchImportResult a) Natural
+totalSuccess = field @"aimTotalSuccess"
 
 wallet :: HasType Wallet s => Lens' s Wallet
 wallet = typed
@@ -684,6 +699,35 @@ mkPassword (RawPassword txt)
         & ByteArray.convert
         & WalletPassPhrase
 
+
+mkAddress
+    :: (MonadIO m, MonadFail m)
+    => BackupPhrase
+    -> Word32
+    -> m WalAddress
+mkAddress (BackupPhrase mnemonic) ix = do
+    let (_, esk) = safeDeterministicKeyGen
+            (mnemonicToSeed mnemonic)
+            mempty
+
+    let maddr = fst <$> deriveLvl2KeyPair
+            NetworkMainOrStage
+            (IsBootstrapEraAddr True)
+            (ShouldCheckPassphrase False)
+            mempty
+            esk
+            (getAccIndex minBound)
+            ix
+
+    case maddr of
+        Nothing ->
+            fail "The impossible happened: failed to generate a\
+                \ random address. This can only happened if you\
+                \ provided a derivation index that is out-of-bound!"
+        Just addr ->
+            return (WalAddress addr)
+
+
 -- | Execute the given setup action with using the next faucet wallet. It fails
 -- hard if there's no more faucet wallet available.
 withNextFaucet
@@ -760,30 +804,8 @@ setupDestination
     -> Scenario Context IO Address
 setupDestination = \case
     RandomDestination -> do
-        (BackupPhrase mnemonic) <- liftIO (generate arbitrary)
-
-        let (_, esk) = safeDeterministicKeyGen
-                (mnemonicToSeed mnemonic)
-                mempty
-
-        let maddr = fst <$> deriveLvl2KeyPair
-                NetworkMainOrStage
-                (IsBootstrapEraAddr True)
-                (ShouldCheckPassphrase False)
-                mempty
-                esk
-                (getAccIndex minBound)
-                1
-
-        case maddr of
-            Nothing ->
-                fail "The impossible happened: failed to generate a \
-                    \ random address. This is really unexpected since we\
-                    \ aren't doing anything fancy here ... ?"
-
-            Just addr ->
-                return addr
-
+        bp <- liftIO (generate arbitrary)
+        unWalAddress <$> mkAddress bp 1
     LockedDestination ->
         fail "Asset-locked destination aren't yet implemented. This\
             \ requires slightly more work than it seems and will be\
