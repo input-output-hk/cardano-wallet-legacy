@@ -97,6 +97,8 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , assumeHdAccountExists
     -- * IsOurs
   , IsOurs(..)
+    -- Address pool
+  , mkAddressPool
   ) where
 
 import           Universum hiding ((:|))
@@ -120,7 +122,7 @@ import qualified Pos.Crypto as Core
 
 import           Cardano.Wallet.API.V1.Types (WalAddress (..))
 import           Cardano.Wallet.Kernel.AddressPool (AddressPool,
-                     lookupAddressPool)
+                     emptyAddressPool, lookupAddressPool)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
@@ -130,6 +132,8 @@ import           Cardano.Wallet.Kernel.DB.Util.AcidState
 import           Cardano.Wallet.Kernel.DB.Util.IxSet hiding (foldl')
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet hiding (Indexable)
 import qualified Cardano.Wallet.Kernel.DB.Util.Zoomable as Z
+import           Cardano.Wallet.Kernel.Ed25519Bip44 (ChangeChain (..),
+                     deriveAddressPublicKey)
 import           Cardano.Wallet.Kernel.NodeStateAdaptor (SecurityParameter (..))
 import qualified Cardano.Wallet.Kernel.Util.StrictList as SL
 import           Cardano.Wallet.Kernel.Util.StrictNonEmpty (StrictNonEmpty (..))
@@ -553,6 +557,22 @@ decryptHdLvl2DerivationPath hdPass addr = do
     case derPath of
         [a,b] -> Just (HdAccountIx a, HdAddressIx b)
         _     -> Nothing
+
+{-------------------------------------------------------------------------------
+  create AddressPool for account
+-------------------------------------------------------------------------------}
+
+mkAddressPool
+    :: (Core.PublicKey -> Core.Address)
+    -> Core.PublicKey
+    -> AddressPoolGap
+    -> AddressPool Core.Address
+mkAddressPool mkAddress accPK gap = emptyAddressPool gap newAddress
+  where
+    newAddress :: Word32 -> Core.Address
+    newAddress addrIx = case deriveAddressPublicKey accPK ExternalChain addrIx of
+        Nothing     -> error "mkAddressPool: maximum number of addresses reached."
+        Just addrPK -> mkAddress addrPK
 
 {-------------------------------------------------------------------------------
   isOurs for Hd Sequential wallets
