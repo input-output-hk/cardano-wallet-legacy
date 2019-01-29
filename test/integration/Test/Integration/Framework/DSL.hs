@@ -25,6 +25,7 @@ module Test.Integration.Framework.DSL
     , NewAccount (..)
     , PasswordUpdate (..)
     , Payment (..)
+    , RawPassword (..)
     , Redemption (..)
     , WalletUpdate(..)
     , ShieldedRedemptionCode (..)
@@ -45,6 +46,7 @@ module Test.Integration.Framework.DSL
     , defaultSpendingPassword
     , defaultWalletName
     , mkSpendingPassword
+    , mkPassword
     , noRedemptionMnemonic
     , noSpendingPassword
 
@@ -803,11 +805,12 @@ withNextFaucet actionWithFaucet = do
 setupWallet
     :: Setup
     -> BackupPhrase
+    -> SpendingPassword
     -> Scenario Context IO Wallet
-setupWallet args phrase = do
+setupWallet args phrase password = do
     wal <- successfulRequest $ Client.postWallet $- NewWallet
         phrase
-        Nothing
+        (Just $ password)
         (args ^. assuranceLevel)
         (args ^. walletName)
         CreateWallet
@@ -821,8 +824,9 @@ setupWallet args phrase = do
             -- Making payments to a different address each time to cope with
             -- grouping policy. That's actually a behavior we might want to
             -- test in the future. So, we'll need to do something smarter here.
+
             addr <- successfulRequest $ Client.postAddress $- NewAddress
-                Nothing
+                (Just $ password)
                 minBound
                 (walId wal)
 
@@ -831,8 +835,8 @@ setupWallet args phrase = do
                 (paymentDist (addr, mkCoin coin))
                 Nothing
                 Nothing
-
             expectTxStatusEventually [InNewestBlocks, Persisted] txn
+
     return wal
 
 

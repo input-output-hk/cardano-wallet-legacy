@@ -113,52 +113,52 @@ spec = do
         let matrix =
                 [ ( "api/v1/wallets?page=0"
                   , [ expectError
-                    -- add expectClientHttpError message validation
+                    -- TODO: add more expectations after #221 is resolved
                     ]
                   )
                 , ( "api/v1/wallets?page=-1"
                   , [ expectError
-                    -- add expectClientHttpError message validation
+                    -- TODO: add more expectations after #221 is resolved
                     ]
                   )
                 , ( "api/v1/wallets?page=0&per_page=35"
                   , [ expectError
-                    -- add expectClientHttpError message validation
+                    -- TODO: add more expectations after #221 is resolved
                     ]
                   )
                 , ( "api/v1/wallets?page=1漢patate字"
                   , [ expectError
-                    -- add expectClientHttpError message validation
+                    -- TODO: add more expectations after #221 is resolved
                     ]
                   )
                 , ( "api/v1/wallets?page=9223372036854775808"
                   , [ expectError
-                    -- add expectClientHttpError message validation
+                    -- TODO: add more expectations after #221 is resolved
                     ]
                   )
                 , ( "api/v1/wallets?page=-9223372036854775809"
                   , [ expectError
-                    -- add expectClientHttpError message validation
+                    -- TODO: add more expectations after #221 is resolved
                     ]
                   )
                 , ( "api/v1/wallets?per_page=0"
                   , [ expectError
-                    -- add expectClientHttpError message validation
+                    -- TODO: add more expectations after #221 is resolved
                     ]
                   )
                 , ( "api/v1/wallets?per_page=-1&page=1"
                   , [ expectError
-                    -- add expectClientHttpError message validation
+                    -- TODO: add more expectations after #221 is resolved
                     ]
                   )
                 , ( "api/v1/wallets?per_page=51"
                   , [ expectError
-                    -- add expectClientHttpError message validation
+                    -- TODO: add more expectations after #221 is resolved
                     ]
                   )
                 , ( "api/v1/wallets?per_page=5漢patate字"
                   , [ expectError
-                    -- add expectClientHttpError message validation
+                    -- TODO: add more expectations after #221 is resolved
                     ]
                   )
                 ]
@@ -517,39 +517,430 @@ spec = do
             , expectFieldEqual assuranceLevel StrictAssurance
             ]
 
-    scenario "WALLETS_UPDATE_PASS_04 - updating password updates date in spendingPasswordLastUpdate" $ do
+    describe "WALLETS_UPDATE_PASS_01,04,05,06,09,10 - Updating password to empty and non-empty" $ do
+
+        let matrix =
+                [ ( "non-empty old and new password"
+                  , "old raw password"
+                  , "3132333435363738393031323334353637383930313233343536373839303030" :: Text
+                  , [ expectFieldEqual hasSpendingPassword True ]
+                  )
+                 ,
+                  ( "old pass empty, new pass non-empty"
+                  , ""
+                  , "3132333435363738393031323334353637383930313233343536373839303030" :: Text
+                  , [ expectFieldEqual hasSpendingPassword True ]
+                  )
+                ,
+                  ( "old pass non-empty, new pass empty"
+                  , "3132333435363738393031323334353637383930313233343536373839303030"
+                  , "" :: Text
+                  , [ expectFieldEqual hasSpendingPassword False ]
+                  )
+                ,
+                  ( "empty old and new password"
+                  , ""
+                  , "" :: Text
+                  , [ expectFieldEqual hasSpendingPassword False ]
+                  )
+                ]
+
+        describe "Restored wallet" $ do
+
+            forM_ matrix $ \(title, oldPass, newPass, expectations) -> scenario title $ do
+                -- 1. Create and delete wallet
+                fixture <- setup $ defaultSetup
+                    & rawPassword .~ oldPass
+                successfulRequest $ Client.deleteWallet
+                    $- (fixture ^. wallet . walletId)
+
+                -- 2. Restore deleted wallet
+                let restoredPass = mkPassword (RawPassword newPass)
+                restoreResp <- request $ Client.postWallet $- NewWallet
+                    (fixture ^. backupPhrase)
+                    (Just $ restoredPass)
+                    StrictAssurance
+                    "My Wallet"
+                    RestoreWallet
+                verify restoreResp
+                    [ expectSuccess
+                    ]
+
+                -- 2. Update password
+                let latestUpdateTime = fixture ^. wallet ^. spendingPasswordLastUpdate
+                let fullExpectations = (expectFieldDiffer spendingPasswordLastUpdate latestUpdateTime) : expectations
+                let newPassword = mkPassword (RawPassword newPass)
+                updatePasswordResp <- request $ Client.updateWalletPassword
+                    $- fixture ^. wallet . walletId
+                    $- PasswordUpdate restoredPass newPassword
+                verify updatePasswordResp fullExpectations
+
+                -- 3. Check GET /api/v1/wallets/{walletId} presists the update
+                getWalletResp <- request $ Client.getWallet
+                    $- (fixture ^. wallet . walletId)
+                verify getWalletResp fullExpectations
+
+        describe "Created wallet" $ do
+
+            forM_ matrix $ \(title, oldPass, newPass, expectations) -> scenario title $ do
+                -- 1. Create a wallet with a password
+                fixture <- setup $ defaultSetup
+                    & rawPassword .~ oldPass
+
+                -- 2. Update password and verify response presists the update
+                let latestUpdateTime = fixture ^. wallet ^. spendingPasswordLastUpdate
+                let fullExpectations = (expectFieldDiffer spendingPasswordLastUpdate latestUpdateTime) : expectations
+                let newPassword = mkPassword (RawPassword newPass)
+                updatePasswordResp <- request $ Client.updateWalletPassword
+                    $- (fixture ^. wallet . walletId)
+                    $- PasswordUpdate (fixture ^. spendingPassword) newPassword
+                verify updatePasswordResp expectations
+
+                -- 3. Check GET /api/v1/wallets/{walletId} presists the update
+                getWalletResp <- request $ Client.getWallet
+                    $- (fixture ^. wallet . walletId)
+                verify getWalletResp fullExpectations
+
+    describe "WALLETS_UPDATE_PASS_02,03 - Updated password makes old password invalid" $ do
+
+        let matrix =
+                [ ( "Empty new pass, non-empty old pass"
+                  , "old password"
+                  , "" :: Text
+                  , [ expectFieldEqual hasSpendingPassword False ]
+                  )
+                ,
+                  ( "Non-empty new pass, empty old pass"
+                  , ""
+                  , "valid new pass" :: Text
+                  , [ expectFieldEqual hasSpendingPassword True ]
+                  )
+                ,
+                  ( "Non-empty new pass, non-empty old pass"
+                  , "old password"
+                  , "valid new pass" :: Text
+                  , [ expectFieldEqual hasSpendingPassword True ]
+                  )
+                ]
+
+        describe "WALLETS_UPDATE_PASS_02 - Newly updated password can be used for generating new address." $ do
+
+            forM_ matrix $ \(title, oldPassword, newPassword, expectations) -> scenario title $ do
+
+                -- 1. Create wallet
+                fixture <- setup $ defaultSetup
+                    & rawPassword .~ oldPassword
+
+                let newPass = mkPassword (RawPassword newPassword)
+                let walId = fixture ^. wallet . walletId
+                -- 2. Update password
+                updatePasswordResp <- request $ Client.updateWalletPassword
+                    $- walId
+                    $- PasswordUpdate (fixture ^. spendingPassword) newPass
+                verify updatePasswordResp expectations
+
+                -- 3. Create new address with new passowrd
+                newAddrResp <- request $ Client.postAddress $- NewAddress
+                    (Just $ newPass)
+                    defaultAccountId
+                    walId
+                verify newAddrResp
+                    [ expectAddressInIndexOf
+                    ]
+
+                -- 4. Attempt to create new address with old passowrd
+                let errMsg = "CreateAddressHdRndGenerationFailed HdAccountId { parent " <> (fromWalletId walId) <> ", ix     HdAccountIx " <> (show (Client.getAccIndex defaultAccountId)) <> "}"
+                newAddrAttemptResp <- request $ Client.postAddress $- NewAddress
+                    (Just $ fixture ^. spendingPassword)
+                    defaultAccountId
+                    walId
+                verify newAddrAttemptResp
+                    [ expectWalletError (CannotCreateAddress errMsg)
+                    ]
+
+        describe "WALLETS_UPDATE_PASS_02 - Old password cannot be used for generating new address." $ do
+
+            forM_ matrix $ \(title, oldPassword, newPassword, expectations) -> scenario title $ do
+
+                -- 1. Create wallet
+                fixture <- setup $ defaultSetup
+                    & rawPassword .~ oldPassword
+
+                let newPass = mkPassword (RawPassword newPassword)
+                let walId = fixture ^. wallet . walletId
+                -- 2. Update password
+                updatePasswordResp <- request $ Client.updateWalletPassword
+                    $- walId
+                    $- PasswordUpdate (fixture ^. spendingPassword) newPass
+                verify updatePasswordResp expectations
+
+                -- 4. Attempt to create new address with old passowrd
+                let errMsg = "CreateAddressHdRndGenerationFailed HdAccountId { parent " <> (fromWalletId walId) <> ", ix     HdAccountIx " <> (show (Client.getAccIndex defaultAccountId)) <> "}"
+                newAddrAttemptResp <- request $ Client.postAddress $- NewAddress
+                    (Just $ fixture ^. spendingPassword)
+                    defaultAccountId
+                    walId
+                verify newAddrAttemptResp
+                    [ expectWalletError (CannotCreateAddress errMsg)
+                    ]
+
+        describe "WALLETS_UPDATE_PASS_03 - Newly updated password can be then used for sending transaction." $ do
+
+            forM_ matrix $ \(title, oldPassword, newPassword, expectations) -> scenario title $ do
+
+                -- 1. Create wallets
+                sourceWalletFixture <- setup $ defaultSetup
+                    & initialCoins .~ [5000000]
+                    & rawPassword .~ oldPassword
+
+                destinationWalletFixture <- setup $ defaultSetup
+
+                -- 2. Update password
+                let oldPass = sourceWalletFixture ^. spendingPassword
+                let newPass = mkPassword (RawPassword newPassword)
+                updatePasswordResp <- request $ Client.updateWalletPassword
+                    $- sourceWalletFixture ^. wallet . walletId
+                    $- PasswordUpdate oldPass newPass
+                verify updatePasswordResp expectations
+
+                -- 3. Post transaction with new password
+                transactionResp <- request $ Client.postTransaction $- Payment
+                    (defaultSource sourceWalletFixture)
+                    (defaultDistribution 44 destinationWalletFixture)
+                    defaultGroupingPolicy
+                    (Just $ newPass)
+                verify transactionResp
+                    [ expectTxStatusEventually [Creating, Applying, InNewestBlocks, Persisted]
+                    ]
+
+        describe "WALLETS_UPDATE_PASS_03 - Old password cannot be then used for sending transaction." $ do
+
+            forM_ matrix $ \(title, oldPassword, newPassword, expectations) -> scenario title $ do
+
+                -- 1. Create wallets
+                sourceWalletFixture <- setup $ defaultSetup
+                    & initialCoins .~ [5000000]
+                    & rawPassword .~ oldPassword
+
+                destinationWalletFixture <- setup $ defaultSetup
+
+                -- 2. Update password
+                let oldPass = sourceWalletFixture ^. spendingPassword
+                let newPass = mkPassword (RawPassword newPassword)
+                let walId = sourceWalletFixture ^. wallet . walletId
+                updatePasswordResp <- request $ Client.updateWalletPassword
+                    $- walId
+                    $- PasswordUpdate oldPass newPass
+                verify updatePasswordResp expectations
+
+                -- 3. Attempt to post transaction with old password
+                let errMsg = "CreateAddressHdRndGenerationFailed HdAccountId { parent " <> (fromWalletId walId) <> ", ix     HdAccountIx " <> (show (Client.getAccIndex defaultAccountId)) <> "}"
+                transAttemptResp <- request $ Client.postTransaction $- Payment
+                    (defaultSource sourceWalletFixture)
+                    (defaultDistribution 44 destinationWalletFixture)
+                    defaultGroupingPolicy
+                    (Just $ oldPass)
+                verify transAttemptResp
+                    [ expectWalletError (CannotCreateAddress errMsg)
+                    ]
+
+    scenario "WALLETS_UPDATE_PASS_03 - Newly updated password can be then used for redeeming certificate." $ do
+
+        -- 1. Create wallets
         fixture <- setup $ defaultSetup
-            & rawPassword .~ "3132333435363738393031323334353637383930313233343536373839303030"
+            & initialCoins .~ [5000000]
+            & rawPassword .~ "old Password"
 
-        successfulRequest $ Client.deleteWallet
-            $- (fixture ^. wallet . walletId)
-
-        -- 1. Create a wallet with init spending password.
-        response <- request $ Client.postWallet $- NewWallet
-            (fixture ^. backupPhrase)
-            (Just $ fixture ^. spendingPassword)
-            NormalAssurance
-            "My new Wallet with spending password"
-            CreateWallet
-
-        -- 2. Verify that we have a spending password on new wallet.
-        verify response
+        -- 2. Update password
+        let oldPass = fixture ^. spendingPassword
+        let newPass = mkPassword (RawPassword "new Password")
+        updatePasswordResp <- request $ Client.updateWalletPassword
+            $- fixture ^. wallet . walletId
+            $- PasswordUpdate oldPass newPass
+        verify updatePasswordResp
             [ expectFieldEqual hasSpendingPassword True
             ]
 
-        -- 3. Remove spending password.
-        updatePasswordResp <- request $ Client.updateWalletPassword
-            $- (fixture ^. wallet . walletId)
-            $- PasswordUpdate (fixture ^. spendingPassword) mempty
-
-        -- 4. Verify there's no spending password anymore and spendingPasswordLastUpdate was changed.
-        -- After wallet was created, spendingPasswordLastUpdate contains time of creation. Of course,
-        -- spendingPasswordLastUpdate after update is a little bit later, so verify it.
-        let latestUpdateTime = fixture ^. wallet ^. spendingPasswordLastUpdate
-        verify updatePasswordResp
-            [ expectFieldEqual hasSpendingPassword False
-            , expectFieldDiffer spendingPasswordLastUpdate latestUpdateTime
+        -- 3.  redeemAda with new password
+        response <- request $ Client.redeemAda $- Redemption
+            (ShieldedRedemptionCode "n0RTZ0VtVhkxSkKj2oawAZR6/lmcK6mceaY0fjsiblo=")
+            noRedemptionMnemonic
+            newPass
+            (fixture ^. wallet . walletId)
+            defaultAccountId
+        verify response
+            [ expectTxStatusEventually [InNewestBlocks, Persisted]
             ]
+
+    scenario "WALLETS_UPDATE_PASS_03 - Old password cannot be then used for redeeming certificate." $ do
+        -- 1. Create wallets
+        fixture <- setup $ defaultSetup
+            & initialCoins .~ [5000000]
+            & rawPassword .~ "old Password"
+
+        -- 2. Update password
+        let walId = fixture ^. wallet . walletId
+        let oldPass = fixture ^. spendingPassword
+        let newPass = mkPassword (RawPassword "new Password")
+        updatePasswordResp <- request $ Client.updateWalletPassword
+            $- walId
+            $- PasswordUpdate oldPass newPass
+        verify updatePasswordResp
+            [ expectFieldEqual hasSpendingPassword True
+            ]
+
+        -- 3. Attempt to redeemAda with new password
+        let errMsg = "CreateAddressHdRndGenerationFailed HdAccountId { parent " <> (fromWalletId walId) <> ", ix     HdAccountIx " <> (show (Client.getAccIndex defaultAccountId)) <> "}"
+        response <- request $ Client.redeemAda $- Redemption
+            (ShieldedRedemptionCode "iFTo/8yiCxcwMLT6wrMWecAlsKyUjYgL7hcdAJrsGfY=")
+            noRedemptionMnemonic
+            oldPass
+            walId
+            defaultAccountId
+        verify response
+            [ expectWalletError (CannotCreateAddress errMsg)
+            ]
+
+    scenario "WALLETS_UPDATE_PASS_07 - Deleted walletId" $ do
+        -- 1. Create and delete wallet
+        fixture <- setup $ defaultSetup
+            & rawPassword .~ "valid raw pass"
+        successfulRequest $ Client.deleteWallet
+            $- (fixture ^. wallet . walletId)
+
+        -- 2. Attempt to update password using deleted wallet id
+        let oldPass = fixture ^. spendingPassword
+        let newPass = mkPassword (RawPassword "new Password")
+        updatePasswordResp <- request $ Client.updateWalletPassword
+            $- fixture ^. wallet . walletId
+            $- PasswordUpdate oldPass newPass
+        verify updatePasswordResp
+            [ expectError
+              -- TODO: add more expectations after #221 is resolved
+            ]
+
+    scenario "WALLETS_UPDATE_PASS_07 - Invalid walletId" $ do
+        -- 1. Create wallet
+        fixture <- setup $ defaultSetup
+            & rawPassword .~ "valid raw pass"
+
+        -- 2. Attempt to update password using invalid wallet id
+        updatePassResp <- unsafeRequest ("PUT", "api/v1/wallets/aaa/password") $ Just $ [json|{
+            "old": #{fixture ^. spendingPassword},
+            "new": "3132333435363738393031323334353637383930313233343536373839303030"
+        }|]
+        verify (updatePassResp :: Either ClientError Wallet)
+            [ expectError
+              -- TODO: add more expectations after #221 is resolved
+            ]
+
+    describe "WALLETS_UPDATE_PASS_08 - Incorrect old password" $ do
+
+        let matrix =
+                [ ( "Incorrect, but valid hex"
+                  , "0200020100010100020202010000000201020000020002020200010200010102" :: Text
+                  )
+                ,
+                  ( "Incorrect, empty"
+                  , "" :: Text
+                  )
+                ]
+
+        forM_ matrix $ \(title, password) -> scenario title $ do
+            -- 1. Create wallet
+            fixture <- setup $ defaultSetup
+                & rawPassword .~ "valid raw pass"
+
+            let walId = fromWalletId (fixture ^. wallet . walletId)
+            -- 2. Attempt to update password using invalid old password
+            let endpoint = "api/v1/wallets/" <> walId <> ("/password" :: Text)
+            updatePassResp <- unsafeRequest ("PUT", endpoint) $ Just $ [json|{
+                "old": #{password},
+                "new": "3132333435363738393031323334353637383930313233343536373839303030"
+            }|]
+            verify (updatePassResp :: Either ClientError Wallet)
+                [ expectWalletError (UnknownError ("UpdateWalletPasswordOldPasswordMismatch " <> walId))
+                ]
+
+    describe "WALLETS_UPDATE_PASS_08 - Invalid old password" $ do
+        let matrix =
+                [ ( "spending password is less than 32 bytes / 64 characters"
+                  , [json| "5416b2988745725998907addf4613c9b0764f04959030e1b81c6" |]
+                  , [ expectJSONError "Error in $.old: Expected spending password to be of either length 0 or 32, not 26" ]
+                  )
+                , ( "spending password is more than 32 bytes / 64 characters"
+                  , [json| "c0b75cebcd14403d7abba4227cea5b99b1b09148623cd927fa7bb40c6cca5583c" |]
+                  , [ expectJSONError "Error in $.old: suffix is not in base-16 format: c" ]
+                  )
+                , ( "spending password is a number"
+                  , [json| 541 |]
+                  , [ expectJSONError "Error in $.old: expected parseJSON failed for PassPhrase, encountered Number" ]
+                  )
+                , ( "spending password is an empty string"
+                  , [json| " " |]
+                  , [ expectJSONError "Error in $.old: suffix is not in base-16 format" ]
+                  )
+                , ( "spending password is an array"
+                  , [json| [] |]
+                  , [ expectJSONError "Error in $.old: expected parseJSON failed for PassPhrase, encountered Array" ]
+                  )
+                , ( "spending password is an arbitrary utf-8 string"
+                  , [json| "patate" |]
+                  , [ expectJSONError "Error in $.old: suffix is not in base-16 format" ]
+                  ) -- ^ is an arbitrary string (not hex-encoded)
+                ]
+        forM_ matrix $ \(title, password, expectations) -> scenario title $ do
+            -- 1. Create wallet
+            fixture <- setup $ defaultSetup
+                & rawPassword .~ "valid raw pass"
+
+            -- 2. Attempt to update password using invalid old password
+            let endpoint = "api/v1/wallets/" <> fromWalletId (fixture ^. wallet . walletId) <> ("/password" :: Text)
+            updatePassResp <- unsafeRequest ("PUT", endpoint) $ Just $ [json|{
+                "old": #{password},
+                "new": "3132333435363738393031323334353637383930313233343536373839303030"
+            }|]
+            verify (updatePassResp :: Either ClientError Wallet) expectations
+
+    describe "WALLETS_UPDATE_PASS_08 - Invalid new password" $ do
+        let matrix =
+                [ ( "spending password is less than 32 bytes / 64 characters"
+                  , [json| "5416b2988745725998907addf4613c9b0764f04959030e1b81c6" |]
+                  , [ expectJSONError "Error in $.new: Expected spending password to be of either length 0 or 32, not 26" ]
+                  )
+                , ( "spending password is more than 32 bytes / 64 characters"
+                  , [json| "c0b75cebcd14403d7abba4227cea5b99b1b09148623cd927fa7bb40c6cca5583c" |]
+                  , [ expectJSONError "Error in $.new: suffix is not in base-16 format: c" ]
+                  )
+                , ( "spending password is a number"
+                  , [json| 541 |]
+                  , [ expectJSONError "Error in $.new: expected parseJSON failed for PassPhrase, encountered Number" ]
+                  )
+                , ( "spending password is an empty string"
+                  , [json| " " |]
+                  , [ expectJSONError "Error in $.new: suffix is not in base-16 format" ]
+                  )
+                , ( "spending password is an array"
+                  , [json| [] |]
+                  , [ expectJSONError "Error in $.new: expected parseJSON failed for PassPhrase, encountered Array" ]
+                  )
+                , ( "spending password is an arbitrary utf-8 string"
+                  , [json| "patate" |]
+                  , [ expectJSONError "Error in $.new: suffix is not in base-16 format" ]
+                  ) -- ^ is an arbitrary string (not hex-encoded)
+                ]
+        forM_ matrix $ \(title, password, expectations) -> scenario title $ do
+            -- 1. Create wallet
+            fixture <- setup $ defaultSetup
+                & rawPassword .~ "valid raw pass"
+
+            -- 2. Attempt to update password using invalid old password
+            let endpoint = "api/v1/wallets/" <> fromWalletId (fixture ^. wallet . walletId) <> ("/password" :: Text)
+            updatePassResp <- unsafeRequest ("PUT", endpoint) $ Just $ [json|{
+                "old": #{fixture ^. spendingPassword},
+                "new": #{password}
+            }|]
+            verify (updatePassResp :: Either ClientError Wallet) expectations
 
     scenario "WALLETS_UTXO_03 - UTxO statistics reflect wallet's inactivity" $ do
         fixture <- setup defaultSetup
@@ -587,7 +978,6 @@ spec = do
                 StrictAssurance
                 kanjiPolishWalletName
                 operation
-
             verify response
                 [ expectWalletEventuallyRestored
                 , expectFieldEqual walletName kanjiPolishWalletName
