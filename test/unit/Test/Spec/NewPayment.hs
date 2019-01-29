@@ -58,7 +58,6 @@ import           Cardano.Wallet.Kernel.Internal (ActiveWallet, PassiveWallet,
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
 import qualified Cardano.Wallet.Kernel.Transactions as Kernel
-import qualified Cardano.Wallet.Kernel.Wallets as Kernel
 import           Cardano.Wallet.WalletLayer (ActiveWalletLayer)
 import qualified Cardano.Wallet.WalletLayer as WalletLayer
 import qualified Cardano.Wallet.WalletLayer.Kernel.Conv as Kernel.Conv
@@ -91,14 +90,14 @@ prepareFixtures :: NetworkMagic
                 -> Pay
                 -> Fixture.GenActiveWalletFixture Fixture
 prepareFixtures nm initialBalance toPay = do
-    addressVersion <- return Kernel.AddressSchemeV1 -- pick arbitrary
+    addressVersion <- return Kernel.AddressSchemeSeq -- pick arbitrary
     passPhrase <- pick $ arbitrary @PassPhrase
     mnemonic <- pick $ arbitrary @(Mnemonic 12)
     let seed = mnemonicToSeed mnemonic
     let esk =
             case addressVersion of
-                Kernel.AddressSchemeV0 -> snd $ safeDeterministicKeyGen seed passPhrase
-                Kernel.AddressSchemeV1 -> genEncryptedSecretKey (mnemonic, mempty) passPhrase
+                Kernel.AddressSchemeRnd -> snd $ safeDeterministicKeyGen seed passPhrase
+                Kernel.AddressSchemeSeq -> genEncryptedSecretKey (mnemonic, mempty) passPhrase
     let newRootId = eskToHdRootId nm esk
     now <- getCurrentTimestamp
     newRoot <- initHdRoot <$> pure newRootId
@@ -115,14 +114,14 @@ prepareFixtures nm initialBalance toPay = do
 
                         let Just (addr, _) =
                                 case addressVersion of
-                                    Kernel.AddressSchemeV0 -> deriveLvl2KeyPair nm
+                                    Kernel.AddressSchemeRnd -> deriveLvl2KeyPair nm
                                                             (IsBootstrapEraAddr True)
                                                             (ShouldCheckPassphrase True)
                                                             passPhrase
                                                             esk
                                                             (newAccountId ^. hdAccountIdIx . to getHdAccountIx)
                                                             (getHdAddressIx newIndex)
-                                    Kernel.AddressSchemeV1 -> first (makePubKeyAddressBoot nm) <$> deriveAddressKeyPair
+                                    Kernel.AddressSchemeSeq -> first (makePubKeyAddressBoot nm) <$> deriveAddressKeyPair
                                                             passPhrase
                                                             esk
                                                             (newAccountId ^. hdAccountIdIx . to getHdAccountIx)

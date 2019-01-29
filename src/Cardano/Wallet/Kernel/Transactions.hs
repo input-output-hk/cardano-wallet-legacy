@@ -598,22 +598,22 @@ instance Arbitrary SignTransactionError where
 
 -- Which address scheme is being used
 data AddressSchemeVersion
-    -- Address scheme 0 (initial address scheme) is bip32 HD wallet derived
+    -- Address scheme random (initial address scheme) is bip32 HD wallet derived
     -- address. It is derived with ed25519v0 curve and contains address payload: account index and address index
-    = AddressSchemeV0
-    -- Address scheme 1 is bip44 HD wallet derived
+    = AddressSchemeRnd
+    -- Address scheme sequential is bip44 HD wallet derived
     -- address. It is derived with ed25519v1 curve and contains no address payload
-    | AddressSchemeV1
+    | AddressSchemeSeq
     deriving (Show)
 
 instance Arbitrary AddressSchemeVersion where
-    arbitrary = elements [AddressSchemeV0, AddressSchemeV1]
+    arbitrary = elements [AddressSchemeRnd, AddressSchemeSeq]
 
 addressSchemeVersion :: Address -> AddressSchemeVersion
 addressSchemeVersion addr =
     if isJust mPayload
-        then AddressSchemeV0
-        else AddressSchemeV1
+        then AddressSchemeRnd
+        else AddressSchemeSeq
   where
     mPayload = Core.aaPkDerivationPath $ attrData $ Core.addrAttributes addr
 
@@ -639,18 +639,18 @@ mkSigner nm spendingPassword (Just esk) snapshot addr =
                                           . fromDb
                 res = case addressSchemeVersion internalAddress of
                     -- If there is some payload we expect this payload to be addressIx and accountIx
-                    -- used for old address scheme so we continue with using
-                    -- old HD address derivation scheme: simple bip32 with ed25519 v0
-                    AddressSchemeV0 -> Core.deriveLvl2KeyPair nm
+                    -- used for random address scheme so we continue with using
+                    -- random HD address derivation scheme: simple bip32 with ed25519 v0
+                    AddressSchemeRnd -> Core.deriveLvl2KeyPair nm
                                     (Core.IsBootstrapEraAddr True)
                                     (ShouldCheckPassphrase False)
                                     spendingPassword
                                     esk
                                     accountIndex
                                     addressIndex
-                    -- If there is no payload we assume it is a new address scheme (which doesn't have payload)
-                    -- New HD address derivation scheme: bip44 with ed25519 v1
-                    AddressSchemeV1 -> first (Core.makePubKeyAddressBoot nm) <$>
+                    -- If there is no payload we assume it is sequential address scheme (which doesn't have payload)
+                    -- Sequential HD address derivation scheme: bip44 with ed25519 v1
+                    AddressSchemeSeq -> first (Core.makePubKeyAddressBoot nm) <$>
                         deriveAddressKeyPair
                             spendingPassword
                             esk
