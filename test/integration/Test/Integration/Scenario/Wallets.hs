@@ -522,18 +522,18 @@ spec = do
         let matrix =
                 [ ( "non-empty old and new password"
                   , "old raw password"
-                  , "3132333435363738393031323334353637383930313233343536373839303030" :: Text
+                  , "new raw password" :: Text
                   , [ expectFieldEqual hasSpendingPassword True ]
                   )
                  ,
                   ( "old pass empty, new pass non-empty"
                   , ""
-                  , "3132333435363738393031323334353637383930313233343536373839303030" :: Text
+                  , "new raw password" :: Text
                   , [ expectFieldEqual hasSpendingPassword True ]
                   )
                 ,
                   ( "old pass non-empty, new pass empty"
-                  , "3132333435363738393031323334353637383930313233343536373839303030"
+                  , "old raw password"
                   , "" :: Text
                   , [ expectFieldEqual hasSpendingPassword False ]
                   )
@@ -639,7 +639,7 @@ spec = do
 
                 fixture <- setupUpdatePass oldPassword newPassword expectations
 
-                -- 3. Create new address with new passowrd
+                -- Create new address with new passowrd
                 newAddrResp <- request $ Client.postAddress $- NewAddress
                     (Just $ mkPassword (RawPassword newPassword))
                     defaultAccountId
@@ -651,9 +651,11 @@ spec = do
         describe "WALLETS_UPDATE_PASS_02 - Old password cannot be used for generating new address." $ do
 
             forM_ matrix $ \(title, oldPassword, newPassword, expectations) -> scenario title $ do
+
                 fixture <- setupUpdatePass oldPassword newPassword expectations
+
+                -- Attempt to create new address with old passowrd
                 let walId = fixture ^. wallet . walletId
-                -- 4. Attempt to create new address with old passowrd
                 let errMsg = "CreateAddressHdRndGenerationFailed HdAccountId { parent " <> (fromWalletId walId) <> ", ix     HdAccountIx " <> (show (Client.getAccIndex defaultAccountId)) <> "}"
                 newAddrAttemptResp <- request $ Client.postAddress $- NewAddress
                     (Just $ fixture ^. spendingPassword)
