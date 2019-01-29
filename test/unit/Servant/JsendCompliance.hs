@@ -96,4 +96,3 @@ type family ResponseTypes' c api :: [*] where
   ResponseTypes' c (e :> api) = ResponseTypes' c api
   ResponseTypes' c (a :<|> b) = AppendList (ResponseTypes' c a) (ResponseTypes' c b)
   ResponseTypes' c api = '[]
-

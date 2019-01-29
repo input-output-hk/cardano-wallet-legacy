@@ -305,6 +305,9 @@ newTransactionError e = case e of
     Kernel.NewTransactionInvalidTxIn ->
             V1.SignedTxSubmitError "NewTransactionInvalidTxIn"
 
+    (Kernel.NewTransactionNotEnoughUtxoFragmentation (Kernel.NumberOfMissingUtxos missingUtxo)) ->
+        V1.UtxoNotEnoughFragmented (V1.ErrUtxoNotEnoughFragmented missingUtxo V1.msgUtxoNotEnoughFragmented)
+
 redeemAdaError :: RedeemAdaError -> V1.WalletError
 redeemAdaError e = case e of
     (RedeemAdaError e') -> case e' of
