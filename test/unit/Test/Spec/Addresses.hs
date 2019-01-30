@@ -32,8 +32,8 @@ import qualified Cardano.Wallet.Kernel.Addresses as Kernel
 import           Cardano.Wallet.Kernel.DB.AcidState
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, eskToHdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel (..),
-                     HasSpendingPassword (..), HdAccountId (..),
-                     HdAccountIx (..), WalletName (..))
+                     HasSpendingPassword (..), HdAccountBase (..),
+                     HdAccountId (..), HdAccountIx (..), WalletName (..))
 import           Cardano.Wallet.Kernel.DB.HdWallet.Create (initHdRoot)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
                      (HardeningMode (..), deriveIndex)
@@ -87,7 +87,10 @@ prepareFixtures nm = do
         hdAddress   = Kernel.defaultHdAddress nm esk emptyPassphrase newRootId
 
     return $ \pw -> do
-        void $ liftIO $ update (pw ^. wallets) (CreateHdWallet newRoot hdAccountId hdAddress accounts)
+        let accs0 = M.unionWith (<>)
+                (M.singleton (HdAccountBaseFO hdAccountId) (mempty, maybeToList hdAddress))
+                (M.mapKeys HdAccountBaseFO accounts)
+        void $ liftIO $ update (pw ^. wallets) (CreateHdWallet newRoot accs0)
         return $ Fixture {
                            fixtureHdRootId = newRootId
                          , fixtureAccountId = newAccountId

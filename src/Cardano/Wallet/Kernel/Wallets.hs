@@ -18,12 +18,14 @@ module Cardano.Wallet.Kernel.Wallets (
 import qualified Prelude
 import           Universum
 
+import qualified Data.Map.Strict as Map
 import           Formatting (bprint, build, formatToString, (%))
 import qualified Formatting as F
 import qualified Formatting.Buildable
 
 import           Data.Acid.Advanced (update')
 
+import           Pos.Chain.Txp (Utxo)
 import           Pos.Core (Address, Timestamp)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, PassPhrase, PublicKey,
@@ -34,13 +36,15 @@ import           Cardano.Mnemonic (Mnemonic)
 import qualified Cardano.Mnemonic as Mnemonic
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
-import           Cardano.Wallet.Kernel.DB.AcidState (CreateEosHdWallet (..),
-                     CreateHdWallet (..), DeleteHdRoot (..), RestoreHdWallet,
+import           Cardano.Wallet.Kernel.DB.AcidState (CreateHdWallet (..),
+                     DeleteHdRoot (..), RestoreHdWallet,
                      UpdateHdRootPassword (..), UpdateHdWallet (..))
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel,
-                     HdAccountId (..), HdAccountIx (..), HdAddress,
-                     HdAddressId (..), HdAddressIx (..), HdRoot, WalletName)
+                     HdAccountBase (..), HdAccountId (..), HdAccountIx (..),
+                     HdAddress, HdAddressId (..), HdAddressIx (..), HdRoot,
+                     WalletName, hdRootId)
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
@@ -102,10 +106,10 @@ instance Arbitrary UpdateWalletPasswordError where
         ]
 
 instance Buildable UpdateWalletPasswordError where
-    build (UpdateWalletPasswordOldPasswordMismatch hdRootId) =
-        bprint ("UpdateWalletPasswordOldPasswordMismatch " % F.build) hdRootId
-    build (UpdateWalletPasswordKeyNotFound hdRootId) =
-        bprint ("UpdateWalletPasswordKeyNotFound " % F.build) hdRootId
+    build (UpdateWalletPasswordOldPasswordMismatch rootId) =
+        bprint ("UpdateWalletPasswordOldPasswordMismatch " % F.build) rootId
+    build (UpdateWalletPasswordKeyNotFound rootId) =
+        bprint ("UpdateWalletPasswordKeyNotFound " % F.build) rootId
     build (UpdateWalletPasswordUnknownHdRoot uRoot) =
         bprint ("UpdateWalletPasswordUnknownHdRoot " % F.build) uRoot
     build (UpdateWalletPasswordKeystoreChangedInTheMeantime uRoot) =
@@ -199,9 +203,7 @@ createHdWallet pw mnemonic spendingPassword assuranceLevel walletName = do
                                      -- See preconditon above.
                                      (\hdRoot hdAccountId hdAddr ->
                                          Left $ CreateHdWallet hdRoot
-                                                               hdAccountId
-                                                               hdAddr
-                                                               mempty
+                                            (Map.singleton (HdAccountBaseFO hdAccountId) (mempty, maybeToList hdAddr))
                                      )
             case res of
                  -- NOTE(adinapoli): This is the @only@ error the DB can return,
@@ -220,9 +222,14 @@ createHdWallet pw mnemonic spendingPassword assuranceLevel walletName = do
                  Right hdRoot -> return (Right hdRoot)
 
 -- | Creates a new EOS HD 'Wallet'.
+--
+-- Here, we review the definition of a wallet down to a list of account public keys with
+-- no relationship whatsoever from the wallet's point of view. New addresses can be derived
+-- for each account at will and discovered using the address pool discovery algorithm
+-- described in BIP-44. Public keys are managed and provided from an external sources.
 createEosHdWallet :: PassiveWallet
-                  -> [(PublicKey, Word32)]
-                  -- ^ External wallet's accounts public keys.
+                  -> [(PublicKey, HdAccountIx)]
+                  -- ^ External wallets' accounts
                   -> AddressPoolGap
                   -- ^ Address pool gap for this wallet.
                   -> AssuranceLevel
@@ -233,26 +240,36 @@ createEosHdWallet :: PassiveWallet
                   -> WalletName
                   -- ^ The name for this wallet.
                   -> IO (Either CreateWalletError HdRoot)
-createEosHdWallet pw accountsPKsWithIxs addressPoolGap assuranceLevel walletName = do
-    -- Here, we review the definition of a wallet down to a list of account public keys with
-    -- no relationship whatsoever from the wallet's point of view. New addresses can be derived
-    -- for each account at will and discovered using the address pool discovery algorithm
-    -- described in BIP-44. Public keys are managed and provided from an external sources.
-    rootId <- HD.genHdRootId
-    created <- InDb <$> getCurrentTimestamp
-    let newRoot = HD.initHdRoot rootId
-                                walletName
-                                (HD.NoSpendingPassword created)
-                                assuranceLevel
-                                created
-    res <- update' (pw ^. wallets) $ CreateEosHdWallet newRoot accountsPKsWithIxs addressPoolGap
+createEosHdWallet pw accounts gap assuranceLevel walletName = do
+    root <- initHdRoot' <$> HD.genHdRootId <*> getCurrentTimestamp
+    let bases = Map.unionsWith (<>) (toAccountBase (root ^. hdRootId) <$> accounts)
+    res <- update' (pw ^. wallets) $ CreateHdWallet root bases
     return $ case res of
         Left e@(HD.CreateHdRootExists _) ->
             Left $ CreateWalletFailed e
         Left e@(HD.CreateHdRootDefaultAddressDerivationFailed) ->
             Left $ CreateWalletFailed e
         Right _ ->
-            Right newRoot
+            Right root
+  where
+    initHdRoot' rootId created = HD.initHdRoot
+        rootId
+        walletName
+        (HD.NoSpendingPassword (InDb created))
+        assuranceLevel
+        (InDb created)
+
+    toAccountBase
+        :: HdRootId
+        -> (PublicKey, HdAccountIx)
+        -> Map HdAccountBase (Utxo, [HdAddress])
+    toAccountBase rootId =
+        let
+            accId ix = HdAccountId rootId ix
+            mkBase (pk, ix) = HdAccountBaseEO (accId ix) pk gap
+        in
+            flip Map.singleton (mempty, mempty) . mkBase
+
 
 
 -- | Creates an HD wallet where new accounts and addresses are generated
@@ -390,8 +407,8 @@ updateHdWallet :: PassiveWallet
                -> HD.AssuranceLevel
                -> HD.WalletName
                -> IO (Either HD.UnknownHdRoot (Kernel.DB, HdRoot))
-updateHdWallet pw hdRootId assuranceLevel walletName = do
-    res <- update' (pw ^. wallets) (UpdateHdWallet hdRootId assuranceLevel walletName)
+updateHdWallet pw rootId assuranceLevel walletName = do
+    res <- update' (pw ^. wallets) (UpdateHdWallet rootId assuranceLevel walletName)
     case res of
          Left e              -> return (Left e)
          Right (db, newRoot) -> return (Right (db, newRoot))
@@ -403,14 +420,14 @@ updatePassword :: PassiveWallet
                -> PassPhrase
                -- ^ The new 'PassPhrase' for this Wallet.
                -> IO (Either UpdateWalletPasswordError (Kernel.DB, HdRoot))
-updatePassword pw hdRootId oldPassword newPassword = do
+updatePassword pw rootId oldPassword newPassword = do
     let nm       = makeNetworkMagic (pw ^. walletProtocolMagic)
         keystore = pw ^. walletKeystore
-        wId      = hdRootId
+        wId      = rootId
     -- STEP 1: Lookup the key from the keystore
     mbKey <- Keystore.lookup nm wId keystore
     case mbKey of
-         Nothing -> return $ Left $ UpdateWalletPasswordKeyNotFound hdRootId
+         Nothing -> return $ Left $ UpdateWalletPasswordKeyNotFound rootId
          Just oldKey -> do
 
              -- Predicate to check that the 2 password matches. It gets passed
@@ -421,7 +438,7 @@ updatePassword pw hdRootId oldPassword newPassword = do
              --         we have. This operation doesn't change any state, it
              --         just recomputes the new 'EncryptedSecretKey' in-place.
              genNewKey <- changeEncPassphrase oldPassword newPassword oldKey
-             let mbNewKey = maybeToRight (UpdateWalletPasswordOldPasswordMismatch hdRootId) $
+             let mbNewKey = maybeToRight (UpdateWalletPasswordOldPasswordMismatch rootId) $
                             genNewKey
 
              case mbNewKey of
@@ -434,11 +451,11 @@ updatePassword pw hdRootId oldPassword newPassword = do
                            -- meantime, and the user needs to repeat the
                            -- operation.
                            Keystore.PredicateFailed ->
-                               return $ Left (UpdateWalletPasswordOldPasswordMismatch hdRootId)
+                               return $ Left (UpdateWalletPasswordOldPasswordMismatch rootId)
                            -- We failed, in the meantime the user deleted the
                            -- key.
                            Keystore.OldKeyLookupFailed -> do
-                               return $ Left (UpdateWalletPasswordKeystoreChangedInTheMeantime hdRootId)
+                               return $ Left (UpdateWalletPasswordKeystoreChangedInTheMeantime rootId)
                            Keystore.Replaced -> do
                                -- STEP 4: Update the timestamp in the wallet data storage.
                                -- If we get interrupted here by an asynchronous exception the
@@ -462,7 +479,7 @@ updatePassword pw hdRootId oldPassword newPassword = do
                                        else HD.HasSpendingPassword lastUpdateNow
 
                                res <- update' (pw ^. wallets)
-                                              (UpdateHdRootPassword hdRootId hasSpendingPassword)
+                                              (UpdateHdRootPassword rootId hasSpendingPassword)
                                case res of
                                     Left e ->
                                         return $ Left (UpdateWalletPasswordUnknownHdRoot e)

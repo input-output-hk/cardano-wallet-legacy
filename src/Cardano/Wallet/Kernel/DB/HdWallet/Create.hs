@@ -157,10 +157,8 @@ initHdAccount accountBase st = HdAccount {
     , _hdAccountAutoPkCounter = AutoIncrementKey 0
     }
   where
-    defName = AccountName $ sformat ("Account: " % build) accountIx
-    HdAccountId _ accountIx = case accountBase of
-        HdAccountBaseFO accId     -> accId
-        HdAccountBaseEO accId _ _ -> accId
+    defName = AccountName $ sformat ("Account: " % build) (accId ^. hdAccountIdIx)
+    accId   = accountBase ^. hdAccountBaseId
 
 {-------------------------------------------------------------------------------
   Pretty printing
