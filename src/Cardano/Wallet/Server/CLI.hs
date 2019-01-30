@@ -76,8 +76,12 @@ data WalletBackendParams = WalletBackendParams
     -- ^ The IP address and port for the node backend.
     , walletNodeTlsClientCert :: FilePath
     -- ^ A filepath to the Node's public certficate
+    , walletNodeTlsServerCert :: FilePath
+    -- ^ A filepath to the Node's private certficate
     , walletNodeTlsPrivKey    :: FilePath
     -- ^ A filepath to the TLS private key for the Node API.
+    , walletNodeTlsPublicKey  :: FilePath
+    -- ^ A filepath to the TLS public key for the Node API.
     , walletNodeTlsCaCertPath :: FilePath
     -- ^ A filepath to the TLS CA Certificate for communicating with the Node
     -- API.
@@ -90,6 +94,24 @@ getWalletDbOptions WalletBackendParams{..} =
 getFullMigrationFlag :: WalletBackendParams -> Bool
 getFullMigrationFlag WalletBackendParams{..} =
     forceFullMigration
+
+getNodeClientTlsParams :: WalletBackendParams -> TlsParams
+getNodeClientTlsParams WalletBackendParams {..} =
+    TlsParams
+        { tpCertPath = walletNodeTlsClientCert
+        , tpCaPath = walletNodeTlsCaCertPath
+        , tpKeyPath = walletNodeTlsPrivKey
+        , tpClientAuth = False
+        }
+
+getNodeServerTlsParams  :: WalletBackendParams -> TlsParams
+getNodeServerTlsParams WalletBackendParams {..} =
+    TlsParams
+        { tpCertPath = walletNodeTlsServerCert
+        , tpCaPath = walletNodeTlsCaCertPath
+        , tpKeyPath = walletNodeTlsPublicKey
+        , tpClientAuth = False
+        }
 
 -- | A richer type to specify in which mode we are running this node.
 data RunMode = ProductionMode
@@ -158,7 +180,9 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
                                                 <*> forceFullMigrationParser
                                                 <*> nodeAddressParser
                                                 <*> tlsClientCertPathParser
+                                                <*> tlsServerCertPathParser
                                                 <*> tlsPrivKeyParser
+                                                <*> tlsPublicKeyParser
                                                 <*> tlsCaCertPathParser
   where
     enableMonitoringApiParser :: Parser Bool
@@ -199,6 +223,15 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
             <> "the Node API."
             )
 
+    tlsServerCertPathParser :: Parser FilePath
+    tlsServerCertPathParser = strOption
+        $ long "node-tls-server-cert"
+        <> metavar "FILEPATH"
+        <> help
+            ( "Path to TLS client public certificate used to authenticate to "
+            <> "the Node API."
+            )
+
     tlsPrivKeyParser :: Parser FilePath
     tlsPrivKeyParser = strOption
         $ long "node-tls-key"
@@ -207,6 +240,16 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
             ( "Path to TLS client private key used to authenticate to the "
             <> "Node API."
             )
+
+    tlsPublicKeyParser :: Parser FilePath
+    tlsPublicKeyParser = strOption
+        $ long "node-tls-server-key"
+        <> metavar "FILEPATH"
+        <> help
+            ( "Path to TLS server public key used to authenticate to the "
+            <> "Node API."
+            )
+
 
     tlsCaCertPathParser :: Parser FilePath
     tlsCaCertPathParser = strOption

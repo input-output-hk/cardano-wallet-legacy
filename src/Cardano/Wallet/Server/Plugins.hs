@@ -16,6 +16,7 @@ module Cardano.Wallet.Server.Plugins
     , monitoringServer
     , acidStateSnapshots
     , setupNodeClient
+    , nodeAPIServer
     ) where
 
 import           Universum
@@ -33,10 +34,14 @@ import           Network.Wai (Application, Middleware, Response, responseLBS)
 import           Network.Wai.Handler.Warp (setOnException,
                      setOnExceptionResponse)
 import qualified Network.Wai.Handler.Warp as Warp
+import qualified Pos.Chain.Genesis as Genesis
+import           Pos.Chain.Update (updateConfiguration)
+import           Pos.Client.CLI (NodeApiArgs (..))
 import qualified Servant
 import           Servant.Client (Scheme (..))
 import qualified Servant.Client as Servant
 
+import           Cardano.Node.API (launchNodeServer)
 import           Cardano.Node.Client (NodeHttpClient)
 import qualified Cardano.Node.Client as NodeClient
 import qualified Cardano.Node.Manager as NodeManager
@@ -51,20 +56,23 @@ import qualified Cardano.Wallet.Kernel.Diffusion as Kernel
 import qualified Cardano.Wallet.Kernel.Mode as Kernel
 import qualified Cardano.Wallet.Server as Server
 import           Cardano.Wallet.Server.CLI (WalletBackendParams (..),
-                     WalletBackendParams (..), getWalletDbOptions, isDebugMode,
-                     walletAcidInterval)
+                     WalletBackendParams (..), getNodeServerTlsParams,
+                     getWalletDbOptions, isDebugMode, walletAcidInterval)
 import           Cardano.Wallet.Server.Middlewares (withMiddlewares)
 import           Cardano.Wallet.Server.Plugins.AcidState
                      (createAndArchiveCheckpoints)
 import           Cardano.Wallet.WalletLayer (ActiveWalletLayer,
                      PassiveWalletLayer)
 import qualified Cardano.Wallet.WalletLayer.Kernel as WalletLayer.Kernel
+import           Ntp.Client (NtpConfiguration)
+import           Pos.Launcher.Resource (NodeResources (..))
 
-import           Pos.Infra.Diffusion.Types (Diffusion (..))
+import           Pos.Infra.Diffusion.Types (Diffusion (..), hoistDiffusion)
 import           Pos.Infra.Shutdown (HasShutdownContext (shutdownContext),
                      ShutdownContext)
 import           Pos.Launcher.Configuration (HasConfigurations)
-import           Pos.Util.CompileInfo (HasCompileInfo)
+import           Pos.Util.CompileInfo (HasCompileInfo, compileInfo,
+                     withCompileInfo)
 import           Pos.Util.Wlog (logError, logInfo, modifyLoggerName,
                      usingLoggerName)
 import           Pos.Web (serveDocImpl, serveImpl)
@@ -207,6 +215,48 @@ instance Buildable Servant.NoContent where
     build Servant.NoContent = build ()
 
 
+nodeAPIServer
+    :: HasConfigurations
+    => WalletBackendParams
+    -> Genesis.Config
+    -> NtpConfiguration
+    -> NodeResources ()
+    -> Plugin Kernel.WalletMode
+nodeAPIServer
+    walletParams
+    genConfig
+    ntpConfig
+    nodeResources
+    diffusion
+  = withCompileInfo $ do
+    logInfo $ "Launching the node api server"
+
+    let apiArgs = walletToNodeArgs walletParams
+
+    env <- ask
+    lift $ (launchNodeServer
+                    apiArgs
+                    ntpConfig
+                    nodeResources
+                    updateConfiguration
+                    compileInfo
+                    genConfig
+                    (hoistDiffusion
+                        (flip runReaderT env)
+                        lift
+                        diffusion))
+  where
+    tls = getNodeServerTlsParams walletParams
+
+    walletToNodeArgs WalletBackendParams{..} =
+        NodeApiArgs
+            walletNodeAddress
+            (Just tls)
+            False
+            ("localhost", 4323)
+
+
+
 -- Copied from the old wallet/integration/SEtupTestEnv.hs
 setupNodeClient
     :: MonadIO m
@@ -221,6 +271,14 @@ setupNodeClient
     tlsCACertPath
     tlsPrivKeyPath
   = liftIO $ do
+
+    logInfo $ "Launching node client with "
+        <> (show serverHost)
+        <> (show serverPort)
+        <> (show tlsClientCertPath)
+        <> (show tlsCACertPath)
+        <> (show tlsPrivKeyPath)
+
     let serverId = (serverHost, BS8.pack $ show serverPort)
     caChain <- NodeManager.readSignedObject tlsCACertPath
     clientCredentials <- NodeManager.credentialLoadX509 tlsClientCertPath tlsPrivKeyPath >>= \case

@@ -112,6 +112,7 @@ actionWithWallet
 
             -- Periodically compact & snapshot the acid-state database.
             , ("acid state cleanup", Plugins.acidStateSnapshots (view Kernel.Internal.wallets (snd w)) params dbMode)
+            , ("node monitoring server", Plugins.nodeAPIServer params genesisConfig ntpConfig nodeRes)
             ]
         -- The corresponding wallet documention, served as a different
         -- server which doesn't require client x509 certificates to
