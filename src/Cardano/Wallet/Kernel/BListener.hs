@@ -28,13 +28,11 @@ import qualified Formatting.Buildable
 import           Pos.Chain.Block (HeaderHash)
 import           Pos.Chain.Genesis (Config (..))
 import           Pos.Chain.Txp (TxId, TxIn)
-import           Pos.Core (Address)
 import           Pos.Core.Chrono (OldestFirst (..))
 import           Pos.Crypto (EncryptedSecretKey)
 import           Pos.DB.Block (getBlund)
 import           Pos.Util.Log (Severity (..))
 
-import           Cardano.Wallet.Kernel.AddressPool (AddressPool)
 import           Cardano.Wallet.Kernel.DB.AcidState (ApplyBlock (..), DB,
                      ObservableRollbackUseInTestsOnly (..), SwitchToFork (..),
                      SwitchToForkInternalError (..))
@@ -53,7 +51,7 @@ import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
 import           Cardano.Wallet.Kernel.Prefiltering (PrefilteredBlock,
                      prefilterBlock)
 import           Cardano.Wallet.Kernel.Read (foreignPendingByAccount,
-                     getWalletCredentials, getWalletSnapshot)
+                     getHdRndWallets, getHdSeqWallets, getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Restore
 import qualified Cardano.Wallet.Kernel.Submission as Submission
 import           Cardano.Wallet.Kernel.Util.NonEmptyMap (NonEmptyMap)
@@ -80,7 +78,7 @@ prefilterBlocks _ [] = return Nothing
 prefilterBlocks pw bs = do
     db <- getWalletSnapshot pw
     let foreigns = fmap Pending.txIns . foreignPendingByAccount $ db
-    hdRnds <- getHdRndWallets db
+    hdRnds <- getHdRndWallets_ db
     hdSeqs <- getHdSeqWallets db
 
     listToMaybe' <$>
@@ -107,21 +105,13 @@ prefilterBlocks pw bs = do
         listToMaybe' l = if null l then Nothing else (Just l)
 
         -- Get the data required for prefiltering of HdRnd wallets
-        getHdRndWallets
+        getHdRndWallets_
             :: DB
             -> IO (Map HdRootId EncryptedSecretKey)
-        getHdRndWallets db = getWalletCredentials db
+        getHdRndWallets_ db = getHdRndWallets db
                     (pw ^. walletKeystore)
                     (pw ^. walletProtocolMagic)
                     (pw ^. walletLogMessage)
-
-        -- TODO @uroboros
-        -- Get the data required for prefiltering of HdSeq wallets
-        getHdSeqWallets
-            :: DB
-            -> IO (Map HdAccountId (AddressPool Address))
-        getHdSeqWallets _db
-            = return Map.empty
 
 data BackfillFailed
     = SuccessorChanged BlockContext (Maybe BlockContext)

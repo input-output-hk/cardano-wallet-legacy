@@ -3,7 +3,8 @@ module Cardano.Wallet.Kernel.Read (
     -- * Read-only access to the DB
     DB -- opaque
     -- ** Helper
-  , getWalletCredentials
+  , getHdRndWallets
+  , getHdSeqWallets
     -- ** The only effectful getter you will ever need
   , getWalletSnapshot
     -- ** Pure getters acting on a DB snapshot
@@ -17,12 +18,15 @@ import qualified Data.Map.Strict as Map
 import           Formatting (sformat, (%))
 import           Serokell.Util (listJson)
 
+import           Pos.Core (Address)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, ProtocolMagic)
 import           Pos.Util.Wlog (Severity (..))
 
+import           Cardano.Wallet.Kernel.AddressPool (AddressPool)
 import           Cardano.Wallet.Kernel.DB.AcidState (DB, Snapshot (..))
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
+import           Cardano.Wallet.Kernel.DB.HdWallet (HdAccountId)
 import           Cardano.Wallet.Kernel.DB.Read as Getters
 import           Cardano.Wallet.Kernel.Internal
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
@@ -31,18 +35,19 @@ import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 getWalletSnapshot :: PassiveWallet -> IO DB
 getWalletSnapshot pw = query' (pw ^. wallets) Snapshot
 
--- | Get wallet credentials
+-- | Get HD Random wallet roots along with the wallet ESK required for
+-- prefiltering Hd Rnd wallets.
 --
 -- For wallets without a corresponding secret key we log an error. This
 -- indicates a bug somewhere, but there is not much we can do about it here,
 -- since this runs in the context of applying a block.
-getWalletCredentials
+getHdRndWallets
     :: DB
     -> Keystore.Keystore
     -> ProtocolMagic
     -> (Severity -> Text -> IO ())
     -> IO (Map HdRootId EncryptedSecretKey)
-getWalletCredentials snapshot ks pm logger = do
+getHdRndWallets snapshot ks pm logger = do
     (creds, missing) <- fmap partitionEithers $
       forM (walletIds snapshot) $ \walletId ->
         aux walletId <$> Keystore.lookup nm walletId ks
@@ -60,3 +65,12 @@ getWalletCredentials snapshot ks pm logger = do
 
     errMissing :: [HdRootId] -> Text
     errMissing = sformat ("Root key missing for " % listJson)
+
+-- TODO @uroboros
+-- Get HD Sequential wallet accounts along with the associated AddressPool
+-- required for prefiltering each account.
+getHdSeqWallets
+    :: DB
+    -> IO (Map HdAccountId (AddressPool Address))
+getHdSeqWallets _db
+    = return Map.empty

@@ -1,3 +1,6 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ViewPatterns #-}
+
 -- | Deal with pending transactions
 module Cardano.Wallet.Kernel.Pending (
     newPending
@@ -17,10 +20,11 @@ import           Control.Concurrent.MVar (modifyMVar_)
 import           Data.Acid.Advanced (update')
 
 import           Pos.Chain.Txp (Tx (..), TxAux (..), TxOut (..))
-import           Pos.Core (Coin (..))
+import           Pos.Core (Address, Coin (..))
 import           Pos.Crypto (EncryptedSecretKey)
 
-import           Cardano.Wallet.Kernel.DB.AcidState (CancelPending (..),
+import           Cardano.Wallet.Kernel.AddressPool (AddressPool)
+import           Cardano.Wallet.Kernel.DB.AcidState (DB, CancelPending (..),
                      NewForeign (..), NewForeignError (..), NewPending (..),
                      NewPendingError (..))
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
@@ -29,7 +33,7 @@ import           Cardano.Wallet.Kernel.DB.InDb
 import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending
 import           Cardano.Wallet.Kernel.DB.TxMeta (TxMeta, putTxMeta)
 import           Cardano.Wallet.Kernel.Internal
-import           Cardano.Wallet.Kernel.Read (getWalletCredentials, getWalletSnapshot)
+import           Cardano.Wallet.Kernel.Read (getHdRndWallets, getHdSeqWallets, getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Submission (Cancelled, addPending)
 import           Cardano.Wallet.Kernel.Util.Core
 
@@ -88,21 +92,23 @@ newTx :: forall e. ActiveWallet
       -> IO (Either e TxMeta)
 newTx ActiveWallet{..} accountId tx partialMeta upd = do
     snapshot <- getWalletSnapshot walletPassive
-    -- run the update
-    hdRnds <- getWalletCredentials snapshot
-                (walletPassive ^. walletKeystore)
-                (walletPassive ^. walletProtocolMagic)
-                (walletPassive ^. walletLogMessage)
 
-    let allOurAddresses = fst <$> allOurs hdRnds
-    res <- upd $ allOurAddresses
-    case res of
+    -- | NOTE: we recognise addresses in the transaction outputs that belong
+    -- to _all_ wallets (not only for the account and wallet to which this
+    -- transaction is being submitted)
+    (hdRnds, hdSeqs) <- fullPref snapshot
+    let allOurAddresses = fst <$> allOurs hdRnds <> allOurs hdSeqs
+
+    -- run the update
+    upd allOurAddresses >>= \case
         Left e   -> return (Left e)
         Right () -> do
-            -- process transaction on success
-            -- myCredentials should be a list with a single element.
-            let thisHdRndRoot = Map.filterWithKey (\hdRoot _ -> accountId ^. hdAccountIdParent == hdRoot) hdRnds
-                ourOutputCoins = snd <$> allOurs thisHdRndRoot
+            let ourOutputCoins
+                    = snd <$> allOurs (thisPrefRnd hdRnds) <> allOurs (thisPrefSeq hdSeqs)
+                -- | NOTE: above, we prefilter coins that belong to _all_ accounts
+                -- which share the root of the given accountId.
+                -- Since we don't know the type of this wallet, we prefilter
+                -- it as either type (one of which will be trivial)
                 gainedOutputCoins = sumCoinsUnsafe ourOutputCoins
                 allOutsOurs = length ourOutputCoins == length txOut
                 txMeta = partialMeta allOutsOurs gainedOutputCoins
@@ -112,14 +118,47 @@ newTx ActiveWallet{..} accountId tx partialMeta upd = do
     where
         (txOut :: [TxOut]) = NE.toList $ (_txOutputs . taTx $ tx)
 
-        -- | NOTE: we recognise addresses in the transaction outputs that belong to _all_ wallets,
-        --  not only for the wallet to which this transaction is being submitted
-        allOurs
-            :: Map HdRootId EncryptedSecretKey
-            -> [(HdAddress, Coin)]
-        allOurs = evalState $ fmap catMaybes $ forM txOut $ \out -> do
-            fmap (, txOutValue out) <$> state (isOurs $ txOutAddress out)
+        -- Prefiltering context for _all_ wallets
+        fullPref
+            :: DB
+            -> IO ( Map HdRootId EncryptedSecretKey
+                  , Map HdAccountId (AddressPool Address))
+        fullPref db = do
+            rnds <- getHdRndWallets db
+                        (walletPassive ^. walletKeystore)
+                        (walletPassive ^. walletProtocolMagic)
+                        (walletPassive ^. walletLogMessage)
+            seqs <- getHdSeqWallets db
+            return (rnds, seqs)
 
+        -- Provides the prefiltering context for all accounts in a wallet.
+        --
+        -- If the accountId is part of an HdRnd wallet, then this selects
+        -- the HdRootId of that wallet.
+        thisPrefRnd
+            :: Map HdRootId EncryptedSecretKey
+            -> Map HdRootId EncryptedSecretKey
+        thisPrefRnd
+            = Map.filterWithKey (\r _ -> accountId ^. hdAccountIdParent == r)
+
+        -- Provides the prefiltering context for all accounts in a wallet.
+        --
+        -- If the accountId is part of an HdSeq wallet, then this selects
+        -- all HdAccountId's that have the same root of the given accountId.
+        thisPrefSeq
+            :: Map HdAccountId (AddressPool Address)
+            -> Map HdAccountId (AddressPool Address)
+        thisPrefSeq
+            = Map.filterWithKey (\a _ -> accountId ^. hdAccountIdParent == a ^. hdAccountIdParent)
+
+        -- filter the Tx outputs for "ours" in the prefilter context _s_
+        allOurs
+            :: IsOurs s
+            => s
+            -> [(HdAddress, Coin)]
+        allOurs (isOursSkip -> True) = []
+        allOurs s = flip evalState s $ fmap catMaybes $ forM txOut $ \out -> do
+            fmap (, txOutValue out) <$> state (isOurs $ txOutAddress out)
 
         submitTx :: IO ()
         submitTx = modifyMVar_ (walletPassive ^. walletSubmission) $
