@@ -27,12 +27,10 @@ library
       OverloadedStrings
       RecordWildCards
       ScopedTypeVariables
-      ScopedTypeVariables
       TemplateHaskell
       TupleSections
       TypeApplications
       TypeFamilies
-      TypeOperators
       TypeOperators
       UndecidableInstances
   ghc-options:
@@ -275,11 +273,9 @@ executable cardano-wallet-server
       OverloadedStrings
       RecordWildCards
       ScopedTypeVariables
-      ScopedTypeVariables
       TemplateHaskell
       TypeApplications
       TypeFamilies
-      TypeOperators
       TypeOperators
       UndecidableInstances
   ghc-options:
@@ -556,8 +552,8 @@ test-suite integration
       MultiParamTypeClasses
       NoImplicitPrelude
       NoMonomorphismRestriction
-      OverloadedStrings
       OverloadedLabels
+      OverloadedStrings
       QuasiQuotes
       ScopedTypeVariables
       TupleSections
