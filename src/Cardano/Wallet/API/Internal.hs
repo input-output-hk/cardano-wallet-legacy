@@ -6,11 +6,11 @@ module Cardano.Wallet.API.Internal where
 import           Servant
 
 import           Cardano.Wallet.API.Response (APIResponse, ValidJSON)
-import           Cardano.Wallet.API.Types (Tags)
+import           Cardano.Wallet.API.Types
 import           Cardano.Wallet.API.V1.Types (Wallet, WalletImport,
                      WalletSoftwareVersion)
 
-type API = Tags '["Internal"] :>
+type API = Tag "Internal" 'NoTagDescription :>
     (    "next-update"
         :> Summary "Version of the next update (404 if none)"
         :> Get '[ValidJSON] (APIResponse WalletSoftwareVersion)
