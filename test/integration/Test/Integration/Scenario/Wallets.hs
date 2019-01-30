@@ -517,7 +517,7 @@ spec = do
             , expectFieldEqual assuranceLevel StrictAssurance
             ]
 
-    describe "WALLETS_UPDATE_PASS_01,04,05,06,09,10 - Updating password to empty and non-empty" $ do
+    describe "WALLETS_UPDATE_PASS_01,04,05,06,09 - Updating password to empty and non-empty" $ do
 
         let matrix =
                 [ ( "non-empty old and new password"
