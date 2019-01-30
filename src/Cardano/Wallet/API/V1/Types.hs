@@ -125,6 +125,8 @@ module Cardano.Wallet.API.V1.Types (
   -- * Wallet Errors
   , WalletError(..)
   , ErrNotEnoughMoney(..)
+  , ErrUtxoNotEnoughFragmented(..)
+  , msgUtxoNotEnoughFragmented
   , toServantError
   , toHttpErrorStatus
   , module Cardano.Wallet.Types.UtxoStatistics
@@ -2410,6 +2412,23 @@ instance FromJSON ErrNotEnoughMoney where
             ErrAvailableBalanceIsInsufficient <$> (o .: "availableBalance")
 
 
+data ErrUtxoNotEnoughFragmented = ErrUtxoNotEnoughFragmented {
+      theMissingUtxos :: !Int
+    , theHelp         :: !Text
+    } deriving (Eq, Generic, Show)
+
+
+msgUtxoNotEnoughFragmented :: Text
+msgUtxoNotEnoughFragmented = "Utxo is not enough fragmented to handle the number of outputs of this transaction. Query /api/v1/wallets/{walletId}/statistics/utxos endpoint for more information"
+
+deriveJSON Aeson.defaultOptions ''ErrUtxoNotEnoughFragmented
+
+instance Buildable ErrUtxoNotEnoughFragmented where
+    build (ErrUtxoNotEnoughFragmented missingUtxos _ ) =
+        bprint ("Missing "%build%" utxo(s) to accommodate all outputs of the transaction") missingUtxos
+
+
+
 -- | Type representing any error which might be thrown by wallet.
 --
 -- Errors are represented in JSON in the JSend format (<https://labs.omniti.com/labs/jsend>):
@@ -2474,6 +2493,9 @@ data WalletError =
     | RequestThrottled !Word64
     -- ^ The request has been throttled. The 'Word64' is a count of microseconds
     -- until the user should retry.
+    | UtxoNotEnoughFragmented !ErrUtxoNotEnoughFragmented
+    -- ^ available Utxo is not enough fragmented, ie., there is more outputs of transaction than
+    -- utxos
     deriving (Generic, Show, Eq)
 
 deriveGeneric ''WalletError
@@ -2516,6 +2538,9 @@ instance Arbitrary WalletError where
         , NodeIsStillSyncing <$> arbitrary
         , CannotCreateAddress <$> arbitraryText
         , RequestThrottled <$> arbitrary
+        , UtxoNotEnoughFragmented <$> Gen.oneof
+          [ ErrUtxoNotEnoughFragmented <$> Gen.choose (1, 10) <*> arbitrary
+          ]
         ]
       where
         arbitraryText :: Gen Text
@@ -2572,7 +2597,8 @@ instance Buildable WalletError where
             bprint "Cannot create derivation path for new address, for external wallet."
         RequestThrottled _ ->
             bprint "You've made too many requests too soon, and this one was throttled."
-
+        UtxoNotEnoughFragmented x ->
+            bprint build x
 
 -- | Convert wallet errors to Servant errors
 instance ToServantError WalletError where
@@ -2615,6 +2641,9 @@ instance ToServantError WalletError where
             err500
         RequestThrottled{} ->
             err400 { errHTTPCode = 429 }
+        UtxoNotEnoughFragmented{} ->
+            err403
+
 
 -- | Declare the key used to wrap the diagnostic payload, if any
 instance HasDiagnostic WalletError where
@@ -2657,3 +2686,5 @@ instance HasDiagnostic WalletError where
             "msg"
         RequestThrottled{} ->
             "microsecondsUntilRetry"
+        UtxoNotEnoughFragmented{} ->
+            "details"

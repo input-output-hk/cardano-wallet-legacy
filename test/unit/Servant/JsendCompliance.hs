@@ -20,7 +20,7 @@ import           Servant.Swagger.Internal.Test (props)
 import           Servant.Swagger.Internal.TypeLevel (AddBodyType, AppendList,
                      Every, Nub, TMap)
 import           Test.QuickCheck (Arbitrary (..), Property, counterexample,
-                     (.&&.), (===))
+                     (===))
 
 -- | For each endpoint, create a property that verifies that serializing
 -- the response for that endpoint is JSend compliant.
@@ -96,4 +96,3 @@ type family ResponseTypes' c api :: [*] where
   ResponseTypes' c (e :> api) = ResponseTypes' c api
   ResponseTypes' c (a :<|> b) = AppendList (ResponseTypes' c a) (ResponseTypes' c b)
   ResponseTypes' c api = '[]
-

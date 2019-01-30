@@ -363,6 +363,7 @@ test-suite unit
   ghc-options:
       -threaded -rtsopts
       -Wall
+      -Werror
       -O2
 
   build-depends:

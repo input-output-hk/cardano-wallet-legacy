@@ -7,9 +7,64 @@ import           Universum
 import qualified Cardano.Wallet.Client.Http as Client
 import           Test.Integration.Framework.DSL
 
-
 spec :: Scenarios Context
 spec = do
+
+    scenario "proper fragmentation of utxo allows for multi-output transaction" $ do
+        fixtureSource <- setup $ defaultSetup
+            & initialCoins .~ [500000, 500000]
+
+        fixtureDest1 <- setup $ defaultSetup & walletName .~ "destinationWallet1"
+
+        accountDest1 <- successfulRequest $ Client.getAccount
+            $- (fixtureDest1 ^. wallet . walletId)
+            $- defaultAccountId
+
+        fixtureDest2 <- setup $ defaultSetup & walletName .~ "destinationWallet2"
+
+        accountDest2 <- successfulRequest $ Client.getAccount
+            $- (fixtureDest2 ^. wallet . walletId)
+            $- defaultAccountId
+
+        response <- request $ Client.postTransaction $- Payment
+            (defaultSource fixtureSource)
+            (customDistribution $ (accountDest1, 10) :| [(accountDest2, 11)] )
+            defaultGroupingPolicy
+            noSpendingPassword
+
+        verify response
+            [ expectTxInHistoryOf (fixtureSource ^. wallet)
+            , expectTxStatusEventually [InNewestBlocks]
+            ]
+
+
+    scenario "not enough fragmentation of utxo forbids multi-output transaction" $ do
+        fixtureSource <- setup $ defaultSetup
+            & initialCoins .~ [100000]
+
+        fixtureDest1 <- setup $ defaultSetup & walletName .~ "destinationWallet1"
+        fixtureDest2 <- setup $ defaultSetup & walletName .~ "destinationWallet2"
+
+        accountDest1 <- successfulRequest $ Client.getAccount
+            $- (fixtureDest1 ^. wallet . walletId)
+            $- defaultAccountId
+
+        accountDest2 <- successfulRequest $ Client.getAccount
+            $- (fixtureDest2 ^. wallet . walletId)
+            $- defaultAccountId
+
+        response <- request $ Client.postTransaction $- Payment
+            (defaultSource fixtureSource)
+            (customDistribution $ (accountDest1, 10) :| [(accountDest2, 11)] )
+            defaultGroupingPolicy
+            noSpendingPassword
+
+
+        verify response
+            [ expectWalletError (UtxoNotEnoughFragmented (Client.ErrUtxoNotEnoughFragmented 1 Client.msgUtxoNotEnoughFragmented))
+            ]
+
+
     scenario "successful payment appears in the history" $ do
         fixture <- setup $ defaultSetup
             & initialCoins .~ [1000000]
@@ -49,7 +104,7 @@ spec = do
             noSpendingPassword
 
         verify response
-            [ expectWalletError (NotEnoughMoney (ErrAvailableBalanceIsInsufficient 0))
+            [ expectWalletError (UtxoNotEnoughFragmented (Client.ErrUtxoNotEnoughFragmented 1 Client.msgUtxoNotEnoughFragmented))
             ]
 
     scenario "payment fails when wallet has insufficient funds" $ do
