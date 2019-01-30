@@ -20,7 +20,7 @@ import           Servant.Swagger.Internal.Test (props)
 import           Servant.Swagger.Internal.TypeLevel (AddBodyType, AppendList,
                      Every, Nub, TMap)
 import           Test.QuickCheck (Arbitrary (..), Property, counterexample,
-                     (.&&.), (===))
+                     (===))
 
 -- | For each endpoint, create a property that verifies that serializing
 -- the response for that endpoint is JSend compliant.
