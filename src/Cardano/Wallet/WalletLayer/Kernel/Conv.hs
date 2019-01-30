@@ -47,6 +47,7 @@ import           Pos.Crypto (AesKey, RedeemSecretKey, aesDecrypt,
 import           Cardano.Mnemonic (mnemonicToAesKey)
 import           Cardano.Wallet.API.Types.UnitOfMeasure
 import qualified Cardano.Wallet.API.V1.Types as V1
+import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
                      (InputGrouping (..))
 import           Cardano.Wallet.Kernel.DB.BlockMeta (addressMetaIsUsed)
@@ -62,6 +63,10 @@ import           Cardano.Wallet.Kernel.Internal (WalletRestorationProgress,
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import           UTxO.Util (exceptT)
 -- import           Cardano.Wallet.WalletLayer (InvalidRedemptionCode (..))
+
+-- Functions 'toWallet' and 'toEosWallet' contain duplications in 'where'
+-- sections, but this is not a problem.
+{-# ANN module ("HLint: ignore Reduce duplication" :: Text) #-}
 
 {-------------------------------------------------------------------------------
   From V1 to kernel types
@@ -182,12 +187,12 @@ toWallet db hdRoot = V1.Wallet {
     v1AssuranceLevel = toAssuranceLevel $ hdRoot ^. HD.hdRootAssurance
 
 -- | Converts an 'HdRoot' into a V1 'EosWallet'.
-toEosWallet :: Kernel.DB -> HD.HdRoot -> V1.EosWallet
-toEosWallet db hdRoot = V1.EosWallet {
+toEosWallet :: AddressPoolGap -> Kernel.DB -> HD.HdRoot -> V1.EosWallet
+toEosWallet gap db hdRoot = V1.EosWallet {
       eoswalId             = V1.WalletId walletId
     , eoswalName           = hdRoot ^. HD.hdRootName
                                      . to HD.getWalletName
-    , eoswalAddressPoolGap = error "TODO, we have to take it from one of accounts, will be done later, see issue #36"
+    , eoswalAddressPoolGap = gap
     , eoswalBalance        = V1.WalletCoin (Kernel.rootTotalBalance db rootId)
     , eoswalCreatedAt      = V1.WalletTimestamp createdAt
     , eoswalAssuranceLevel = v1AssuranceLevel

@@ -28,6 +28,7 @@ import           Pos.Crypto.Signing
 import qualified Cardano.Mnemonic as Mnemonic
 import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
+import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (dbHdWallets)
 import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
@@ -256,8 +257,26 @@ getEosWallet
     -> m (Either GetWalletError V1.EosWallet)
 getEosWallet _wallet wId db = runExceptT $ do
     rootId <- withExceptT GetWalletWalletIdDecodingFailed (fromRootId wId)
-    fmap (toEosWallet db) $ withExceptT GetWalletError $ exceptT $
+    hdRoot <- withExceptT GetWalletError $ exceptT $
         Kernel.lookupHdRootId db rootId
+    return $ toEosWallet (addressPoolGapByRootId rootId db) db hdRoot
+
+-- | 'HdRoot' doesn't contain address pool gap,
+-- only corresponding 'HdAccount's contain it.
+addressPoolGapByRootId
+    :: HD.HdRootId
+    -> Kernel.DB
+    -> AddressPoolGap
+addressPoolGapByRootId rootId db =
+    if IxSet.null accountSet
+        then def :: AddressPoolGap
+        else gap
+  where
+    accountSet = Kernel.accountsByRootId db rootId
+    -- Since this function is using for EOS-wallets only,
+    -- we definitely know that this is an account with EO-branch.
+    HD.HdAccountBaseEO _ _ gap = firstAccount ^. HD.hdAccountBase
+    (firstAccount:_) = IxSet.toList accountSet
 
 -- | Gets all the wallets known to this edge node.
 --
@@ -283,7 +302,8 @@ getEosWallets
     -> m (IxSet V1.EosWallet)
 getEosWallets _wallet db =
     fmap IxSet.fromList $ forM (IxSet.toList allRoots) $ \root -> do
-        return $ toEosWallet db root
+        let rootId = root ^. HD.hdRootId
+        return $ toEosWallet (addressPoolGapByRootId rootId db) db root
   where
     allRoots = db ^. dbHdWallets . HD.hdWalletsRoots
 
