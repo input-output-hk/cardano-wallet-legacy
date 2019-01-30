@@ -6,6 +6,8 @@ module Cardano.Wallet.WalletLayer
     -- ** Errors
     , CreateWalletError(..)
     , GetWalletError(..)
+    , GetAddressPoolGapError(..)
+    , GetEosWalletError(..)
     , UpdateWalletError(..)
     , UpdateWalletPasswordError(..)
     , DeleteWalletError(..)
@@ -112,6 +114,40 @@ instance Buildable GetWalletError where
         bprint ("GetWalletErrorNotFound " % build) walletId
     build (GetWalletWalletIdDecodingFailed txt) =
         bprint ("GetWalletWalletIdDecodingFailed " % build) txt
+
+data GetAddressPoolGapError =
+      GetEosWalletErrorNoAccounts Text
+    | GetEosWalletErrorWrongAccounts Text
+    | GetEosWalletErrorGapsDiffer Text
+    deriving Eq
+
+instance Buildable GetAddressPoolGapError where
+    build (GetEosWalletErrorNoAccounts txt) =
+        bprint ("GetEosWalletErrorNoAccounts " % build) txt
+    build (GetEosWalletErrorWrongAccounts txt) =
+        bprint ("FO-accounts found in EOS-wallet " % build) txt
+    build (GetEosWalletErrorGapsDiffer txt) =
+        bprint ("Address pool gaps differ, for EOS-wallet " % build) txt
+
+data GetEosWalletError =
+      GetEosWalletError Kernel.UnknownHdRoot
+    | GetEosWalletWalletIdDecodingFailed Text
+    | GetEosWalletErrorAddressPoolGap GetAddressPoolGapError
+    deriving Eq
+
+-- | Unsound show instance needed for the 'Exception' instance.
+instance Show GetEosWalletError where
+    show = formatToString build
+
+instance Exception GetEosWalletError
+
+instance Buildable GetEosWalletError where
+    build (GetEosWalletError kernelError) =
+        bprint ("GetEosWalletError " % build) kernelError
+    build (GetEosWalletWalletIdDecodingFailed txt) =
+        bprint ("GetEosWalletWalletIdDecodingFailed " % build) txt
+    build (GetEosWalletErrorAddressPoolGap gapError) =
+        bprint ("GetEosWalletErrorAddressPoolGap " % build) gapError
 
 data UpdateWalletError =
       UpdateWalletError Kernel.UnknownHdRoot
@@ -415,9 +451,9 @@ data PassiveWalletLayer m = PassiveWalletLayer
     -- fully-owned wallets
       createWallet         :: CreateWallet -> m (Either CreateWalletError Wallet)
     , getWallets           :: m (IxSet Wallet)
-    , getEosWallets        :: m (IxSet EosWallet)
+    , getEosWallets        :: m (Either GetEosWalletError (IxSet EosWallet))
     , getWallet            :: WalletId -> m (Either GetWalletError Wallet)
-    , getEosWallet         :: WalletId -> m (Either GetWalletError EosWallet)
+    , getEosWallet         :: WalletId -> m (Either GetEosWalletError EosWallet)
     , updateWallet         :: WalletId
                            -> WalletUpdate
                            -> m (Either UpdateWalletError Wallet)
