@@ -59,15 +59,15 @@ defaultIntegrationEnv = Map.fromList
     , ("CONFIGURATION_KEY", "default")
     , ("STATE_DIR", "./state-integration")
     , ("REBUILD_DB", "True")
-    , ("WALLET_ADDRESS", "127.0.0.1:8090")
-    , ("WALLET_DOC_ADDRESS", "127.0.0.1:8190")
-    , ("WALLET_DB_PATH", "./state-integration/wallet-db/edge")
     , ("WALLET_REBUILD_DB", "True")
-    , ("WALLET_NODE_API_ADDRESS", "127.0.0.1:8185")
-    , ("NODE_API_ADDRESS", "127.0.0.1:8080")
-    , ("NODE_DOC_ADDRESS", "127.0.0.1:3186")
-    , ("NODE_TLS_CLIENT_CERT", "./state-integration/tls/edge/client.crt")
-    , ("NODE_TLS_CLIENT_KEY", "./state-integration/tls/edge/client.key")
+    , ("WALLET_DB_PATH", "./state-integration/wallet-db/edge")
+    , ("WALLET_API_ADDRESS", "127.0.0.1:8090")
+    , ("WALLET_DOC_ADDRESS", "127.0.0.1:8190")
+    , ("TLS_CA_CERT", "./state-integration/tls/edge/ca.crt")
+    , ("TLS_WALLET_SERVER_CERT", "./state-integration/tls/edge/server.crt")
+    , ("TLS_WALLET_SERVER_KEY", "./state-integration/tls/edge/server.key")
+    , ("TLS_NODE_CLIENT_CERT", "./state-integration/tls/edge/client.crt")
+    , ("TLS_NODE_CLIENT_KEY", "./state-integration/tls/edge/client.key")
     ]
 
 -- | Start an integration cluster. Quite identical to the original "start cluster".
@@ -203,8 +203,12 @@ printCartouche :: Env -> IO ()
 printCartouche env = do
     let colSize = 35
     putTextLn $ toText (env ! "NODE_ID") <> T.replicate (colSize - length (env !  "NODE_ID")) "-"
-    when (Map.member "LISTEN" env) $ putTextLn $  "|.....listen:        " <> toText (env ! "LISTEN")
-    putTextLn $ "|.....api address:   " <> toText (env ! "NODE_API_ADDRESS")
-    putTextLn $ "|.....doc address:   " <> toText (env ! "NODE_DOC_ADDRESS")
-    putTextLn $ "|.....system start:  " <> toText (env ! "SYSTEM_START")
+    safeLine "LISTEN"           "|.....listen:        "
+    safeLine "NODE_API_ADDRESS" "|.....api address:   "
+    safeLine "NODE_DOC_ADDRESS" "|.....doc address:   "
+    safeLine "SYSTEM_START"     "|.....system start:  "
     putTextLn $ T.replicate colSize "-" <> "\n"
+  where
+    safeLine :: String -> Text -> IO ()
+    safeLine k title =
+        when (Map.member k env) $ putTextLn $ title <> toText (env ! k)

@@ -17,7 +17,6 @@ import qualified Cardano.Wallet.API.Internal.Handlers as Internal
 import qualified Cardano.Wallet.API.V1.Handlers as V1
 import           Cardano.Wallet.API.V1.Swagger (swaggerSchemaUIServer)
 import qualified Cardano.Wallet.API.V1.Swagger as Swagger
-import           Cardano.Wallet.Server.CLI (RunMode (..))
 import           Cardano.Wallet.WalletLayer (ActiveWalletLayer (..))
 
 -- | Serve the REST interface to the wallet
@@ -27,9 +26,8 @@ import           Cardano.Wallet.WalletLayer (ActiveWalletLayer (..))
 walletServer
     :: NodeHttpClient
     -> ActiveWalletLayer IO
-    -> RunMode
     -> Server WalletAPI
-walletServer nc w _ =
+walletServer nc w =
     v1Handler
     :<|> internalHandler
   where
