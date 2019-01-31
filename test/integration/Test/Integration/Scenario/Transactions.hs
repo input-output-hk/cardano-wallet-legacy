@@ -63,7 +63,7 @@ spec = do
             [ expectWalletError (UtxoNotEnoughFragmented (Client.ErrUtxoNotEnoughFragmented 1 Client.msgUtxoNotEnoughFragmented))
             ]
 
-    scenario "cannot send subsequenct transaction when the first one is pending" $ do
+    scenario "cannot send subsequent transaction when the first one is pending" $ do
         fixtureSource <- setup $ defaultSetup
             & initialCoins .~ [10000000]
             & rawPassword .~ "raw password"
