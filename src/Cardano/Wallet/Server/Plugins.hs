@@ -56,8 +56,8 @@ import qualified Cardano.Wallet.Kernel.Diffusion as Kernel
 import qualified Cardano.Wallet.Kernel.Mode as Kernel
 import qualified Cardano.Wallet.Server as Server
 import           Cardano.Wallet.Server.CLI (WalletBackendParams (..),
-                     WalletBackendParams (..), getNodeServerTlsParams,
-                     getWalletDbOptions, isDebugMode, walletAcidInterval)
+                     WalletBackendParams (..), getWalletDbOptions, isDebugMode,
+                     walletAcidInterval)
 import           Cardano.Wallet.Server.Middlewares (withMiddlewares)
 import           Cardano.Wallet.Server.Plugins.AcidState
                      (createAndArchiveCheckpoints)
@@ -229,7 +229,7 @@ nodeAPIServer
     nodeResources
     diffusion
   = withCompileInfo $ do
-    logInfo $ "Launching the node api server with tls params: " <> (show tls)
+    logInfo $ "Launching the node api server with tls params: " <> (show nodeTLSParams)
 
     let apiArgs = walletToNodeArgs walletParams
 
@@ -246,14 +246,14 @@ nodeAPIServer
                         lift
                         diffusion))
   where
-    tls = getNodeServerTlsParams walletParams
-
+    nodeTLSParams = walletTLSParams walletParams
     walletToNodeArgs WalletBackendParams{..} =
         NodeApiArgs
             walletNodeAddress
-            (Just tls)
-            False
-            ("localhost", 4323)
+            nodeTLSParams
+            -- We re-use the wallet TLS params for the node server
+            False -- debug mode
+            ("localhost", 4323) -- something
 
 
 
@@ -284,7 +284,7 @@ setupNodeClient
     clientCredentials <- NodeManager.credentialLoadX509 tlsClientCertPath tlsPrivKeyPath >>= \case
         Right   a -> return a
         Left  err -> fail $ "Error decoding X509 certificates: " <> err
-    let settings = NodeManager.mkHttpsManagerSettings serverId caChain clientCredentials
+    let settings = NodeManager.mkHttpsManagerSettings serverId caChain (Just clientCredentials)
     manager <- NodeManager.newManager $ settings
         { managerResponseTimeout =
             responseTimeoutSeconds 60 -- force-ntp-check may take 30 s + communication delay

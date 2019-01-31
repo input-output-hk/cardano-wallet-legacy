@@ -38,6 +38,7 @@ import           Cardano.Wallet.Server.Middlewares
 import qualified Cardano.Wallet.Server.Plugins as Plugins
 import           Cardano.Wallet.WalletLayer (PassiveWalletLayer)
 import qualified Cardano.Wallet.WalletLayer.Kernel as WalletLayer.Kernel
+import           Pos.Web (TlsParams (..))
 
 
 -- | The "workhorse" responsible for starting a Cardano edge node plus a number of extra plugins.
@@ -59,12 +60,15 @@ actionWithWallet
     ntpStatus <- withNtpClient (ntpClientSettings ntpConfig)
     userSecret <- readTVarIO (ncUserSecret $ nrContext nodeRes)
 
+    logInfo $ "Params: " <> show params
+
     let (nodeIp, nodePort) = walletNodeAddress
+    let walletNodeTlsCaCertPath = tpCaPath $ maybe (error "TODO") id walletTLSParams
     nodeClient <- Plugins.setupNodeClient
          (BS8.unpack nodeIp, fromIntegral nodePort)
          walletNodeTlsClientCert
          walletNodeTlsCaCertPath
-         walletNodeTlsPrivKey
+         walletNodeTlsClientKey
 
     let nodeState = newNodeStateAdaptor
             genesisConfig

@@ -74,17 +74,10 @@ data WalletBackendParams = WalletBackendParams
     , forceFullMigration      :: !Bool
     , walletNodeAddress       :: !NetworkAddress
     -- ^ The IP address and port for the node backend.
-    , walletNodeTlsClientCert :: FilePath
-    -- ^ A filepath to the Node's public certficate
-    , walletNodeTlsServerCert :: FilePath
-    -- ^ A filepath to the Node's private certficate
-    , walletNodeTlsPrivKey    :: FilePath
+    , walletNodeTlsClientCert :: !FilePath
+    -- ^ A filepath to the Node's client certficate
+    , walletNodeTlsClientKey  :: !FilePath
     -- ^ A filepath to the TLS private key for the Node API.
-    , walletNodeTlsPublicKey  :: FilePath
-    -- ^ A filepath to the TLS public key for the Node API.
-    , walletNodeTlsCaCertPath :: FilePath
-    -- ^ A filepath to the TLS CA Certificate for communicating with the Node
-    -- API.
     } deriving Show
 
 getWalletDbOptions :: WalletBackendParams -> WalletDBOptions
@@ -95,23 +88,16 @@ getFullMigrationFlag :: WalletBackendParams -> Bool
 getFullMigrationFlag WalletBackendParams{..} =
     forceFullMigration
 
-getNodeClientTlsParams :: WalletBackendParams -> TlsParams
-getNodeClientTlsParams WalletBackendParams {..} =
-    TlsParams
-        { tpCertPath = walletNodeTlsClientCert
-        , tpCaPath = walletNodeTlsCaCertPath
-        , tpKeyPath = walletNodeTlsPrivKey
-        , tpClientAuth = False
-        }
-
-getNodeServerTlsParams  :: WalletBackendParams -> TlsParams
-getNodeServerTlsParams WalletBackendParams {..} =
-    TlsParams
-        { tpCertPath = walletNodeTlsServerCert
-        , tpCaPath = walletNodeTlsCaCertPath
-        , tpKeyPath = walletNodeTlsPublicKey
-        , tpClientAuth = False
-        }
+getNodeClientTlsParams :: WalletBackendParams -> Maybe TlsParams
+getNodeClientTlsParams WalletBackendParams{..} =
+    case walletTLSParams of
+        Nothing -> Nothing
+        Just p  -> Just $ TlsParams
+                        { tpCaPath = tpCaPath p
+                        , tpCertPath = walletNodeTlsClientCert
+                        , tpKeyPath = walletNodeTlsClientKey
+                        , tpClientAuth = tpClientAuth p
+                        }
 
 -- | A richer type to specify in which mode we are running this node.
 data RunMode = ProductionMode
@@ -180,10 +166,7 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
                                                 <*> forceFullMigrationParser
                                                 <*> nodeAddressParser
                                                 <*> tlsClientCertPathParser
-                                                <*> tlsServerCertPathParser
                                                 <*> tlsClientKeyParser
-                                                <*> tlsServerKeyParser
-                                                <*> tlsCaCertPathParser
   where
     enableMonitoringApiParser :: Parser Bool
     enableMonitoringApiParser =
@@ -223,40 +206,13 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
             <> "the Node API."
             )
 
-    tlsServerCertPathParser :: Parser FilePath
-    tlsServerCertPathParser = strOption
-        $ long "node-tls-server-cert"
-        <> metavar "FILEPATH"
-        <> help
-            ( "Path to TLS client public certificate used to authenticate to "
-            <> "the Node API."
-            )
 
     tlsClientKeyParser :: Parser FilePath
     tlsClientKeyParser = strOption
-        $ long "node-tls-key"
+        $ long "node-tls-client-key"
         <> metavar "FILEPATH"
         <> help
             ( "Path to TLS client private key used to authenticate to the "
-            <> "Node API."
-            )
-
-    tlsServerKeyParser :: Parser FilePath
-    tlsServerKeyParser = strOption
-        $ long "node-tls-server-key"
-        <> metavar "FILEPATH"
-        <> help
-            ( "Path to TLS server public key used to authenticate to the "
-            <> "Node API."
-            )
-
-
-    tlsCaCertPathParser :: Parser FilePath
-    tlsCaCertPathParser = strOption
-        $ long "node-tls-ca-cert"
-        <> metavar  "FILEPATH"
-        <> help
-            ( "Path to TLS CA public certificate used to authenticate to the "
             <> "Node API."
             )
 
