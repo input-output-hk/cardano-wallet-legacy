@@ -105,12 +105,15 @@ prepareFixtures nm initialBalance toPay = do
                           <*> pure (HasSpendingPassword $ InDb now)
                           <*> pure AssuranceLevelNormal
                           <*> (InDb <$> pick arbitrary)
-    newAccountId <- HdAccountId newRootId <$> deriveIndex (pick . choose) HdAccountIx HardDerivation
     utxo   <- pick (genUtxoWithAtLeast initialBalance)
+    newAccountId <- case addressVersion of
+        Kernel.AddressSchemeRnd -> HdAccountId newRootId <$> deriveIndex (pick . choose) HdAccountIx HardDerivation
+        Kernel.AddressSchemeSeq -> pure $ HdAccountId newRootId (HdAccountIx 0x80000000) -- 2^31
     -- Override all the addresses of the random Utxo with something meaningful,
     -- i.e. with 'Address'(es) generated in a principled way, and not random.
-    utxo' <- foldlM (\acc (txIn, (TxOutAux (TxOut _ coin))) -> do
-                        newIndex <- deriveIndex (pick . choose) HdAddressIx SoftDerivation
+    utxo' <- foldlM (\acc ((txIn, (TxOutAux (TxOut _ coin))), seqIndex) -> do
+                        -- TODO: why is hardened derivation in rnd address derivation step? Shouldn't it be soft derivation?
+                        rndIndex <- deriveIndex (pick . choose) HdAddressIx HardDerivation
 
                         let Just (addr, _) =
                                 case addressVersion of
@@ -120,16 +123,16 @@ prepareFixtures nm initialBalance toPay = do
                                                             passPhrase
                                                             esk
                                                             (newAccountId ^. hdAccountIdIx . to getHdAccountIx)
-                                                            (getHdAddressIx newIndex)
+                                                            (getHdAddressIx rndIndex)
                                     Kernel.AddressSchemeSeq -> first (makePubKeyAddressBoot nm) <$> deriveAddressKeyPair
                                                             passPhrase
                                                             esk
                                                             (newAccountId ^. hdAccountIdIx . to getHdAccountIx)
                                                             ExternalChain
-                                                            (getHdAddressIx newIndex)
+                                                            seqIndex
                         return $ M.insert txIn (TxOutAux (TxOut addr coin)) acc
-                    ) M.empty (M.toList utxo)
-    payees <- fmap (\(TxOut addr coin) -> (addr, coin)) <$> pick (genPayeeWithNM nm utxo' toPay) -- FIX this in the morning - generate keys for new addresses
+                    ) M.empty (zip (M.toList utxo) [0..])
+    payees <- fmap (\(TxOut addr coin) -> (addr, coin)) <$> pick (genPayeeWithNM nm utxo' toPay)
 
     return $ \keystore aw -> do
         liftIO $ Keystore.insert newRootId esk keystore
