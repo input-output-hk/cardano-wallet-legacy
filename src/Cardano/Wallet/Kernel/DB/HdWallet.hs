@@ -54,6 +54,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
     -- *** Account
   , hdAccountId
   , hdAccountBase
+  , hdAccountBaseId
   , hdAccountName
   , hdAccountState
   , hdAccountStateCurrent
@@ -297,7 +298,8 @@ data HdAccountBase =
           _hdAccountBaseEOId             :: !HdAccountId
         , _hdAccountBaseEOAccountKey     :: !Core.PublicKey
         , _hdAccountBaseEOAddressPoolGap :: !AddressPoolGap
-      }
+        }
+    deriving (Eq, Ord)
 
 instance Arbitrary HdAccountBase where
     arbitrary = oneof
@@ -464,19 +466,22 @@ deriveSafeCopy 1 'base ''HdAccountIncomplete
   Derived lenses
 -------------------------------------------------------------------------------}
 
-getHdAccountId :: HdAccountBase -> HdAccountId
-getHdAccountId (HdAccountBaseFO accountId)     = accountId
-getHdAccountId (HdAccountBaseEO accountId _ _) = accountId
+hdAccountBaseId :: Lens' HdAccountBase HdAccountId
+hdAccountBaseId = lens getHdAccountId setHdAccountId
+  where
+    getHdAccountId :: HdAccountBase -> HdAccountId
+    getHdAccountId (HdAccountBaseFO accountId)     = accountId
+    getHdAccountId (HdAccountBaseEO accountId _ _) = accountId
 
-setHdAccountId :: HdAccountBase -> HdAccountId -> HdAccountBase
-setHdAccountId (HdAccountBaseFO _) newAccountId = HdAccountBaseFO newAccountId
-setHdAccountId (HdAccountBaseEO _ pKey gap) newAccountId = HdAccountBaseEO newAccountId pKey gap
+    setHdAccountId :: HdAccountBase -> HdAccountId -> HdAccountBase
+    setHdAccountId (HdAccountBaseFO _) newAccountId = HdAccountBaseFO newAccountId
+    setHdAccountId (HdAccountBaseEO _ pKey gap) newAccountId = HdAccountBaseEO newAccountId pKey gap
 
 hdAccountId :: Lens' HdAccount HdAccountId
-hdAccountId = hdAccountBase . lens getHdAccountId setHdAccountId
+hdAccountId = hdAccountBase . hdAccountBaseId
 
 hdAccountRootId :: Lens' HdAccount HdRootId
-hdAccountRootId = hdAccountBase . lens getHdAccountId setHdAccountId . hdAccountIdParent
+hdAccountRootId = hdAccountBase . hdAccountBaseId . hdAccountIdParent
 
 hdAddressAccountId :: Lens' HdAddress HdAccountId
 hdAddressAccountId = hdAddressId . hdAddressIdParent

@@ -242,11 +242,11 @@ equivalentT useWW activeWallet esk = \mkWallet w ->
             walletName
             assuranceLevel
             esk
-            (\root defaultAccount defAddress ->
-                Left $ DB.CreateHdWallet root
-                                         defaultAccount
-                                         defAddress
-                                         (prefilterUtxo (root ^. HD.hdRootId) esk utxo)
+            (\root defaultAccount defAddress -> do
+                let accs0 = Map.unionWith (<>)
+                        (Map.singleton (HD.HdAccountBaseFO defaultAccount) (mempty, maybeToList defAddress))
+                        (Map.mapKeys HD.HdAccountBaseFO (prefilterUtxo (root ^. HD.hdRootId) esk utxo))
+                Left $ DB.CreateHdWallet root accs0
             )
         case res of
              Left e -> createWalletErr (STB e)

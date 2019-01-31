@@ -26,7 +26,6 @@ import           Pos.Crypto.Signing
 import qualified Cardano.Mnemonic as Mnemonic
 import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
-import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (dbHdWallets)
 import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
@@ -152,31 +151,26 @@ createEosWallet :: MonadIO m
                 => Kernel.PassiveWallet
                 -> V1.NewEosWallet
                 -> m (Either CreateWalletError V1.EosWallet)
-createEosWallet wallet newEosWalletRequest = runExceptT $ do
-    let accountsPublicKeysWithIxs =
-            map (\(V1.AccountPublicKeyWithIx pk ix) -> (pk, V1.getAccIndex ix)) $
-                V1.neweoswalAccounts newEosWalletRequest
-        addressPoolGap = maybe (def :: AddressPoolGap) id $
-            V1.neweoswalAddressPoolGap newEosWalletRequest
-        name = V1.neweoswalName newEosWalletRequest
-        assuranceLevel = V1.neweoswalAssuranceLevel newEosWalletRequest
+createEosWallet wallet req = runExceptT $ do
+    let gap  = fromMaybe def (V1.neweoswalAddressPoolGap req)
+    let accs = mkAccount <$> V1.neweoswalAccounts req
+    let name = HD.WalletName $ V1.neweoswalName req
+    let alvl = fromAssuranceLevel $ V1.neweoswalAssuranceLevel req
+
     hdRoot <- withExceptT CreateWalletError $ ExceptT $ liftIO $
-        Kernel.createEosHdWallet
-            wallet
-            accountsPublicKeysWithIxs
-            addressPoolGap
-            (fromAssuranceLevel assuranceLevel)
-            (HD.WalletName name)
-    let createdAt = hdRoot ^. HD.hdRootCreatedAt . fromDb
-        walletId  = toRootId $ hdRoot ^. HD.hdRootId
-    return $ V1.EosWallet {
-          eoswalId             = walletId
-        , eoswalName           = name
-        , eoswalAddressPoolGap = addressPoolGap
+        Kernel.createEosHdWallet wallet accs gap alvl name
+
+    return $ V1.EosWallet
+        { eoswalId             = toRootId $ hdRoot ^. HD.hdRootId
+        , eoswalName           = V1.neweoswalName req
+        , eoswalAddressPoolGap = gap
         , eoswalBalance        = V1.WalletCoin (mkCoin 0)
-        , eoswalAssuranceLevel = assuranceLevel
-        , eoswalCreatedAt      = V1.WalletTimestamp createdAt
+        , eoswalAssuranceLevel = V1.neweoswalAssuranceLevel req
+        , eoswalCreatedAt      = V1.WalletTimestamp $ hdRoot ^. HD.hdRootCreatedAt . fromDb
         }
+  where
+    mkAccount (V1.AccountPublicKeyWithIx pk ix) =
+        (pk, HD.HdAccountIx (V1.getAccIndex ix))
 
 -- | Updates the 'SpendingPassword' for this wallet.
 updateWallet :: MonadIO m
