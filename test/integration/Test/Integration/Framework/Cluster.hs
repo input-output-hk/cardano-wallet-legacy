@@ -63,12 +63,14 @@ defaultIntegrationEnv = Map.fromList
     , ("WALLET_DOC_ADDRESS", "127.0.0.1:8190")
     , ("WALLET_DB_PATH", "./state-integration/wallet-db/edge")
     , ("WALLET_REBUILD_DB", "True")
-    , ("WALLET_NODE_API_ADDRESS", "127.0.0.1:8089")
-    , ("NODE_API_ADDRESS", "127.0.0.1:8086")
+    , ("WALLET_NODE_API_ADDRESS", "127.0.0.1:8185")
+    , ("NODE_API_ADDRESS", "127.0.0.1:8080")
     , ("NODE_DOC_ADDRESS", "127.0.0.1:3186")
-    , ("NODE_TLS_CLIENT_CERT", "./state-integration/tls/relay/client.crt")
-    , ("NODE_TLS_KEY", "./state-integration/tls/relay/client.key")
-    , ("NODE_TLS_CA_CERT", "./state-integration/tls/relay/ca.crt")
+    , ("NODE_TLS_CLIENT_CERT", "./state-integration/tls/edge/client.crt")
+    , ("NODE_TLS_KEY", "./state-integration/tls/edge/client.key")
+    , ("NODE_TLS_CA_CERT", "./state-integration/tls/edge/ca.crt")
+    , ("NODE_TLS_SERVER_CERT", "./state-integration/tls/edge/server.crt")
+    , ("NODE_TLS_SERVER_KEY", "./state-integration/tls/edge/server.key")
     ]
 
 -- | Start an integration cluster. Quite identical to the original "start cluster".

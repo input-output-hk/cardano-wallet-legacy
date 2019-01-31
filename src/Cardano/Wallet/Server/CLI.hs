@@ -181,8 +181,8 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
                                                 <*> nodeAddressParser
                                                 <*> tlsClientCertPathParser
                                                 <*> tlsServerCertPathParser
-                                                <*> tlsPrivKeyParser
-                                                <*> tlsPublicKeyParser
+                                                <*> tlsClientKeyParser
+                                                <*> tlsServerKeyParser
                                                 <*> tlsCaCertPathParser
   where
     enableMonitoringApiParser :: Parser Bool
@@ -232,8 +232,8 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
             <> "the Node API."
             )
 
-    tlsPrivKeyParser :: Parser FilePath
-    tlsPrivKeyParser = strOption
+    tlsClientKeyParser :: Parser FilePath
+    tlsClientKeyParser = strOption
         $ long "node-tls-key"
         <> metavar "FILEPATH"
         <> help
@@ -241,8 +241,8 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
             <> "Node API."
             )
 
-    tlsPublicKeyParser :: Parser FilePath
-    tlsPublicKeyParser = strOption
+    tlsServerKeyParser :: Parser FilePath
+    tlsServerKeyParser = strOption
         $ long "node-tls-server-key"
         <> metavar "FILEPATH"
         <> help

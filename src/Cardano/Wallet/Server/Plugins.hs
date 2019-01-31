@@ -229,7 +229,7 @@ nodeAPIServer
     nodeResources
     diffusion
   = withCompileInfo $ do
-    logInfo $ "Launching the node api server"
+    logInfo $ "Launching the node api server with tls params: " <> (show tls)
 
     let apiArgs = walletToNodeArgs walletParams
 
