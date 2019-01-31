@@ -37,7 +37,6 @@ spec = do
             , expectTxStatusEventually [InNewestBlocks]
             ]
 
-
     scenario "not enough fragmentation of utxo forbids multi-output transaction" $ do
         fixtureSource <- setup $ defaultSetup
             & initialCoins .~ [100000]
@@ -64,6 +63,44 @@ spec = do
             [ expectWalletError (UtxoNotEnoughFragmented (Client.ErrUtxoNotEnoughFragmented 1 Client.msgUtxoNotEnoughFragmented))
             ]
 
+    scenario "cannot send subsequenct transaction when the first one is pending" $ do
+        fixtureSource <- setup $ defaultSetup
+            & initialCoins .~ [10000000]
+            & rawPassword .~ "raw password"
+
+        fixtureDest <- setup $ defaultSetup
+
+        -- Running two transactions one after another. Not waiting for the first transaction to be "completed".
+        -- The second transaction returns UtxoNotEnoughFragmented because the first one is still "pending"
+        resp1 <- request $ Client.postTransaction $- Payment
+            (defaultSource fixtureSource)
+            (defaultDistribution 1 fixtureDest)
+            defaultGroupingPolicy
+            (Just $ fixtureDest ^. spendingPassword)
+        verify resp1
+            [ expectSuccess
+            ]
+
+        resp2 <- request $ Client.postTransaction $- Payment
+            (defaultSource fixtureSource)
+            (defaultDistribution 1 fixtureDest)
+            defaultGroupingPolicy
+            (Just $ fixtureDest ^. spendingPassword)
+        verify resp2
+            [ expectWalletError (UtxoNotEnoughFragmented (Client.ErrUtxoNotEnoughFragmented 1 Client.msgUtxoNotEnoughFragmented))
+            ]
+
+        -- only after the first transaction completes the next one can be successfully sent
+        expectTxStatusEventually [InNewestBlocks, Persisted] resp1
+
+        resp3 <- request $ Client.postTransaction $- Payment
+            (defaultSource fixtureSource)
+            (defaultDistribution 1 fixtureDest)
+            defaultGroupingPolicy
+            (Just $ fixtureDest ^. spendingPassword)
+        verify resp3
+            [ expectTxStatusEventually [InNewestBlocks, Persisted]
+            ]
 
     scenario "successful payment appears in the history" $ do
         fixture <- setup $ defaultSetup
