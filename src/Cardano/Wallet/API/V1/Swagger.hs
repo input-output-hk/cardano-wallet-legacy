@@ -684,35 +684,50 @@ curl -X POST https://localhost:8090/api/v1/transactions \
 ```
 
 
-Utxo Fragmentation Requirement When Sending Money to Multiple Recipients or Multiple Transactions
-------------------------------------
+About UTXO Fragmentation
+------------------------
 
-As seen in [Sending Money to Multiple Recipients](#section/Common-Use-Cases/Sending-Money-to-Multiple-Recipients), you can send _ADA_ to more than
-one destination. Due to intrinsic design decisions (ie., how coin selection works) there is a limitation here though: when the number of transaction outputs
-is greater than the number of utxo `UtxoNotEnoughFragmented` error is triggered and the following response is expected (here `missingUtxos = 1` denotes that
-there is 1 utxo lacking to cover all outputs of a given transaction) :
+As described in [Sending Money to Multiple
+Recipients](#section/Common-Use-Cases/Sending-Money-to-Multiple-Recipients),
+it is possible to send ada to more than one destination. Cardano only allows a given UTXO to cover at most one single transaction output. As a
+result, when the number of transaction outputs is greater than the number
+of available UTXOs, the API returns a `UTXONotEnoughFragmented` error which
+looks like the following:
+
 ```
 {
     "status": "error",
     "diagnostic": {
         "details": {
-            "help": "Utxo is not enough fragmented to handle the number of outputs of this transaction. Query /api/v1/wallets/{walletId}/statistics/utxos endpoint for more information",
-            "missingUtxos": 1
+            "help": "UTXO is not enough fragmented to handle the number of outputs of this transaction. Query /api/v1/wallets/{walletId}/statistics/UTXOs endpoint for more information",
+            "missingUTXOs": 1
         }
     },
-    "message": "UtxoNotEnoughFragmented"
+    "message": "UTXONotEnoughFragmented"
 }
 ```
-To make sure the source account has enough Utxo fragmentation (ie., number of utxos) please use Utxo statistics endpoint [Getting Utxo Statistics](#section/Common-Use-Cases/Getting-Utxo-Statistics).
-The number of wallet utxos should be not less than the transaction outputs (and the sum of all utxos should surpass the sum of correspnding amounts of transaction outputs plus fee incurred).
 
-There's no real "ideal" level of fragmentation. The "maximum" is relative to the transaction and can be roughly computed.
-The coin selection works by trying to maintain a one-to-one ratio between the outputs and change _of a same wallet_. So, for each output, there's a corresponding change output. Meaning that, after a multi-output transactions, the number of available Utxo tends to stay constant. The exception is if more than one inputs have to be selected to cover a single output (regardless of whether the fees is included or not), or because, the change output overflows - in that case there can be a situation that two change outputs are used for a single output.
-Hence, the more Utxo one has available, the more transactions one can do at a same time. In essence, by having a more fragmented Utxo, one gains concurrency.
-This is why the proper Utxo fragmentation allows also for making multiple transactions at the same time. For more information, refer [Coin Selection Blog Entry](https://iohk.io/blog/self-organisation-in-coin-selection/)
+To make sure the source account has a sufficient level of UTXO fragmentation
+(i.e. number of UTXOs), please monitor the state of the UTXOs as described in [Getting
+UTXO Statistics](#section/Common-Use-Cases/Getting-UTXO-Statistics). The
+number of wallet UTXOs should be no less than the transaction outputs, and
+the sum of all UTXOs should be enough to cover the total
+transaction amount, including fees.
 
-There's a maximum number of inputs a transaction can have, because transaction have a maximum size (checked by the node). This depends on the initial configuration and, can be voted as part of an update proposal during the blockchain lifecycle. In the case a maximum transaction size is exceeded, `TooBigTransaction` error is triggered.
 
+Contrary to a classic accounting model, there's no such thing as spending
+_part of a UTXO_, and one has to wait for a transaction to be included in a
+block before spending the remaining change. This is very similar to using bank
+notes: one can't spend a $$20 bill at two different shops at the same time, even if it is enough to cover both purchases — one has to
+wait for change from the first transaction before making the second one.
+There's no "ideal" level of fragmentation; it depends on one's needs. However,
+the more UTXOs that are available, the higher the concurrency capacity
+of one's wallet, allowing multiple transactions to be made at the same time.
+
+Similarly, there's no practical maximum number of UTXOs, but there is nevertheless a maximum
+transaction size. By having many small UTXOs, one is taking the risk of hitting that
+restriction, should too many inputs be selected to fill a transaction. The only way to
+work around this is to make multiple smaller transactions.
 
 
 Estimating Transaction Fees
