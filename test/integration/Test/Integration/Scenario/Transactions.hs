@@ -4,64 +4,55 @@ module Test.Integration.Scenario.Transactions
 
 import           Universum
 
+import qualified Data.List.NonEmpty as NonEmpty
+
 import qualified Cardano.Wallet.Client.Http as Client
 import           Test.Integration.Framework.DSL
+import           Test.Integration.Framework.Scenario (Scenario)
 
 spec :: Scenarios Context
 spec = do
 
-    scenario "proper fragmentation of utxo allows for multi-output transaction" $ do
-        fixtureSource <- setup $ defaultSetup
-            & initialCoins .~ [500000, 500000]
+    -- estimated fee amount for this transaction is 187946
+    multioutputTransactionScenario
+        "proper fragmentation of utxo - both utxos can seperately cover fee and outputs"
+        [200000, 200000]
+        [10,11]
+        [ expectTxStatusEventually [InNewestBlocks] ]
 
-        fixtureDest1 <- setup $ defaultSetup & walletName .~ "destinationWallet1"
+    -- estimated fee amount for this transaction is 187946
+    multioutputTransactionScenario
+        "proper fragmentation of utxo - 2 utxos available, each cannot seperately cover fee and outputs, but jointly can"
+        [100000, 100000]
+        [10,11]
+        [ expectTxStatusEventually [InNewestBlocks] ]
 
-        accountDest1 <- successfulRequest $ Client.getAccount
-            $- (fixtureDest1 ^. wallet . walletId)
-            $- defaultAccountId
+    -- estimated fee amount for this transaction is 196076
+    multioutputTransactionScenario
+        "proper fragmentation of utxo - 3 utxos available, each cannot seperately cover fee and outputs, but jointly can"
+        [70000, 70000, 70000]
+        [10,11]
+        [ expectTxStatusEventually [InNewestBlocks] ]
 
-        fixtureDest2 <- setup $ defaultSetup & walletName .~ "destinationWallet2"
+    -- estimated fee amount for this transaction is 187946
+    multioutputTransactionScenario
+        "proper fragmentation of utxo - 2 utxos available, one can cover fee, cannot cover any output seperately, but jointly can"
+        [187950, 50]
+        [10,11]
+        [ expectTxStatusEventually [InNewestBlocks] ]
 
-        accountDest2 <- successfulRequest $ Client.getAccount
-            $- (fixtureDest2 ^. wallet . walletId)
-            $- defaultAccountId
+    multioutputTransactionScenario
+        "not enough fragmentation of utxo although available utxo can cover both outputs and fee"
+        [400000]
+        [10,11]
+        [ expectWalletError (UtxoNotEnoughFragmented (Client.ErrUtxoNotEnoughFragmented 1 Client.msgUtxoNotEnoughFragmented)) ]
 
-        response <- request $ Client.postTransaction $- Payment
-            (defaultSource fixtureSource)
-            (customDistribution $ (accountDest1, 10) :| [(accountDest2, 11)] )
-            defaultGroupingPolicy
-            noSpendingPassword
+    multioutputTransactionScenario
+        "not enough fragmentation of utxo and available utxo cannot cover the sum of outputs and fee"
+        [100000]
+        [10,11]
+        [ expectWalletError (UtxoNotEnoughFragmented (Client.ErrUtxoNotEnoughFragmented 1 Client.msgUtxoNotEnoughFragmented)) ]
 
-        verify response
-            [ expectTxInHistoryOf (fixtureSource ^. wallet)
-            , expectTxStatusEventually [InNewestBlocks]
-            ]
-
-    scenario "not enough fragmentation of utxo forbids multi-output transaction" $ do
-        fixtureSource <- setup $ defaultSetup
-            & initialCoins .~ [100000]
-
-        fixtureDest1 <- setup $ defaultSetup & walletName .~ "destinationWallet1"
-        fixtureDest2 <- setup $ defaultSetup & walletName .~ "destinationWallet2"
-
-        accountDest1 <- successfulRequest $ Client.getAccount
-            $- (fixtureDest1 ^. wallet . walletId)
-            $- defaultAccountId
-
-        accountDest2 <- successfulRequest $ Client.getAccount
-            $- (fixtureDest2 ^. wallet . walletId)
-            $- defaultAccountId
-
-        response <- request $ Client.postTransaction $- Payment
-            (defaultSource fixtureSource)
-            (customDistribution $ (accountDest1, 10) :| [(accountDest2, 11)] )
-            defaultGroupingPolicy
-            noSpendingPassword
-
-
-        verify response
-            [ expectWalletError (UtxoNotEnoughFragmented (Client.ErrUtxoNotEnoughFragmented 1 Client.msgUtxoNotEnoughFragmented))
-            ]
 
     scenario "cannot send subsequent transaction when the first one is pending" $ do
         fixtureSource <- setup $ defaultSetup
@@ -349,3 +340,39 @@ spec = do
             verify response
                 [ expectTxStatusEventually [InNewestBlocks, Persisted]
                 ]
+
+    multioutputTransactionScenario
+        :: String
+        -> [Word64]
+        -> [Word64]
+        -> [Either Client.ClientError Client.Transaction -> Scenario Context IO ()]
+        -> Scenarios Context
+    multioutputTransactionScenario title startCoins outputDistribution expectations =
+        scenario ("multi-output transaction: " <> title) $ do
+            fixtureSource <- setup $ defaultSetup
+                & initialCoins .~ startCoins
+
+            fixtureDest1 <- setup $ defaultSetup & walletName .~ "destinationWallet1"
+
+            accountDest1 <- successfulRequest $ Client.getAccount
+                $- (fixtureDest1 ^. wallet . walletId)
+                $- defaultAccountId
+
+            fixtureDest2 <- setup $ defaultSetup & walletName .~ "destinationWallet2"
+
+            accountDest2 <- successfulRequest $ Client.getAccount
+                $- (fixtureDest2 ^. wallet . walletId)
+                $- defaultAccountId
+
+            response <- request $ Client.postTransaction $- Payment
+                (defaultSource fixtureSource)
+                (customDistribution $
+                    NonEmpty.zipWith
+                    (,)
+                    (accountDest1 :| [accountDest2])
+                    (NonEmpty.fromList outputDistribution)
+                )
+                defaultGroupingPolicy
+                noSpendingPassword
+
+            verify response expectations
