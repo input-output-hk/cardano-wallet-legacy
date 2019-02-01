@@ -19,6 +19,7 @@ module Cardano.Wallet.Kernel.Internal (
   , walletSubmission
   , walletRestorationTask
   , walletFInjects
+  , walletProcessedBlocks
     -- * Active wallet
   , ActiveWallet(..)
     -- * Restoration data
@@ -51,6 +52,7 @@ import           Control.Lens.TH
 import           Data.Acid (AcidState)
 import qualified Data.Map.Strict as Map
 
+import           Pos.Chain.Block (HeaderHash)
 import           Pos.Core (BlockCount, FlatSlotId)
 import           Pos.Crypto (ProtocolMagic)
 import           Pos.Infra.InjectFail (FInjects)
@@ -130,6 +132,9 @@ data PassiveWallet = PassiveWallet {
 
       -- | Failure injection handle:  a stateful set of active fault injections.
     , _walletFInjects        :: FInjects IO
+
+      -- | Block headers of all blocks that the wallet processed
+    , _walletProcessedBlocks :: [HeaderHash]
     }
 
 {-------------------------------------------------------------------------------

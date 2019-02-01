@@ -448,6 +448,8 @@ diffusion :: Kernel.WalletDiffusion
 diffusion =  Kernel.WalletDiffusion {
       walletSendTx = \_tx -> return False
     , walletGetSubscriptionStatus = return mempty
+    , walletRequestTip            = return mempty
+    , walletGetBlocks             = \_nodeId _hashId _checkpointHashIds -> return $ OldestFirst []
   }
 
 getSomeTimestamp :: Pos.Core.Timestamp

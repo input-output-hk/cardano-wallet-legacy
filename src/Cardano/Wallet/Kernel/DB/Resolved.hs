@@ -61,7 +61,7 @@ data ResolvedTx = ResolvedTx {
 
      -- | Transaction Meta
     , _rtxMeta    :: InDb (TxId, Timestamp)
-    }
+    } deriving Show
 
 -- | (Unsigned block) containing resolved transactions
 --
@@ -77,7 +77,7 @@ data ResolvedBlock = ResolvedBlock {
 
       -- | Creation time of this block
     , _rbMeta    :: !Timestamp
-    }
+    } deriving Show
 
 makeLenses ''ResolvedTx
 makeLenses ''ResolvedBlock

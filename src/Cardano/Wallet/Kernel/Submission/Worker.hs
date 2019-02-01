@@ -11,14 +11,15 @@ import qualified Formatting as F
 import           Pos.Util.Wlog (Severity (..))
 
 
-tickSubmissionLayer :: forall m. (MonadCatch m, MonadIO m)
-                    => (Severity -> Text -> m ())
-                    -- ^ A logging function
-                    -> IO ()
-                    -- ^ A function to call at each 'tick' of the worker.
-                    -- This callback will be responsible for doing any pre
-                    -- and post processing of the state.
-                    -> m ()
+tickSubmissionLayer
+    :: forall m. (MonadCatch m, MonadIO m)
+    => (Severity -> Text -> m ())
+       -- ^ A logging function
+    -> IO ()
+       -- ^ A function to call at each 'tick' of the worker.
+       -- This callback will be responsible for doing any pre
+       -- and post processing of the state.
+    -> m ()
 tickSubmissionLayer logFunction tick =
     go `catch` (\(e :: SomeException) ->
                    let msg = "Terminating tickSubmissionLayer due to " % F.shown

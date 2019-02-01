@@ -30,8 +30,9 @@ import qualified Cardano.Wallet.Kernel.Mode as Kernel.Mode
 import           Cardano.Wallet.Kernel.NodeStateAdaptor (newNodeStateAdaptor)
 import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
 import           Cardano.Wallet.Server.CLI (WalletBackendParams (..),
-                     getFullMigrationFlag, getWalletDbOptions, walletDbPath,
-                     walletNodeAddress, walletRebuildDb)
+                     getApplyBlockPullMechanismFlag, getFullMigrationFlag,
+                     getWalletDbOptions, walletDbPath, walletNodeAddress,
+                     walletRebuildDb)
 import           Cardano.Wallet.Server.Middlewares
                      (faultInjectionHandleIgnoreAPI, throttleMiddleware,
                      unsupportedMimeTypeMiddleware, withDefaultHeader)
@@ -82,8 +83,9 @@ actionWithWallet
             , Kernel.dbPathMetadata  = dbPath <> "-sqlite.sqlite3"
             , Kernel.dbRebuild       = rebuildDB
             })
+        let usePullMechanism = getApplyBlockPullMechanismFlag params
         let pm = configProtocolMagic genesisConfig
-        WalletLayer.Kernel.bracketPassiveWallet pm dbMode logMessage' keystore nodeState (npFInjects nodeParams) $ \walletLayer passiveWallet -> do
+        WalletLayer.Kernel.bracketPassiveWallet pm dbMode usePullMechanism logMessage' keystore nodeState (npFInjects nodeParams) $ \walletLayer passiveWallet -> do
             migrateLegacyDataLayer passiveWallet dbPath (getFullMigrationFlag params)
 
             let plugs = plugins (walletLayer, passiveWallet) nodeClient dbMode
@@ -131,4 +133,3 @@ actionWithWallet
       where
         loggerName :: LoggerName
         loggerName = lpDefaultName . bpLoggingParams . npBaseParams $ nodeParams
-
