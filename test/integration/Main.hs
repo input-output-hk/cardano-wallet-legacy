@@ -30,7 +30,7 @@ main = do
         , ("relay", NodeRelay)
         , ("edge", NodeEdge)
         ]
-    let wAddr   = toBaseUrl $ env ! "WALLET_ADDRESS"
+    let wAddr   = toBaseUrl $ env ! "WALLET_API_ADDRESS"
     let dAddr   = toBaseUrl $ env ! "WALLET_DOC_ADDRESS"
     let wClient = mkHttpClient wAddr manager
     let dClient = mkHttpDocClient dAddr manager
