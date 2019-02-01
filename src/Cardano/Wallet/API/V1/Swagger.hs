@@ -335,7 +335,7 @@ $errors
 
     -- 'UnsupportedMimeTypeError'
     , mkRow fmtErr $ UnsupportedMimeTypePresent "Expected Content-Type's main MIME-type to be 'application/json'."
-
+    , mkRow fmtErr $ UtxoNotEnoughFragmented (ErrUtxoNotEnoughFragmented 1 msgUtxoNotEnoughFragmented)
     -- TODO 'MnemonicError' ?
     ]
   mkRow fmt err = T.intercalate "|" (fmt err)
@@ -684,6 +684,52 @@ curl -X POST https://localhost:8090/api/v1/transactions \
 ```
 
 
+About UTXO Fragmentation
+------------------------
+
+As described in [Sending Money to Multiple
+Recipients](#section/Common-Use-Cases/Sending-Money-to-Multiple-Recipients),
+it is possible to send ada to more than one destination. Cardano only allows a given UTXO to cover at most one single transaction output. As a
+result, when the number of transaction outputs is greater than the number
+of available UTXOs, the API returns a `UTXONotEnoughFragmented` error which
+looks like the following:
+
+```
+{
+    "status": "error",
+    "diagnostic": {
+        "details": {
+            "help": "UTXO is not enough fragmented to handle the number of outputs of this transaction. Query /api/v1/wallets/{walletId}/statistics/UTXOs endpoint for more information",
+            "missingUTXOs": 1
+        }
+    },
+    "message": "UTXONotEnoughFragmented"
+}
+```
+
+To make sure the source account has a sufficient level of UTXO fragmentation
+(i.e. number of UTXOs), please monitor the state of the UTXOs as described in [Getting
+UTXO Statistics](#section/Common-Use-Cases/Getting-UTXO-Statistics). The
+number of wallet UTXOs should be no less than the transaction outputs, and
+the sum of all UTXOs should be enough to cover the total
+transaction amount, including fees.
+
+
+Contrary to a classic accounting model, there's no such thing as spending
+_part of a UTXO_, and one has to wait for a transaction to be included in a
+block before spending the remaining change. This is very similar to using bank
+notes: one can't spend a $$20 bill at two different shops at the same time, even if it is enough to cover both purchases — one has to
+wait for change from the first transaction before making the second one.
+There's no "ideal" level of fragmentation; it depends on one's needs. However,
+the more UTXOs that are available, the higher the concurrency capacity
+of one's wallet, allowing multiple transactions to be made at the same time.
+
+Similarly, there's no practical maximum number of UTXOs, but there is nevertheless a maximum
+transaction size. By having many small UTXOs, one is taking the risk of hitting that
+restriction, should too many inputs be selected to fill a transaction. The only way to
+work around this is to make multiple smaller transactions.
+
+
 Estimating Transaction Fees
 ---------------------------
 
@@ -917,7 +963,7 @@ curl -X GET 'https://127.0.0.1:8090/api/v1/transactions?wallet_id=Ae2tdPwU...3AV
 ```
 
 
-Getting Utxo statistics
+Getting Utxo Statistics
 ---------------------------------
 
 You can get Utxo statistics of a given wallet using
