@@ -26,8 +26,6 @@ import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Text as T
 import           Data.Typeable (typeOf)
 import           Formatting.Buildable (build)
-import           Network.HTTP.Client (managerResponseTimeout,
-                     responseTimeoutMicro)
 import           Network.HTTP.Types.Status (badRequest400)
 import           Network.Wai (Application, Middleware, Response, responseLBS)
 import           Network.Wai.Handler.Warp (setOnException,
@@ -232,12 +230,11 @@ setupNodeClient (serverHost, serverPort) params = liftIO $ do
     clientCredentials <- NodeManager.credentialLoadX509 (tpCertPath params) (tpKeyPath params) >>= \case
         Right   a -> return a
         Left  err -> fail $ "Error decoding X509 certificates: " <> err
-    let settings = NodeManager.mkHttpsManagerSettings serverId caChain clientCredentials
-    manager <- NodeManager.newManager $ settings
-        { managerResponseTimeout =
-            responseTimeoutSeconds 60 -- force-ntp-check may take 30 s + communication delay
-        }
-    return $ NodeClient.mkHttpClient baseUrl manager
-  where
-    baseUrl = Servant.BaseUrl Https serverHost serverPort mempty
-    responseTimeoutSeconds a = responseTimeoutMicro (a * 1000 * 1000)
+    manager <- NodeManager.newManager $ NodeManager.mkHttpsManagerSettings serverId caChain clientCredentials
+
+    let
+        baseUrl = Servant.BaseUrl Https serverHost serverPort mempty
+        walletClient :: NodeHttpClient
+        walletClient = NodeClient.mkHttpClient baseUrl manager
+
+    return walletClient
