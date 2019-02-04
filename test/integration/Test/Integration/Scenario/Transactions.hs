@@ -17,40 +17,40 @@ spec = do
     multioutputTransactionScenario
         "proper fragmentation of utxo - both utxos can seperately cover fee and outputs"
         [200000, 200000]
-        [10,11]
+        (10, 11)
         [ expectTxStatusEventually [InNewestBlocks] ]
 
     -- estimated fee amount for this transaction is 187946
     multioutputTransactionScenario
         "proper fragmentation of utxo - 2 utxos available, each cannot seperately cover fee and outputs, but jointly can"
         [100000, 100000]
-        [10,11]
+        (10, 11)
         [ expectTxStatusEventually [InNewestBlocks] ]
 
     -- estimated fee amount for this transaction is 196076
     multioutputTransactionScenario
         "proper fragmentation of utxo - 3 utxos available, each cannot seperately cover fee and outputs, but jointly can"
         [70000, 70000, 70000]
-        [10,11]
+        (10, 11)
         [ expectTxStatusEventually [InNewestBlocks] ]
 
     -- estimated fee amount for this transaction is 187946
     multioutputTransactionScenario
         "proper fragmentation of utxo - 2 utxos available, one can cover fee, cannot cover any output seperately, but jointly can"
         [187950, 50]
-        [10,11]
+        (10, 11)
         [ expectTxStatusEventually [InNewestBlocks] ]
 
     multioutputTransactionScenario
         "not enough fragmentation of utxo although available utxo can cover both outputs and fee"
         [400000]
-        [10,11]
+        (10, 11)
         [ expectWalletError (UtxoNotEnoughFragmented (Client.ErrUtxoNotEnoughFragmented 1 Client.msgUtxoNotEnoughFragmented)) ]
 
     multioutputTransactionScenario
         "not enough fragmentation of utxo and available utxo cannot cover the sum of outputs and fee"
         [100000]
-        [10,11]
+        (10, 11)
         [ expectWalletError (UtxoNotEnoughFragmented (Client.ErrUtxoNotEnoughFragmented 1 Client.msgUtxoNotEnoughFragmented)) ]
 
 
@@ -344,10 +344,10 @@ spec = do
     multioutputTransactionScenario
         :: String
         -> [Word64]
-        -> [Word64]
+        -> (Word64, Word64)
         -> [Either Client.ClientError Client.Transaction -> Scenario Context IO ()]
         -> Scenarios Context
-    multioutputTransactionScenario title startCoins outputDistribution expectations =
+    multioutputTransactionScenario title startCoins (output1,output2) expectations =
         scenario ("multi-output transaction: " <> title) $ do
             fixtureSource <- setup $ defaultSetup
                 & initialCoins .~ startCoins
@@ -370,7 +370,7 @@ spec = do
                     NonEmpty.zipWith
                     (,)
                     (accountDest1 :| [accountDest2])
-                    (NonEmpty.fromList outputDistribution)
+                    (output1 :| [output2])
                 )
                 defaultGroupingPolicy
                 noSpendingPassword
