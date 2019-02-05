@@ -158,6 +158,14 @@ data WalletClient m
         :: m (Either ClientError ())
     , importWallet
         :: WalletImport -> Resp m Wallet
+
+    -- Externally Owned Wallets Endpoints
+    , postEosWallet
+        :: NewEosWallet
+        -> Resp m EosWallet
+    , getEosWallet
+        :: WalletId
+        -> Resp m EosWallet
     } deriving Generic
 
 
@@ -294,6 +302,10 @@ natMapClient phi f wc = WalletClient
         f $ phi $ resetWalletState wc
     , importWallet =
         f . phi . importWallet wc
+    , postEosWallet =
+        f . phi . postEosWallet wc
+    , getEosWallet =
+        f . phi . getEosWallet wc
     }
 
 -- | Run the given natural transformation over the 'WalletClient'.
