@@ -533,9 +533,9 @@ hdAccountRestorationState a = case a ^. hdAccountState of
 -------------------------------------------------------------------------------}
 
 class IsOurs s where
-    -- For the given state, check whether an address is "ours"
+    -- | For the given state, check whether an address is "ours"
     isOurs :: Core.Address -> s -> (Maybe HdAddress, s)
-    -- Marks the state as empty and enables us to skip single or batch calls
+    -- | Marks the state as empty and enables us to skip single or batch calls
     -- to isOurs in the case of trivial state.
     isOursSkip :: s -> Bool
 

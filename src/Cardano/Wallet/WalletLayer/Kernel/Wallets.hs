@@ -124,7 +124,7 @@ createWallet wallet newWalletRequest = liftIO $ do
                       (Just (hdAddress ^. HD.hdAddressAddress . fromDb))
                       (HD.WalletName walletName)
                       hdAssuranceLevel
-                      esk
+                      (rootId,esk)
 
                 -- Return the wallet information, with an updated balance.
                 let root' = mkRoot walletName (toAssuranceLevel hdAssuranceLevel) root

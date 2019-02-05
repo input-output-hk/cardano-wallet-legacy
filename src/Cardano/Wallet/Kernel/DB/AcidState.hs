@@ -493,18 +493,8 @@ observableRollbackUseInTestsOnly = runUpdateDiscardSnapshot $
   Wallet creation
 -------------------------------------------------------------------------------}
 
--- | Create an HdWallet with HdRoot
---
--- NOTE: We allow an initial set of accounts with associated addresses and
--- balances /ONLY/ for testing purpose. Normally this should be empty; see
--- 'createHdWallet'/'createWalletHdRnd' in "Cardano.Wallet.Kernel.Wallets".
---
--- INVARIANT: Creating a new F.O. wallet always come with a fresh HdAccount and
--- an optional 'HdAddress' attached to it, so we have to pass these two extra
--- pieces of info to the update function. We do @not@ build these inside the
--- update function because derivation requires an 'EncryptedSecretKey' and
--- definitely we do not want it to show up in our acid-state logs.
---
+-- | Create an HdWallet with the given HdRoot and HdAccountBases,
+-- along with utxo and adresses for each account.
 createHdWallet :: HdRoot
                -> Map HdAccountBase (Utxo,[HdAddress])
                -> Update DB (Either HD.CreateHdRootError ())
@@ -522,51 +512,30 @@ createHdWallet newRoot utxo0 =
         , accountUpdate      = return () -- just need to create it, no more
         }
 
--- | Begin restoration by creating an HdWallet with the given HdRoot,
--- starting from the 'HdAccountOutsideK' state.
---
--- INVARIANT: Creating a new wallet always come with a fresh HdAccount and
--- an optional 'HdAddress' attached to it, so we have to pass these two extra
--- pieces of info to the update function. We do @not@ build these inside the
--- update function because derivation requires an 'EncryptedSecretKey' and
--- definitely we do not want it to show up in our acid-state logs.
---
+-- | Begin restoration by creating an HdWallet with the given HdRoot and
+-- HdAccountBases along with utxo and adresses for each account.
+-- (we start restoration for each account starting from the
+-- 'HdAccountOutsideK' state.)
 restoreHdWallet :: HdRoot
-                -> HdAccountId
-                -- ^ The default HdAccountId to go with this HdRoot. This
-                -- function will take responsibility of creating the associated
-                -- 'HdAccount'.
-                -> Maybe HdAddress
-                -- ^ Optional default HdAddress to go with this HdRoot
+                -> Map HdAccountBase (Utxo, Utxo, [HdAddress])
+                -- ^ Current and genesis UTxO per account
                 -> BlockContext
                 -- ^ The initial block context for restorations
-                -> Map HdAccountId (Utxo, Utxo, [HdAddress])
-                -- ^ Current and genesis UTxO per account
                 -> Update DB (Either HD.CreateHdRootError ())
-restoreHdWallet newRoot defaultHdAccountId defaultHdAddress ctx utxoByAccount =
+restoreHdWallet newRoot utxoByAccount ctx =
     runUpdateDiscardSnapshot $ do
       zoom dbHdWallets $ do
           HD.createHdRoot newRoot
-          updateAccounts_ $ map mkUpdate (Map.toList (insertDefault utxoByAccount))
+          updateAccounts_ $ map mkUpdate (Map.toList utxoByAccount)
   where
-    mkUpdate :: (HdAccountId, (Utxo, Utxo, [HdAddress]))
+    mkUpdate :: (HdAccountBase, (Utxo, Utxo, [HdAddress]))
              -> AccountUpdate HD.CreateHdRootError ()
     mkUpdate (accId, (curUtxo, genUtxo, addrs)) = AccountUpdate {
-          accountUpdateBase  = HdAccountBaseFO accId
+          accountUpdateBase  = accId
         , accountUpdateNew   = AccountUpdateNewIncomplete curUtxo genUtxo ctx
         , accountUpdateAddrs = addrs
         , accountUpdate      = return () -- Create it only
         }
-
-    insertDefault :: Map HdAccountId (Utxo, Utxo, [HdAddress])
-                  -> Map HdAccountId (Utxo, Utxo, [HdAddress])
-    insertDefault m =
-        let addrWithId = defaultHdAddress
-        in case Map.lookup defaultHdAccountId m of
-               Just (utxo, utxo', addrs) ->
-                   Map.insert defaultHdAccountId (utxo, utxo', maybe addrs (: addrs) addrWithId) m
-               Nothing ->
-                   Map.insert defaultHdAccountId (mempty, mempty, maybeToList addrWithId) m
 
 {-------------------------------------------------------------------------------
   Internal: support for updating accounts

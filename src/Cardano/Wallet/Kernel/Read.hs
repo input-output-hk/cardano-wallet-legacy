@@ -66,11 +66,11 @@ getHdRndWallets snapshot ks pm logger = do
     errMissing :: [HdRootId] -> Text
     errMissing = sformat ("Root key missing for " % listJson)
 
--- TODO @uroboros
--- Get HD Sequential wallet accounts along with the associated AddressPool
--- required for prefiltering each account.
+
+-- Get HD Sequential wallet accounts from Acidstate, along with the
+-- associated AddressPool required for prefiltering each account.
 getHdSeqWallets
     :: DB
     -> IO (Map HdAccountId (AddressPool Address))
 getHdSeqWallets _db
-    = return Map.empty
+    = return Map.empty -- TODO @uroboros

@@ -4,6 +4,7 @@
 
 module Cardano.Wallet.Kernel.Restore
     ( restoreWallet
+    , restoreEosWallet
     , restoreKnownWallet
     , continueRestoration
     , blundToResolvedBlock
@@ -26,13 +27,13 @@ import qualified Formatting.Buildable
 
 import qualified Prelude
 
-
 import           Cardano.Wallet.API.Types.UnitOfMeasure
 import           Cardano.Wallet.Kernel (walletLogMessage)
 import qualified Cardano.Wallet.Kernel as Kernel
+import           Cardano.Wallet.Kernel.AddressPool (AddressPool)
+import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (ApplyHistoricalBlocks (..),
-                     CreateHdWallet (..), ResetAllHdWalletAccounts (..),
-                     RestorationComplete (..), RestoreHdWallet (..),
+                     ResetAllHdWalletAccounts (..), RestorationComplete (..),
                      dbHdWallets)
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
@@ -64,7 +65,10 @@ import           Cardano.Wallet.Kernel.Types (RawResolvedBlock (..),
                      fromRawResolvedBlock, rawResolvedBlock,
                      rawResolvedBlockInputs, rawResolvedContext, rawTimestamp)
 import           Cardano.Wallet.Kernel.Util.Core (utxoBalance)
-import           Cardano.Wallet.Kernel.Wallets (createWalletHdRnd)
+import           Cardano.Wallet.Kernel.Wallets (createWalletHdRnd,
+                     createWalletEos, mkAddressPool, mkCreateEosWallet,
+                     mkCreateHdRndWallet, mkRestoreEosWallet,
+                     mkRestoreHdRndWallet)
 
 import           Pos.Chain.Block (Block, Blund, HeaderHash, Undo, mainBlockSlot,
                      undoTx)
@@ -75,22 +79,15 @@ import           Pos.Chain.Txp (TxIn (..), TxOut (..), TxOutAux (..), Utxo,
                      genesisUtxo)
 import           Pos.Core as Core (Address, BlockCount (..), Coin, SlotId,
                      flattenSlotId, getCurrentTimestamp, mkCoin,
-                     unsafeIntegerToCoin)
+                     makePubKeyAddressBoot, unsafeIntegerToCoin)
 import           Pos.Core.NetworkMagic (makeNetworkMagic)
-import           Pos.Crypto (EncryptedSecretKey)
+import           Pos.Crypto (EncryptedSecretKey, PublicKey)
 import           Pos.DB.Block (getFirstGenesisBlockHash, getUndo,
                      resolveForwardLink)
 import           Pos.DB.Class (getBlock)
 import           Pos.Util.Trace (Severity (Error))
 
--- | Restore a wallet
---
--- Scan the node's current UTXO set for any that belong to this wallet. Use them
--- to update the current checkpoint's UTXO set, and return the total 'Coin'
--- value of the UTXO belonging to this wallet. At the same time, kick off a
--- background thread that will asynchronously restore the wallet history.
---
--- Wallet initialization parameters match those of 'createWalletHdRnd'
+-- | Restore an HdRnd wallet
 --
 -- NOTE: We pass in an optional fresh 'Address' which will be used to initialise
 -- the companion 'HdAccount' this wallet will be created with. The reason why we
@@ -109,29 +106,90 @@ restoreWallet
     -- ^ An optional stock address to use for the companion 'HdAccount'.
     -> HD.WalletName
     -> HD.AssuranceLevel
-    -> EncryptedSecretKey
+    -> (HD.HdRootId, EncryptedSecretKey)
     -> IO (Either CreateHdRootError (HD.HdRoot, Coin))
-restoreWallet pw hasSpendingPassword defaultCardanoAddress name assurance esk
+restoreWallet pw hasSpendingPassword defaultCardanoAddress name assurance (rootId,esk)
+  = restoreHdWallet
+        pw
+        prefContext
+        (\utxos -> createWallet (mkCreateHdRndWallet utxos))
+        (\utxos tgt -> createWallet (mkRestoreHdRndWallet utxos tgt))
+  where
+    prefContext = M.singleton rootId esk
+    createWallet = createWalletHdRnd pw hasSpendingPassword
+                     defaultCardanoAddress name assurance esk
+
+
+-- | Restore an Eos wallet on a per-account basis.
+restoreEosWallet
+    :: Kernel.PassiveWallet
+    -> [(PublicKey, HD.HdAccountIx)]
+    -- ^ External wallets' accounts
+    -> AddressPoolGap
+    -- ^ Address pool gap for this wallet.
+    -> HD.AssuranceLevel
+    -- ^ The 'AssuranceLevel' for this wallet, namely after how many
+    -- blocks each transaction is considered 'adopted'. This translates
+    -- in the frontend with a different threshold for the confirmation
+    -- range (@low@, @medium@, @high@).
+    -> HD.WalletName
+    -- ^ The name for this wallet.
+    -> IO (Either CreateHdRootError (HD.HdRoot, Coin))
+restoreEosWallet pw accounts gap assurance name
+    = do
+        rootId <- HD.genHdRootId
+        restoreHdWallet
+            pw
+            (prefContext rootId)
+            (\utxos ->
+                createWallet rootId (mkCreateEosWallet accounts gap utxos))
+            (\utxos tgt ->
+                createWallet rootId (mkRestoreEosWallet accounts gap utxos tgt))
+  where
+    -- Given an address PublicKey, compute the Address
+    pkToAddr :: PublicKey -> Address
+    pkToAddr
+        = makePubKeyAddressBoot . makeNetworkMagic $ pw ^. walletProtocolMagic
+
+    -- Construct the prefiltering context for this wallet, we need the rootId
+    -- to get build the AccountId's for each account pub key 
+    prefContext
+        :: HD.HdRootId
+        -> Map HD.HdAccountId (AddressPool Address)
+    prefContext rootId
+        = M.fromList $ mkAddressPool rootId gap pkToAddr <$> accounts
+
+    createWallet = createWalletEos pw assurance name
+
+-- | Restore an abstract wallet that can be prefiltered with IsOurs.
+--
+-- Scan the node's current UTXO set for any that belong to this wallet. Use them
+-- to update the current checkpoint's UTXO set, and return the total 'Coin'
+-- value of the UTXO belonging to this wallet. At the same time, kick off a
+-- background thread that will asynchronously restore the wallet history.
+restoreHdWallet
+    :: HD.IsOurs s
+    => Kernel.PassiveWallet
+    -> s
+    -> (Map HD.HdAccountId (Utxo,[HD.HdAddress])
+        -> IO (Either CreateHdRootError HD.HdRoot))
+    -> (Map HD.HdAccountId (Utxo, Utxo, [HD.HdAddress])
+        -> BlockContext
+        -> IO (Either CreateHdRootError HD.HdRoot))
+    -> IO (Either CreateHdRootError (HD.HdRoot, Coin))
+restoreHdWallet pw prefContext createWallet_ restoreWallet_
   = do
     coreConfig <- getCoreConfig (pw ^. walletNode)
     walletInitInfo <- withNodeState (pw ^. walletNode)
-        $ getWalletInitInfo coreConfig creds
+        $ getWalletInitInfo coreConfig prefContext
     case walletInitInfo of
         WalletCreate utxos -> do
-            root <- createWalletHdRnd'
-                $ \root defaultHdAccount defaultHdAddress -> do
-                    let defUtxo = M.singleton
-                            (HD.HdAccountBaseFO defaultHdAccount)
-                            (mempty, maybeToList defaultHdAddress)
-                    let utxos' = M.mapKeys HD.HdAccountBaseFO utxos
-                    Left $ CreateHdWallet root (M.unionWith (<>) utxos' defUtxo)
+            root <- createWallet_ utxos
             return $ fmap (, mkCoin 0) root
         WalletRestore utxos tgt -> do
             -- Create the wallet for restoration, deleting the wallet first if it
             -- already exists.
-            mRoot <- createWalletHdRnd'
-                $ \root defaultHdAccount defaultHdAddress -> Right
-                $ RestoreHdWallet root defaultHdAccount defaultHdAddress tgt utxos
+            mRoot <- restoreWallet_ utxos tgt
             for mRoot $ \root -> do
                 -- Start the restoration task, from the genesis block up to
                 -- @tgt@.
@@ -147,20 +205,14 @@ restoreWallet pw hasSpendingPassword defaultCardanoAddress name assurance esk
                 return (root, coins)
 
   where
-    createWalletHdRnd' =
-        createWalletHdRnd
-            pw hasSpendingPassword defaultCardanoAddress name assurance esk
-    nm = makeNetworkMagic (pw ^. walletProtocolMagic)
-    creds = (HD.eskToHdRootId nm esk, esk)
-
     prefilter :: Blund -> IO (PrefilteredBlock, [TxMeta])
-    prefilter = mkPrefilter pw creds
+    prefilter = mkPrefilter pw prefContext
 
     restart :: HD.HdRoot -> IO ()
     restart root = do
         coreConfig <- getCoreConfig (pw ^. walletNode)
         walletInitInfo <- withNodeState (pw ^. walletNode)
-            $ getWalletInitInfo coreConfig creds
+            $ getWalletInitInfo coreConfig prefContext
         case walletInitInfo of
             WalletCreate _utxos ->
                 -- This can only happen if the node has no main blocks,
@@ -174,15 +226,16 @@ restoreWallet pw hasSpendingPassword defaultCardanoAddress name assurance esk
 -- | Synchronously restore the wallet balance, and begin to asynchronously
 -- reconstruct the wallet's history.
 mkPrefilter
-    :: Kernel.PassiveWallet
-    -> (HD.HdRootId, EncryptedSecretKey)
+    :: HD.IsOurs s
+    => Kernel.PassiveWallet
+    -> s
     -> Blund
     -> IO (PrefilteredBlock, [TxMeta])
-mkPrefilter wallet (rootId,esk) blund = do
+mkPrefilter wallet prefContext blund = do
     foreigns <- fmap Pending.txIns . foreignPendingByAccount <$> getWalletSnapshot wallet
     blundToResolvedBlock (wallet ^. Kernel.walletNode) blund >>= \case
         Nothing -> return (mempty, [])
-        Just rb -> flip evalStateT (M.singleton rootId esk) $ do
+        Just rb -> flip evalStateT prefContext $ do
             pb <- state $ prefilterBlock foreigns rb
             metas <- state (resolvedToTxMetas rb) >>= \case
                 Left e  -> throwM e
@@ -208,7 +261,8 @@ restoreKnownWallet pw rootId = do
         Nothing -> do
             mesk <- Keystore.lookup nm rootId (pw ^. walletKeystore)
             whenJust mesk $ \esk -> do
-                let prefilter = mkPrefilter pw (rootId, esk)
+                let prefilter = mkPrefilter pw prefContext
+                    prefContext = M.singleton rootId esk
                 coreConfig <- getCoreConfig (pw ^. walletNode)
                 db <- getWalletSnapshot pw
                 let mroot = db ^. dbHdWallets . HD.hdWalletsRoots . at rootId
@@ -218,7 +272,7 @@ restoreKnownWallet pw rootId = do
                     let restart = do
                             cmd <- withNodeState
                                 (pw ^. walletNode)
-                                (getWalletInitInfo coreConfig (rootId, esk))
+                                (getWalletInitInfo coreConfig prefContext)
                             case cmd of
                                 WalletCreate  _utxos    ->
                                     -- This can only happen if the node has no
@@ -250,12 +304,12 @@ continueRestoration pw root cur tgt = do
             -- restoration of an unknown wallet
             return ()
         Just esk -> do
-            let creds = (root ^. HD.hdRootId, esk)
-            let prefilter = mkPrefilter pw creds
-            let restart   = do
+            let prefContext = M.singleton (root ^. HD.hdRootId) esk
+                prefilter = mkPrefilter pw prefContext
+                restart = do
                     coreConfig <- getCoreConfig (pw ^. walletNode)
                     wii <- withNodeState (pw ^. walletNode)
-                                        (getWalletInitInfo coreConfig creds)
+                                        (getWalletInitInfo coreConfig prefContext)
                     case wii of
                         WalletCreate  _utxos    ->
                             -- This can only happen if the node has no main
@@ -348,12 +402,12 @@ data WalletInitInfo =
 -- information about the tip of the blockchain (provided the blockchain
 -- isn't empty).
 getWalletInitInfo
-    :: NodeConstraints
+    :: (NodeConstraints, HD.IsOurs s)
     => Genesis.Config
-    -> (HD.HdRootId, EncryptedSecretKey)
+    -> s
     -> Lock (WithNodeState IO)
     -> WithNodeState IO WalletInitInfo
-getWalletInitInfo coreConfig (rootId,esk) lock = do
+getWalletInitInfo coreConfig prefContext lock = do
     -- Find all of the current UTXO that this wallet owns.
     -- We lock the node state to be sure the tip header and the UTxO match
     (tipHeader, curUtxo) <-
@@ -362,7 +416,7 @@ getWalletInitInfo coreConfig (rootId,esk) lock = do
 
     -- Find genesis UTxO for this wallet
     let genUtxo :: Map HD.HdAccountId (Utxo, [HD.HdAddress])
-        genUtxo = M.unionsWith (<>) $ flip evalState (M.singleton rootId esk) $ do
+        genUtxo = M.unionsWith (<>) $ flip evalState prefContext $ do
             fmap (fmap byAccount . M.toList) $ state $
                 prefilterUtxo (genesisUtxo $ configGenesisData coreConfig)
               where
@@ -410,9 +464,11 @@ getWalletInitInfo coreConfig (rootId,esk) lock = do
         -> Map HD.HdAccountId (Map TxIn (TxOutAux, HD.HdAddressId))
     mergeUtxos = M.fromListWith M.union
 
-    isOurs :: (TxIn, TxOutAux) -> Maybe (HD.HdAccountId, Map TxIn (TxOutAux, HD.HdAddressId))
+    isOurs
+        :: (TxIn, TxOutAux)
+        -> Maybe (HD.HdAccountId, Map TxIn (TxOutAux, HD.HdAddressId))
     isOurs (inp, out@(TxOutAux (TxOut addr _))) = do
-        hdAddr <- evalState (state $ HD.isOurs addr) (M.singleton rootId esk)
+        hdAddr <- evalState (state $ HD.isOurs addr) prefContext
         let addrId = hdAddr ^. HD.hdAddressId
         return (addrId ^. HD.hdAddressIdParent, M.singleton inp (out, addrId))
 

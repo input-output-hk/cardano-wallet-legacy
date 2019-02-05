@@ -118,7 +118,7 @@ newTx ActiveWallet{..} accountId tx partialMeta upd = do
     where
         (txOut :: [TxOut]) = NE.toList $ (_txOutputs . taTx $ tx)
 
-        -- Prefiltering context for _all_ wallets
+        -- Prefiltering context for HdRnd and Eos wallet types
         fullPref
             :: DB
             -> IO ( Map HdRootId EncryptedSecretKey
@@ -131,19 +131,19 @@ newTx ActiveWallet{..} accountId tx partialMeta upd = do
             seqs <- getHdSeqWallets db
             return (rnds, seqs)
 
-        -- Provides the prefiltering context for all accounts in a wallet.
+        -- Provides the prefilter context for all accounts in this HdRnd wallet.
         --
-        -- If the accountId is part of an HdRnd wallet, then this selects
-        -- the HdRootId of that wallet.
+        -- If the given accountId is part of an HdRnd wallet, then this selects
+        -- all HdAccountId's that have the same root of the given accountId.
         thisPrefRnd
             :: Map HdRootId EncryptedSecretKey
             -> Map HdRootId EncryptedSecretKey
         thisPrefRnd
             = Map.filterWithKey (\r _ -> accountId ^. hdAccountIdParent == r)
 
-        -- Provides the prefiltering context for all accounts in a wallet.
+        -- Provides the prefilter context for all accounts in this Eos wallet.
         --
-        -- If the accountId is part of an HdSeq wallet, then this selects
+        -- If the given accountId is part of an Eos wallet, then this selects
         -- all HdAccountId's that have the same root of the given accountId.
         thisPrefSeq
             :: Map HdAccountId (AddressPool Address)
@@ -151,7 +151,7 @@ newTx ActiveWallet{..} accountId tx partialMeta upd = do
         thisPrefSeq
             = Map.filterWithKey (\a _ -> accountId ^. hdAccountIdParent == a ^. hdAccountIdParent)
 
-        -- filter the Tx outputs for "ours" in the prefilter context _s_
+        -- Prefilter "our" Tx outputs given the prefilter context _s_
         allOurs
             :: IsOurs s
             => s

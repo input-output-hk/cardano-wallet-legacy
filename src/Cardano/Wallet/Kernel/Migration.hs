@@ -101,7 +101,7 @@ restore :: Kernel.PassiveWallet
         -> IO ()
 restore pw forced esk = do
     let logMsg = pw ^. Kernel.walletLogMessage
-        nm     = makeNetworkMagic (pw ^. Kernel.walletProtocolMagic)
+        nm = makeNetworkMagic (pw ^. Kernel.walletProtocolMagic)
         rootId = eskToHdRootId nm esk
 
     let -- DEFAULTS for wallet restoration
@@ -117,7 +117,7 @@ restore pw forced esk = do
                          defaultAddress
                          defaultWalletName
                          defaultAssuranceLevel
-                         esk
+                         (rootId,esk)
 
     case res of
          Right (restoredRoot, balance) -> do

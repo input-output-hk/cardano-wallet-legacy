@@ -1,6 +1,12 @@
 module Cardano.Wallet.Kernel.Wallets (
       createHdWallet
+    , createWalletEos
     , createEosHdWallet
+    , mkCreateHdRndWallet
+    , mkRestoreHdRndWallet
+    , mkRestoreEosWallet
+    , mkCreateEosWallet
+    , mkAddressPool
     , updateHdWallet
     , updatePassword
     , deleteHdWallet
@@ -24,31 +30,33 @@ import qualified Formatting as F
 import qualified Formatting.Buildable
 
 import           Data.Acid.Advanced (update')
-import qualified Data.Map.Strict as Map
 
 import           Pos.Chain.Txp (Utxo)
 import           Pos.Core (Address, Timestamp)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
-import           Pos.Crypto (EncryptedSecretKey, PassPhrase, PublicKey,
-                     changeEncPassphrase, checkPassMatches, emptyPassphrase,
-                     firstHardened, safeDeterministicKeyGen)
+import           Pos.Crypto (EncryptedSecretKey, PassPhrase,
+                     PublicKey, changeEncPassphrase, checkPassMatches,
+                     emptyPassphrase, firstHardened, safeDeterministicKeyGen)
 
 import           Cardano.Mnemonic (Mnemonic)
 import qualified Cardano.Mnemonic as Mnemonic
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
+import           Cardano.Wallet.Kernel.AddressPool (AddressPool,
+                     emptyAddressPool)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (CreateHdWallet (..),
-                     DeleteHdRoot (..), RestoreHdWallet,
+                     DeleteHdRoot (..), RestoreHdWallet (..),
                      UpdateHdRootPassword (..), UpdateHdWallet (..))
-import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
+import           Cardano.Wallet.Kernel.DB.BlockContext
 import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel,
-                     HdAccountBase (..), HdAccountId (..), HdAccountIx (..),
-                     HdAddress, HdAddressId (..), HdAddressIx (..), HdRoot,
-                     WalletName, hdRootId)
+                     HdAccountId (..), HdAccountIx (..), HdAddress,
+                     HdAddressId (..), HdAddressIx (..), HdRoot, WalletName)
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
+import           Cardano.Wallet.Kernel.Ed25519Bip44 (ChangeChain (..),
+                     deriveAddressPublicKey)
 import           Cardano.Wallet.Kernel.Internal (PassiveWallet, walletKeystore,
                      walletProtocolMagic, wallets)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
@@ -202,10 +210,7 @@ createHdWallet pw mnemonic spendingPassword assuranceLevel walletName = do
                                      esk
                                      -- Brand new wallets have no Utxo
                                      -- See preconditon above.
-                                     (\hdRoot hdAccountId hdAddr ->
-                                         Left $ CreateHdWallet hdRoot
-                                            (Map.singleton (HdAccountBaseFO hdAccountId) (mempty, maybeToList hdAddr))
-                                     )
+                                     (mkCreateHdRndWallet mempty)
             case res of
                  -- NOTE(adinapoli): This is the @only@ error the DB can return,
                  -- so we are pattern matching directly on it. In the
@@ -242,36 +247,48 @@ createEosHdWallet :: PassiveWallet
                   -- ^ The name for this wallet.
                   -> IO (Either CreateWalletError HdRoot)
 createEosHdWallet pw accounts gap assuranceLevel walletName = do
-    root <- initHdRoot' <$> HD.genHdRootId <*> getCurrentTimestamp
-    let bases = Map.unionsWith (<>) (toAccountBase (root ^. hdRootId) <$> accounts)
-    res <- update' (pw ^. wallets) $ CreateHdWallet root bases
+    rootId <- HD.genHdRootId
+    res <- createWalletEos pw assuranceLevel walletName rootId
+            (mkCreateEosWallet accounts gap mempty)
     return $ case res of
         Left e@(HD.CreateHdRootExists _) ->
             Left $ CreateWalletFailed e
         Left e@(HD.CreateHdRootDefaultAddressDerivationFailed) ->
             Left $ CreateWalletFailed e
-        Right _ ->
+        Right root ->
             Right root
+
+-- | The given a wallet creator function returns a Create or Restore
+-- Acidstate action. Here we generate a new HdRoot using the given HdRootId
+-- and perform the Acidstate action.
+createWalletEos
+    :: PassiveWallet
+    -> AssuranceLevel
+    -- ^ The 'AssuranceLevel' for this wallet, namely after how many
+    -- blocks each transaction is considered 'adopted'. This translates
+    -- in the frontend with a different threshold for the confirmation
+    -- range (@low@, @medium@, @high@).
+    -> WalletName
+    -- ^ The name for this wallet.
+    -> HD.HdRootId
+    -> (  HdRoot
+       -> Either CreateHdWallet RestoreHdWallet
+       )
+    -> IO (Either HD.CreateHdRootError HdRoot)
+createWalletEos pw assuranceLevel walletName rootId createWallet = do
+    root <- initHdRoot' <$> getCurrentTimestamp
+    res <- case createWallet root of
+        Left  create  -> update' (pw ^. wallets) create
+        Right restore -> update' (pw ^. wallets) restore
+
+    return $ either Left (const (Right root)) res
   where
-    initHdRoot' rootId created = HD.initHdRoot
+    initHdRoot' created = HD.initHdRoot
         rootId
         walletName
         (HD.NoSpendingPassword (InDb created))
         assuranceLevel
         (InDb created)
-
-    toAccountBase
-        :: HdRootId
-        -> (PublicKey, HdAccountIx)
-        -> Map HdAccountBase (Utxo, [HdAddress])
-    toAccountBase rootId =
-        let
-            accId ix = HdAccountId rootId ix
-            mkBase (pk, ix) = HdAccountBaseEO (accId ix) pk gap
-        in
-            flip Map.singleton (mempty, mempty) . mkBase
-
-
 
 -- | Creates an HD wallet where new accounts and addresses are generated
 -- via random index derivation.
@@ -332,6 +349,144 @@ createWalletHdRnd pw hasSpendingPassword defaultCardanoAddress name assuranceLev
         hdSpendingPassword created =
             if hasSpendingPassword then HD.HasSpendingPassword created
                                    else HD.NoSpendingPassword created
+
+{-------------------------------------------------------------------------------
+  EOS auxiliary
+-------------------------------------------------------------------------------}
+
+-- | Construct an address pool for the account implied by the rootId, pub key
+-- and account index. From the account we derive the address pub keys.
+--
+-- NOTE: We use the passed in function to construct the address because
+-- this operation requires heavy context.
+mkAddressPool
+    :: HD.HdRootId
+    -> AddressPoolGap
+    -> (PublicKey -> Address)
+    -> (PublicKey, HD.HdAccountIx)
+    -> (HD.HdAccountId, AddressPool Address)
+mkAddressPool rootId gap pkToAddr (pk,ix)
+    = ( HD.HdAccountId rootId ix
+      , emptyAddressPool gap newAddress)
+    where
+        newAddress :: Word32 -> Address
+        newAddress addrIx
+            = maybe (error "mkAddresSPool: Maximum number of addresses reached.")
+                    pkToAddr
+                    (deriveAddressPublicKey pk ExternalChain addrIx)
+
+-- | Construct an Acidstate action for creating a new HdRnd wallet.
+-- For new HdRnd wallets we are given a default account and address, which is
+-- merged with the given account utxos for the wallet.
+mkCreateHdRndWallet
+    :: Map HD.HdAccountId (Utxo, [HD.HdAddress])
+    -- ^ Discovered utxos and addrs per-account
+    -> HD.HdRoot
+    -> HD.HdAccountId
+    -- ^ The default HdAccountId to go with this HdRoot. This
+    -- function will take responsibility of creating the associated
+    -- 'HdAccount'.
+    -> Maybe HD.HdAddress
+    -- ^ Optional default HdAddress to go with this HdRoot
+    -> Either CreateHdWallet RestoreHdWallet
+mkCreateHdRndWallet utxos root defAccId defAddr
+    = Left $ CreateHdWallet root (Map.unionWith (<>) utxos' defUtxo)
+    where
+        utxos' = Map.mapKeys HD.HdAccountBaseFO utxos
+        defUtxo = Map.singleton
+                    (HD.HdAccountBaseFO defAccId)
+                    (mempty, maybeToList defAddr)
+
+-- | Construct an Acidstate action for restoring a pre-existing HdRnd wallet.
+-- For new HdRnd wallets we are given a default account and address, which is
+-- merged with the given account utxos and addresses for the wallet.
+--
+-- NOTE: if an account is not present in the utxos (i.e. has no utxo) we default
+-- the account utxo's to `mempty`.
+mkRestoreHdRndWallet
+    :: Map HD.HdAccountId (Utxo, Utxo, [HD.HdAddress])
+    -- ^ Discovered utxos and addrs per-account
+    -> BlockContext
+    -> HD.HdRoot
+    -> HD.HdAccountId
+    -- ^ The default HdAccountId to go with this HdRoot. This
+    -- function will take responsibility of creating the associated
+    -- 'HdAccount'.
+    -> Maybe HD.HdAddress
+    -- ^ Optional default HdAddress to go with this HdRoot
+    -> Either CreateHdWallet RestoreHdWallet
+mkRestoreHdRndWallet utxos tgt root defAccId defAddr
+    = Right $ RestoreHdWallet root (utxos' <> defUtxo) tgt
+    where
+        utxos' = Map.mapKeys HD.HdAccountBaseFO utxos
+        defUtxo = Map.singleton (HD.HdAccountBaseFO defAccId) defUtxo_
+
+        defUtxo_ :: (Utxo, Utxo, [HD.HdAddress])
+        defUtxo_ =
+            case Map.lookup defAccId utxos of
+                Just (utxo, utxo', addrs) ->
+                    (utxo, utxo', maybe addrs (: addrs) defAddr)
+                Nothing ->
+                    (mempty, mempty, maybeToList defAddr)
+
+-- | Construct an Acidstate action for creating a new Eos wallet.
+-- For new Eos wallets we are given the gap and account key/index pairs.
+--
+-- NOTE: if an account is not present in the utxos (i.e. has no utxo) we default
+-- the account utxo and addresses to `mempty`.
+mkCreateEosWallet
+    :: [(PublicKey, HdAccountIx)]
+    -> AddressPoolGap
+    -- ^ Number of new addresses to maintain during address discovery
+    -> Map HD.HdAccountId (Utxo, [HD.HdAddress])
+    -- ^ Discovered utxos and addrs per-account
+    -> HD.HdRoot
+    -> Either CreateHdWallet RestoreHdWallet
+mkCreateEosWallet accounts gap utxos root
+    = Left $ CreateHdWallet root utxos'
+    where
+        mkBase = mkEosBase (root ^. HD.hdRootId) gap (mempty, mempty) utxos
+        utxos' = Map.unions $ mkBase <$> accounts
+
+-- | Construct an Acidstate action for restoring pre-existing Eos wallet
+-- accounts. Restoration of Eos wallets happens on a per-account basis.
+--
+-- NOTE: if an account is not present in the utxos (i.e. has no utxo) we default
+-- the account utxo's and addresses to `mempty`.
+mkRestoreEosWallet
+    :: [(PublicKey, HdAccountIx)]
+    -> AddressPoolGap
+    -> Map HD.HdAccountId (Utxo, Utxo, [HD.HdAddress])
+    -- ^ Discovered utxos and addrs per-account
+    -> BlockContext
+    -> HD.HdRoot
+    -> Either CreateHdWallet RestoreHdWallet
+mkRestoreEosWallet accounts gap utxos tgt root
+    = Right $ RestoreHdWallet root utxos' tgt
+    where
+        mkBase = mkEosBase (root ^. HD.hdRootId) gap (mempty, mempty, mempty) utxos
+        utxos' = Map.unions $ mkBase <$> accounts
+
+-- | Look up the utxos for the given account pub key and index (use the
+-- default if nothing is found) and construct a singleton map of the
+-- Eos account and utxo data.
+mkEosBase
+    :: HD.HdRootId
+    -> AddressPoolGap
+    -> a
+    -> Map HD.HdAccountId a
+    -> (PublicKey, HD.HdAccountIx)
+    -> Map HD.HdAccountBase a
+mkEosBase rootId gap def utxos (pk,ix)
+    = Map.singleton base val
+    where
+        accId = HD.HdAccountId rootId ix
+        base = HD.HdAccountBaseEO accId pk gap
+        val = maybe def id (Map.lookup accId utxos)
+
+{-------------------------------------------------------------------------------
+  HdRnd auxiliary
+-------------------------------------------------------------------------------}
 
 -- | Creates a default 'HdAddress' at a fixed derivation path. This is
 -- useful for tests, but otherwise you may want to use 'defaultHdAddressWith'.

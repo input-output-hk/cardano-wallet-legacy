@@ -66,14 +66,16 @@ import           Cardano.Wallet.WalletLayer.Kernel.Wallets
 type PrefilterResult = ((BlockContext, PrefilteredBlock), [TxMeta])
 
 -- | Prefilter a list of resolved blocks for all accounts in all wallets.
--- Since different types wallets have different prefiltering mechanisms, we need
--- to do prefiltering seperately for each type of wallet and then combine the results.
-prefilterBlocks :: PassiveWallet
-                -> [ResolvedBlock]
-                -> IO (Maybe [PrefilterResult])
+-- Since different types wallets have different prefiltering mechanisms,
+-- we need to do prefiltering seperately for each type of wallet and then
+-- combine the results.
+--
 -- Returns 'Nothing' if the prefiltering is irrelevant for this node, i.e.
 -- there are no user wallets stored, so we can avoid doing work
 -- (e.g. writing into the acid-state DB log) by skipping such block application).
+prefilterBlocks :: PassiveWallet
+                -> [ResolvedBlock]
+                -> IO (Maybe [PrefilterResult])
 prefilterBlocks _ [] = return Nothing
 prefilterBlocks pw bs = do
     db <- getWalletSnapshot pw
