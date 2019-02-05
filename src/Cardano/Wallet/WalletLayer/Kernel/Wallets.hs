@@ -286,9 +286,10 @@ addressPoolGapByRootId rootId db = do
     if | null bases            -> Left $ GetEosWalletErrorNoAccounts anId
        | not . null $ errors   -> Left $ GetEosWalletErrorWrongAccounts anId
        | length (nub gaps) > 1 -> Left $ GetEosWalletErrorGapsDiffer anId
-       | otherwise             -> let [gap] = gaps in Right gap
+       | otherwise             -> let gap:_ = gaps in Right gap
   where
     anId = sformat build rootId
+
 
 -- | Gets all the wallets known to this edge node.
 --
