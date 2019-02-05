@@ -2496,6 +2496,12 @@ data WalletError =
     | UtxoNotEnoughFragmented !ErrUtxoNotEnoughFragmented
     -- ^ available Utxo is not enough fragmented, ie., there is more outputs of transaction than
     -- utxos
+    | EosWalletDoesNotHaveAccounts Text
+    -- ^ EOS-wallet doesn't have any accounts.
+    | EosWalletHasWrongAccounts Text
+    -- ^ Some of accounts associated with EOS-wallets have FO-branch.
+    | EosWalletGapsDiffer Text
+    -- ^ Accounts associated with EOS-wallet contain different values of address pool gap.
     deriving (Generic, Show, Eq)
 
 deriveGeneric ''WalletError
@@ -2599,6 +2605,12 @@ instance Buildable WalletError where
             bprint "You've made too many requests too soon, and this one was throttled."
         UtxoNotEnoughFragmented x ->
             bprint build x
+        EosWalletDoesNotHaveAccounts _ ->
+            bprint "EOS-wallet doesn't have any accounts."
+        EosWalletHasWrongAccounts _ ->
+            bprint "Some of accounts associated with EOS-wallets have FO-branch."
+        EosWalletGapsDiffer _ ->
+            bprint "Accounts associated with EOS-wallet contain different values of address pool gap."
 
 -- | Convert wallet errors to Servant errors
 instance ToServantError WalletError where
@@ -2643,7 +2655,12 @@ instance ToServantError WalletError where
             err400 { errHTTPCode = 429 }
         UtxoNotEnoughFragmented{} ->
             err403
-
+        EosWalletDoesNotHaveAccounts{} ->
+            err500
+        EosWalletHasWrongAccounts{} ->
+            err500
+        EosWalletGapsDiffer{} ->
+            err500
 
 -- | Declare the key used to wrap the diagnostic payload, if any
 instance HasDiagnostic WalletError where
@@ -2688,3 +2705,9 @@ instance HasDiagnostic WalletError where
             "microsecondsUntilRetry"
         UtxoNotEnoughFragmented{} ->
             "details"
+        EosWalletDoesNotHaveAccounts{} ->
+            noDiagnosticKey
+        EosWalletHasWrongAccounts{} ->
+            noDiagnosticKey
+        EosWalletGapsDiffer{} ->
+            noDiagnosticKey
