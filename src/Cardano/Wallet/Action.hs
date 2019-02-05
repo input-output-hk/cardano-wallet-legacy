@@ -27,8 +27,8 @@ import qualified Cardano.Wallet.Kernel.Internal as Kernel.Internal
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import           Cardano.Wallet.Kernel.Migration (migrateLegacyDataLayer)
 import qualified Cardano.Wallet.Kernel.Mode as Kernel.Mode
-import           Cardano.Wallet.Kernel.NodeStateAdaptor (newNodeStateAdaptor)
-import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
+import           Cardano.Wallet.Kernel.NodeStateAdaptor (newNodeStateAdaptor,
+                     toMonadIO)
 import           Cardano.Wallet.Server.CLI (WalletBackendParams (..),
                      walletDbPath, walletNodeAddress, walletRebuildDb)
 import           Cardano.Wallet.Server.Middlewares
@@ -67,7 +67,7 @@ actionWithWallet
             genesisConfig
             nodeRes
             ntpStatus
-            NodeStateAdaptor.toMonadIO
+            toMonadIO
             nodeClient
 
     liftIO $ Keystore.bracketLegacyKeystore userSecret $ \keystore -> do

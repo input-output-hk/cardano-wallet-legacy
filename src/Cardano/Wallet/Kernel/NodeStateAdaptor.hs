@@ -35,14 +35,15 @@ module Cardano.Wallet.Kernel.NodeStateAdaptor (
   , filterUtxo
   , mostRecentMainBlock
   , defaultGetSlotStart
+
+    -- helper for error handling
+  , toMonadIO
+
     -- * Support for tests
   , MockNodeStateParams(..)
   , mockNodeState
   , mockNodeStateDef
   , defMockNodeStateParams
-
-  , toMonadIO
-  , NodeCommunicationError (..)
   ) where
 
 import           Universum
@@ -51,8 +52,6 @@ import           Control.Lens (lens)
 import           Control.Monad.IO.Unlift (MonadUnliftIO, UnliftIO (UnliftIO),
                      askUnliftIO, unliftIO, withUnliftIO)
 import           Control.Monad.STM (retry)
-import           Control.Retry (RetryPolicyM, RetryStatus, fullJitterBackoff,
-                     limitRetries, retrying)
 import           Data.Conduit (mapOutputMaybe, runConduitRes, (.|))
 import qualified Data.Conduit.List as Conduit
 import           Data.SafeCopy (base, deriveSafeCopy)
@@ -628,30 +627,7 @@ newtype NodeCommunicationError = NodeCommunicationError String
 
 instance Exception NodeCommunicationError
 
-
---
--- >>> (a :: ExceptT Int IO Int) = print "running" >> throwError 0
--- >>> toMonadIO a
--- "running"
--- "running"
--- "running"
--- "running"
--- "running"
--- *** Exception: NodeCommunicationError "There was an error communicating with the node: 0"
---
 toMonadIO :: (MonadIO m, MonadThrow m, Show e) => ExceptT e m a -> m a
-toMonadIO = retrying' . runExceptT >=> \case
+toMonadIO = runExceptT >=> \case
     Right a   -> return a
     Left  err -> throwM . NodeCommunicationError $ ("There was an error communicating with the node: " <> show err)
-
-  where
-    retrying' a = retrying policy shouldRetry (const a)
-
-    -- See <https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter>
-    policy :: MonadIO m => RetryPolicyM m
-    policy = fullJitterBackoff 1000000 <> limitRetries 4
-
-    shouldRetry :: MonadIO m => RetryStatus -> Either e a -> m Bool
-    shouldRetry _ (Right _) = return False
-    shouldRetry _ (Left  _) = return True
-

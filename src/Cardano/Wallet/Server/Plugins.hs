@@ -20,6 +20,9 @@ module Cardano.Wallet.Server.Plugins
 
 import           Universum
 
+import           Control.Retry (RetryPolicyM, RetryStatus, fullJitterBackoff,
+                     limitRetries)
+import qualified Control.Retry
 import           Data.Acid (AcidState)
 import           Data.Aeson (encode)
 import qualified Data.ByteString.Char8 as BS8
@@ -237,4 +240,18 @@ setupNodeClient (serverHost, serverPort) params = liftIO $ do
         walletClient :: NodeHttpClient
         walletClient = NodeClient.mkHttpClient baseUrl manager
 
-    return walletClient
+    return $ NodeClient.hoist retryingExcept walletClient
+
+      where
+        retryingExcept a = ExceptT $ retryingEither (runExceptT a)
+        retryingEither a = Control.Retry.retrying policy shouldRetry (const a)
+
+        -- See <https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter>
+        policy :: MonadIO m => RetryPolicyM m
+        policy = fullJitterBackoff 1000000 <> limitRetries 4
+
+        shouldRetry :: MonadIO m => RetryStatus -> Either e a -> m Bool
+        shouldRetry _ (Right _) = return False
+        shouldRetry _ (Left  _) = return True
+
+
