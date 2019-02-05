@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 module Test.Integration.Scenario.Wallets
     ( spec
     ) where
@@ -9,8 +10,10 @@ import qualified Cardano.Wallet.Client.Http as Client
 import           Test.Hspec (describe)
 import           Test.Integration.Framework.DSL
 
+
 spec :: Scenarios Context
 spec = do
+
     scenario "WALLETS_DELETE_01 - deleted wallet is not available" $ do
         fixture <- setup $ defaultSetup
             & walletName .~ "漢ę ó ł ąś ł żźćń字"
@@ -808,17 +811,17 @@ spec = do
             ]
 
     scenario "WALLETS_UTXO_04 - UTxO statistics reflect wallet's activity" $ do
-        pendingWith "disabled until we figure out why it is randomly failing.  See #220"
-
+        void $ print "WALLETS_UTXO_04: 1"
         fixture <- setup $ defaultSetup
             & initialCoins .~ [14, 42, 1337]
-
+        void $ print "WALLETS_UTXO_04: 2"
         response <- request $ Client.getUtxoStatistics
             $- (fixture ^. wallet . walletId)
-
+        void $ print "WALLETS_UTXO_04: 3"
         verify response
             [ expectWalletUTxO [14, 42, 1337]
             ]
+
 
     -- Below are scenarios that are somewhat 'symmetric' for both 'create' and 'restore' operations.
     forM_ [CreateWallet, RestoreWallet] $ \operation -> describe (show operation) $ do

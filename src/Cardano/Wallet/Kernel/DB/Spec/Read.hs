@@ -34,19 +34,21 @@ import qualified Cardano.Wallet.Kernel.Util.Core as Core
   defined in the Wallet Spec
 -------------------------------------------------------------------------------}
 
+import qualified Debug.Trace as Debug
+
 -- | Available UTxO
 --
 -- The available UtxO is the current UTxO minus outputs spent by pending txs
 cpAvailableUtxo :: IsCheckpoint c => c -> Core.Utxo
 cpAvailableUtxo c =
-    Core.utxoRemoveInputs (c ^. cpUtxo) pendingIns
+    Debug.trace ("####### cpAvailableUtxo: cpUtxo:" ++ (show (c ^. cpUtxo)) ) $ Core.utxoRemoveInputs (c ^. cpUtxo) pendingIns
   where
-    pendingIns = Pending.txIns (c ^. cpPending)
+    pendingIns = Debug.trace ("####### cpAvailableUtxo: pendingIns:" ++ (show (Pending.txIns (c ^. cpPending))) ) $  Pending.txIns (c ^. cpPending)
 
 -- | Returns the sets of available and unavailable inputs
 cpCheckAvailable :: IsCheckpoint c
                  => Set Core.TxIn -> c -> (Set Core.TxIn, Set Core.TxIn)
-cpCheckAvailable ins c = Set.partition isAvailable ins
+cpCheckAvailable ins c = Debug.trace ("####### cpCheckAvailable: ins:" ++ show ins) $ Set.partition isAvailable ins
   where
     isAvailable :: Core.TxIn -> Bool
     isAvailable inp = inp `Map.member` cpAvailableUtxo c

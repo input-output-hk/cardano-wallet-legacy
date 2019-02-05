@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RankNTypes                 #-}
 module Cardano.Wallet.Kernel.Transactions (
@@ -84,6 +85,7 @@ import           Pos.Crypto (EncryptedSecretKey, PassPhrase, ProtocolMagic,
                      ShouldCheckPassphrase (..), Signature (..), hash,
                      redeemToPublic)
 import           UTxO.Util (shuffleNE)
+
 
 {-------------------------------------------------------------------------------
   Generating payments and estimating fees
@@ -246,6 +248,12 @@ newUnsignedTransaction ActiveWallet{..} options accountId payees = runExceptT $ 
     -- STEP 0: Get available UTxO
     availableUtxo <- withExceptT NewTransactionUnknownAccount $ exceptT $
                        currentAvailableUtxo snapshot accountId
+
+    let a1 = "####### newUnsignedTransaction (availableUtxo):" ++ (show availableUtxo)
+    let a2 = "####### newUnsignedTransaction (payees):" ++ (show payees)
+
+    void $ print a1
+    void $ print a2
 
     withExceptT NewTransactionNotEnoughUtxoFragmentation $ exceptT $
         checkUtxoFragmentation payees availableUtxo

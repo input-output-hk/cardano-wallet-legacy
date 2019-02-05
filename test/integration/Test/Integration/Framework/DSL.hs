@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE RankNTypes            #-}
 
@@ -155,6 +156,7 @@ import           Pos.Crypto (ShouldCheckPassphrase (..),
 import           Test.Integration.Framework.Request (HasHttpClient, request,
                      request_, successfulRequest, unsafeRequest, ($-))
 import           Test.Integration.Framework.Scenario (Scenario)
+
 --
 -- SCENARIO
 --
@@ -676,7 +678,8 @@ expectWalletUTxO coins = \case
                 , TxOutAux (TxOut addr (mkCoin coin))
                 )
         let utxo = Map.fromList $ zipWith constructUtxoEntry [0..] coins
-
+        let out = ("####### expectWalletUTxO (utxo):\n" <> show utxo)::String
+        void $ print out
         computeUtxoStatistics log10 [utxo] `shouldBe` stats
 
 --

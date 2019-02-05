@@ -76,6 +76,8 @@ import           Cardano.Wallet.Kernel.DB.Spec.Pending (Pending)
 import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending
 import qualified Pos.Chain.Txp as Txp
 
+
+import qualified Debug.Trace as Debug
 -- | Wallet Submission Layer
 --
 -- This module implements section 10 of the Wallet spec,
@@ -361,7 +363,7 @@ tick ws =
         evicted = evictedThisSlot toConfirm pendingMap
         newState = ws & wsState . wssSchedule    .~ schedule'
                       & wsState . wssCurrentSlot %~ mapSlot succ
-        in (evicted, toSend, remPending evicted newState)
+        in Debug.trace ("####### tick: toSend:" ++ show toSend ++ " evicted :" ++ (show $ M.elems evicted)) $ (evicted, toSend, remPending evicted newState)
     where
         evictedThisSlot :: [ScheduleEvictIfNotConfirmed]
                         -> M.Map HdAccountId Pending
