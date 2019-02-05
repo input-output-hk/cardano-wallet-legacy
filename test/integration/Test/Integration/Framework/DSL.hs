@@ -77,12 +77,14 @@ module Test.Integration.Framework.DSL
     , amount
     , assuranceLevel
     , backupPhrase
+    , externallyOwnedAccounts
     , failures
     , initialCoins
     , mnemonicWords
     , spendingPassword
     , totalSuccess
     , rawPassword
+    , rawMnemonicPassword
     , address
     , wallet
     , wallets
@@ -128,6 +130,8 @@ import           Cardano.Wallet.API.V1.Types
 import           Cardano.Wallet.Client.Http (BaseUrl, ClientError (..), Manager,
                      WalletClient)
 import qualified Cardano.Wallet.Client.Http as Client
+import           Cardano.Wallet.Kernel.Ed25519Bip44 (deriveAccountPrivateKey,
+                     derivePublicKey, genEncryptedSecretKey)
 import           Pos.Chain.Txp (TxIn (..), TxOut (..), TxOutAux (..))
 import           Pos.Core (Coin, IsBootstrapEraAddr (..), deriveLvl2KeyPair,
                      mkCoin, unsafeGetCoin)
@@ -220,6 +224,8 @@ data Setup = Setup
         :: [Text]
     , _rawPassword
         :: RawPassword
+    , _rawMnemonicPassword
+        :: RawPassword
     } deriving (Show, Generic)
 
 data Fixture = Fixture
@@ -231,6 +237,9 @@ data Fixture = Fixture
         :: BackupPhrase
     , _spendingPassword
         :: SpendingPassword
+    , _eoAccounts
+        :: [(PublicKey, Word32)]
+        -- ^ WARNING We rely on lazyness here, so don't make this strict
     } deriving (Show, Generic)
 
 -- | Setup a wallet with the given parameters.
@@ -241,10 +250,11 @@ setup args = do
     phrase <- if null (args ^. mnemonicWords)
         then liftIO $ generate arbitrary
         else mkBackupPhrase (args ^. mnemonicWords)
-    let password = mkPassword (args ^. rawPassword)
+    let walPwd@(WalletPassPhrase pwd) = mkPassword (args ^. rawPassword)
     wal <- setupWallet args phrase
     addrs  <- forM (RandomDestination :| []) setupDestination
-    return $ Fixture wal addrs phrase password
+    let accs = genExternallyOwnedAccounts (phrase, args ^. rawMnemonicPassword) pwd
+    return $ Fixture wal addrs phrase walPwd accs
 
 -- | Apply 'a' to all actions in sequence
 verify :: (Monad m) => a -> [a -> m ()] -> m ()
@@ -294,11 +304,12 @@ defaultPerPage = Nothing
 
 defaultSetup :: Setup
 defaultSetup = Setup
-    { _initialCoins   = []
-    , _walletName     = defaultWalletName
-    , _assuranceLevel = defaultAssuranceLevel
-    , _mnemonicWords  = []
-    , _rawPassword    = mempty
+    { _initialCoins        = []
+    , _walletName          = defaultWalletName
+    , _assuranceLevel      = defaultAssuranceLevel
+    , _mnemonicWords       = []
+    , _rawPassword         = mempty
+    , _rawMnemonicPassword = mempty
     }
 
 defaultSource
@@ -354,6 +365,9 @@ assuranceLevel = typed
 backupPhrase :: HasType BackupPhrase s => Lens' s BackupPhrase
 backupPhrase = typed
 
+externallyOwnedAccounts :: HasType [(PublicKey, Word32)] s => Lens' s [(PublicKey, Word32)]
+externallyOwnedAccounts = typed
+
 failures :: Lens' (BatchImportResult a) [a]
 failures = field @"aimFailures"
 
@@ -377,8 +391,11 @@ mnemonicWords = typed
 hasSpendingPassword :: HasType Bool s => Lens' s Bool
 hasSpendingPassword = typed
 
-rawPassword :: HasType RawPassword s => Lens' s RawPassword
-rawPassword = typed
+rawPassword :: Lens' Setup RawPassword
+rawPassword = field @"_rawPassword"
+
+rawMnemonicPassword :: Lens' Setup RawPassword
+rawMnemonicPassword = field @"_rawMnemonicPassword"
 
 spendingPassword :: HasType SpendingPassword s => Lens' s SpendingPassword
 spendingPassword = typed
@@ -834,3 +851,21 @@ setupDestination = \case
         fail "Asset-locked destination aren't yet implemented. This\
             \ requires slightly more work than it seems and will be\
             \ implemented later."
+
+
+-- | Lazily generate an "infinite" list of accounts (PubKey, Index)
+-- from a mnemonic using the new address derivation scheme V2 (BIP-44 with
+-- Ed25519 elliptic curve)
+genExternallyOwnedAccounts
+    :: (BackupPhrase, RawPassword)
+    -> PassPhrase
+    -> [(PublicKey, Word32)]
+genExternallyOwnedAccounts (BackupPhrase mnemonic, RawPassword mnePassphrase) passphrase =
+    let
+        esk = genEncryptedSecretKey (mnemonic, T.encodeUtf8 mnePassphrase) passphrase
+        accountXPrv = fmap derivePublicKey . deriveAccountPrivateKey passphrase esk
+    in
+        catMaybes
+        [ (,ix) <$> accountXPrv ix
+        | ix <- getAccIndex <$> [minBound..maxBound]
+        ]

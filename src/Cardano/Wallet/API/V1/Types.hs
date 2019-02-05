@@ -122,6 +122,8 @@ module Cardano.Wallet.API.V1.Types (
   , CaptureAccountId
   -- * Core re-exports
   , Core.Address
+  , Core.PublicKey
+  , Core.PassPhrase
   -- * Wallet Errors
   , WalletError(..)
   , ErrNotEnoughMoney(..)
@@ -1110,6 +1112,12 @@ instance Bounded AccountIndex where
     -- NOTE: minimum for hardened key. See https://iohk.myjetbrains.com/youtrack/issue/CO-309
     minBound = AccountIndex 2147483648
     maxBound = AccountIndex maxBound
+
+instance Enum AccountIndex where
+    fromEnum (AccountIndex a) = fromEnum a
+    toEnum a = case mkAccountIndex (toEnum a) of
+        Left err -> error (sformat build err)
+        Right ix -> ix
 
 instance ToJSON AccountIndex where
     toJSON = toJSON . getAccIndex
