@@ -1,5 +1,11 @@
 #!/bin/bash
 
+#
+# This script generates 50k addresses on a Daedalus wallet. 
+# The addresses can be then retrieved to a file using get_addresses.sh
+# and the file itself can be used as a parameter for batch import request.
+#
+
 port=46380 # Note: Daedalus port can be retrieved with the following command `lsof -i -P -n | grep LISTEN` (cardano-n port)
 wallet_id="Ae2tdPwUPEZLXCZQkmwcatABSc5Fw1bp3dk5nBkNnkNHy6teLdxqQm8NPgW"
 account_index=2147483648
