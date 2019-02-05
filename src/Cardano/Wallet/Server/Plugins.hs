@@ -51,6 +51,7 @@ import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel (DatabaseMode (..), PassiveWallet)
 import qualified Cardano.Wallet.Kernel.Diffusion as Kernel
 import qualified Cardano.Wallet.Kernel.Mode as Kernel
+import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
 import qualified Cardano.Wallet.Server as Server
 import           Cardano.Wallet.Server.CLI (WalletBackendParams (..),
                      WalletBackendParams (..), walletAcidInterval,
@@ -101,7 +102,7 @@ apiServer
     env <- ask
     let diffusion' = Kernel.fromDiffusion (lower env) diffusion
     logInfo "Testing node client connection"
-    eresp <- liftIO . runExceptT $ NodeClient.getNodeSettings nodeClient
+    eresp <- liftIO . NodeStateAdaptor.retrying . runExceptT $ NodeClient.getNodeSettings nodeClient
     case eresp of
         Left err -> do
             logError
