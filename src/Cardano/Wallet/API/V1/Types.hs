@@ -1717,9 +1717,9 @@ instance BuildableSafeGen TransactionType where
 -- | The 'Transaction' @direction@
 data TransactionDirection =
     IncomingTransaction
-  -- ^ This represents an incoming transactions.
+  -- ^ Represents a transaction that adds funds to the local wallet.
   | OutgoingTransaction
-  -- ^ This qualifies external transactions.
+  -- ^ Represents a transaction that removes funds from the local wallet.
   deriving (Show, Ord, Eq, Enum, Bounded)
 
 instance Arbitrary TransactionDirection where
