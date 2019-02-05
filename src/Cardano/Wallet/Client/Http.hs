@@ -112,8 +112,13 @@ mkHttpClient baseUrl manager = WalletClient
 
     , importWallet
         = run . importWalletR
-    }
 
+    -- Externally Owned Wallets Endpoints
+    , postEosWallet
+        = run . postEosWalletR
+    , getEosWallet
+        = run. getEosWalletR
+    }
   where
 
     -- Must give the type. GHC will not infer it to be polymorphic in 'a'.
@@ -130,11 +135,19 @@ mkHttpClient baseUrl manager = WalletClient
                     Just err -> ClientWalletError err
                     Nothing  -> ClientHttpError servantErr
             _ -> ClientHttpError servantErr
+
     getAddressIndexR
         :<|> postAddressR
         :<|> getAddressR
         :<|> importAddressesR
         = addressesAPI
+
+    postEosWalletR
+        :<|> getEosWalletR
+        :<|> _
+        :<|> _
+        :<|> _
+        = eosWalletsAPI
 
     postWalletR
         :<|> getWalletIndexFilterSortsR
@@ -171,7 +184,7 @@ mkHttpClient baseUrl manager = WalletClient
 
     addressesAPI
         :<|> walletsAPI
-        :<|> _
+        :<|> eosWalletsAPI
         :<|> accountsAPI
         :<|> transactionsAPI
         :<|> getNodeSettingsR
