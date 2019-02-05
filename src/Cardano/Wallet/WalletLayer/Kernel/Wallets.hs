@@ -27,6 +27,7 @@ import           Pos.Chain.Txp (Utxo)
 import           Pos.Core (mkCoin)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
 import           Pos.Crypto.Signing
+import           Pos.Util.Wlog (Severity (..))
 
 import qualified Cardano.Mnemonic as Mnemonic
 import qualified Cardano.Wallet.API.V1.Types as V1
@@ -40,7 +41,7 @@ import qualified Cardano.Wallet.Kernel.DB.TxMeta.Types as Kernel
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (IxSet)
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import           Cardano.Wallet.Kernel.Internal (walletKeystore, walletMeta,
-                     walletProtocolMagic, _wriProgress)
+                     walletProtocolMagic, (<.>), _wriProgress)
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import qualified Cardano.Wallet.Kernel.Read as Kernel
@@ -260,12 +261,16 @@ getEosWallet
     -> Kernel.DB
     -> m (Either GetEosWalletError V1.EosWallet)
 getEosWallet _wallet wId db = runExceptT $ do
+    debug $ "looking for: " <.> wId
     rootId <- withExceptT GetEosWalletWalletIdDecodingFailed (fromRootId wId)
-    hdRoot <- withExceptT GetEosWalletError $ exceptT $
-        Kernel.lookupHdRootId db rootId
-    fmap (toEosWallet db hdRoot) $
-        withExceptT GetEosWalletErrorAddressPoolGap $ exceptT $
-            addressPoolGapByRootId rootId db
+    hdRoot <- withExceptT GetEosWalletError $ exceptT $ Kernel.lookupHdRootId db rootId
+    debug $ "successfully decoded HdRoot: " <.> hdRoot
+    gap <- withExceptT GetEosWalletErrorAddressPoolGap $ exceptT $ addressPoolGapByRootId rootId db
+    debug $ "successfully recovered gap from accounts: " <.> gap
+    return $ toEosWallet db hdRoot gap
+  where
+    debug :: MonadIO m => Text -> m ()
+    debug = Kernel.mkLogger _wallet "getEosWallet" Debug
 
 addressPoolGapByRootId
     :: HD.HdRootId
