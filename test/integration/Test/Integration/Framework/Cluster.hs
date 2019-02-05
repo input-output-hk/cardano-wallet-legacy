@@ -12,6 +12,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import           Options.Applicative (handleParseResult, info)
 import qualified Prelude
+import           System.Directory (doesPathExist)
 import           System.Environment (getEnvironment)
 import           System.FilePath ((</>))
 
@@ -87,13 +88,20 @@ startCluster nodes = do
     let stateDir   = env0 ! "STATE_DIR" -- Safe, we just defaulted it above
     let configFile = env0 ! "CONFIGURATION_FILE" -- Safe, we just defaulted it above
     let configKey  = env0 ! "CONFIGURATION_KEY" -- Safe, we just defaulted it above
+    let genKeyDir  = stateDir </> "generated-keys"
 
-    handles <- forM nodes $ \node@(_, nodeType) -> runAsync $ \yield -> do
+    handles <- forM nodes $ \node@(NodeName nodeId, nodeType) -> runAsync $ \yield -> do
         let (artifacts, nodeEnv) = prepareEnvironment node nodes stateDir env0
         let (genesis, topology, logger, tls) = artifacts
         case nodeType of
             NodeCore -> do
-                void (init genesis >> init topology >> init logger >> init tls)
+                doesPathExist genKeyDir >>= \case
+                    False -> void (init genesis)
+                    True  -> putTextLn
+                        $ "WARNING (" <> nodeId <> "): "
+                        <> "not generating new keys in '" <> toText genKeyDir <> "' "
+                        <> "because the directory already exists."
+                void (init topology >> init logger >> init tls)
                 yield (nodeEnv, Nothing) >> startNode node nodeEnv
             NodeRelay -> do
                 void (init topology >> init logger >> init tls)
@@ -111,7 +119,7 @@ startCluster nodes = do
             , cfoSystemStart = Just 0
             , cfoSeed        = Nothing
             }
-    (env,,manager) <$> getGenesisKeys stateDir configOpts
+    (env,,manager) <$> getGenesisKeys genKeyDir configOpts
   where
     init :: Artifact a b -> IO b
     init = initializeArtifact
@@ -182,10 +190,10 @@ getGenesisKeys
     :: FilePath
     -> ConfigurationOptions
     -> IO [FilePath]
-getGenesisKeys stateDir configOpts = do
+getGenesisKeys genKeyDir configOpts = do
     gs <- getGeneratedSecrets configOpts
     let genesisKeys =
-            [ stateDir </> "generated-keys" </> "poor" </> (show i <> ".key")
+            [ genKeyDir </> "poor" </> (show i <> ".key")
             | i <- iterate (+1) (0 :: Int)
             ]
     return $ take (length $ gsPoorSecrets gs) genesisKeys

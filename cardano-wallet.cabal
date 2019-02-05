@@ -587,6 +587,7 @@ test-suite integration
     , cardano-wallet
     , containers
     , cryptonite
+    , directory
     , filepath
     , generic-lens
     , hspec
