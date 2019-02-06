@@ -478,6 +478,12 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
                     Right c -> E.unValue <$> c
             return (txMeta, count')
   where
+    filters t = do
+        E.where_
+            $ filterAccs t accountFops
+            E.&&. applyFilter (t E.^. TxMetaTableId) fopTxId
+            E.&&. applyFilter (t E.^. TxMetaTableCreatedAt) fopTimestamp
+
     metaQuery =
         E.select $
         E.from $ \t -> do
@@ -486,21 +492,34 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
         limitOffset
         return t
 
-    limitOffset = do
-        E.limit (fromIntegral limit)
-        E.offset (fromIntegral offset)
-
     metaQueryC =
         E.select $
         E.from $ \t -> do
         filters t
         return E.countRows
 
-    filters t = do
-        E.where_
-            $ filterAccs t accountFops
-            E.&&. applyFilter (t E.^. TxMetaTableId) fopTxId
-            E.&&. applyFilter (t E.^. TxMetaTableCreatedAt) fopTimestamp
+    metaQueryWithAddr addr =
+        E.select $
+        E.distinct $
+        E.from $ \(meta `E.InnerJoin` inp `E.InnerJoin` out) -> do
+        joinConditions meta inp out
+        sorting meta
+        filters meta
+        eitherHasAddress inp out addr
+        limitOffset
+        return meta
+
+    metaQueryWithAddrC addr =
+        E.select $
+        E.from $ \(meta `E.InnerJoin` inp `E.InnerJoin` out) -> do
+        joinConditions meta inp out
+        filters meta
+        eitherHasAddress inp out addr
+        pure $ E.countDistinct (meta E.^. TxMetaTableId)
+
+    limitOffset = do
+        E.limit (fromIntegral limit)
+        E.offset (fromIntegral offset)
 
     filterAccs _ Everything =
         E.val True
@@ -528,14 +547,6 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
                 E.&&. inputData E.<=. (E.val to)
             FilterIn ls -> E.in_ inputData (E.valList ls)
 
-    metaQueryWithAddrC addr =
-        E.select $
-        E.from $ \(meta `E.InnerJoin` inp `E.InnerJoin` out) -> do
-        joinConditions meta inp out
-        filters meta
-        eitherHasAddress inp out addr
-        pure $ E.countDistinct (meta E.^. TxMetaTableId)
-
     eitherHasAddress inp out addr =
         E.where_
             $ inp E.^. InputTableAddress E.==. E.val addr
@@ -553,17 +564,6 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
                 E.orderBy [toEsqSortDir dir (meta E.^. TxMetaTableCreatedAt)]
             Just (Sorting SortByAmount     dir) ->
                 E.orderBy [toEsqSortDir dir (meta E.^. TxMetaTableAmount)]
-
-    metaQueryWithAddr addr =
-        E.select $
-        E.distinct $
-        E.from $ \(meta `E.InnerJoin` inp `E.InnerJoin` out) -> do
-        joinConditions meta inp out
-        sorting meta
-        filters meta
-        eitherHasAddress inp out addr
-        limitOffset
-        return meta
 
     transform :: NonEmpty (Txp.TxId, a) -> M.Map Txp.TxId (NonEmpty a)
     transform = Foldable.foldl' updateFn M.empty
