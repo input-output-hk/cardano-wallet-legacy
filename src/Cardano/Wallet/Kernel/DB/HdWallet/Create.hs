@@ -13,7 +13,6 @@ module Cardano.Wallet.Kernel.DB.HdWallet.Create (
     -- * Initial values
   , initHdRoot
   , initHdAccount
-  , initHdAddress
   ) where
 
 import           Universum
@@ -26,6 +25,7 @@ import qualified Formatting.Buildable
 
 import qualified Pos.Core as Core
 
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.Util.AcidState
@@ -147,35 +147,18 @@ initHdRoot rootId name hasPass assurance created = HdRoot {
 --
 -- It is the responsibility of the caller to check the wallet's spending
 -- password.
-initHdAccount :: HdAccountId
+initHdAccount :: HdAccountBase
               -> HdAccountState
               -> HdAccount
-initHdAccount accountId st = HdAccount {
-      _hdAccountId    = accountId
+initHdAccount accountBase st = HdAccount {
+      _hdAccountBase  = accountBase
     , _hdAccountName  = defName
     , _hdAccountState = st
     , _hdAccountAutoPkCounter = AutoIncrementKey 0
     }
   where
-    defName = AccountName $ sformat ("Account: " % build)
-                                    (accountId ^. hdAccountIdIx)
-
--- | New address in the specified account
---
--- Since the DB does not contain the private key of the wallet, we cannot
--- do the actual address derivation here; this will be the responsibility of
--- the caller (which will require the use of the spending password, if
--- one exists).
---
--- Similarly, it will be the responsibility of the caller to pick a random
--- address index, as we do not have access to a random number generator here.
-initHdAddress :: HdAddressId
-              -> Core.Address
-              -> HdAddress
-initHdAddress addrId address = HdAddress {
-      _hdAddressId      = addrId
-    , _hdAddressAddress = InDb address
-    }
+    defName = AccountName $ sformat ("Account: " % build) (accId ^. hdAccountIdIx)
+    accId   = accountBase ^. hdAccountBaseId
 
 {-------------------------------------------------------------------------------
   Pretty printing

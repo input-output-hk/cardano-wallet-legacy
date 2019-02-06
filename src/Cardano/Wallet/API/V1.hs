@@ -11,7 +11,8 @@ import qualified Cardano.Wallet.API.V1.Wallets as Wallets
 import qualified Pos.Node.API as Node
 
 type API =  Addresses.API
-       :<|> Wallets.API
+       :<|> Wallets.FullyOwnedAPI
+       :<|> Wallets.ExternallyOwnedAPI
        :<|> Accounts.API
        :<|> Transactions.API
        :<|> Node.SettingsAPI

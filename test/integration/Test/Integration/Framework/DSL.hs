@@ -6,6 +6,7 @@ module Test.Integration.Framework.DSL
     -- * Scenario
       scenario
     , xscenario
+    , pendingWith
     , Scenarios
     , Context(..)
 
@@ -22,6 +23,7 @@ module Test.Integration.Framework.DSL
     , NewAddress(..)
     , NewWallet (..)
     , NewAccount (..)
+    , PasswordUpdate (..)
     , Payment (..)
     , Redemption (..)
     , WalletUpdate(..)
@@ -34,6 +36,7 @@ module Test.Integration.Framework.DSL
     , defaultAccountId
     , defaultAssuranceLevel
     , defaultDistribution
+    , customDistribution
     , defaultGroupingPolicy
     , defaultPage
     , defaultPerPage
@@ -41,6 +44,7 @@ module Test.Integration.Framework.DSL
     , defaultSource
     , defaultSpendingPassword
     , defaultWalletName
+    , mkSpendingPassword
     , noRedemptionMnemonic
     , noSpendingPassword
 
@@ -49,9 +53,12 @@ module Test.Integration.Framework.DSL
     , ErrNotEnoughMoney(..)
     , TransactionStatus(..)
     , expectAddressInIndexOf
+    , expectListSizeEqual
+    , expectListItemFieldEqual
     , expectEqual
     , expectError
     , expectFieldEqual
+    , expectFieldDiffer
     , expectJSONError
     , expectSuccess
     , expectTxInHistoryOf
@@ -64,19 +71,29 @@ module Test.Integration.Framework.DSL
     -- * Helpers
     , ($-)
     , (</>)
+    , (!!)
+    , addresses
+    , walAddresses
     , amount
     , assuranceLevel
     , backupPhrase
+    , externallyOwnedAccounts
+    , failures
     , initialCoins
     , mnemonicWords
     , spendingPassword
+    , totalSuccess
     , rawPassword
+    , rawMnemonicPassword
+    , address
     , wallet
     , wallets
     , walletId
     , walletName
+    , spendingPasswordLastUpdate
     , json
     , hasSpendingPassword
+    , mkAddress
     , mkBackupPhrase
     ) where
 
@@ -88,13 +105,18 @@ import           Crypto.Hash (hash)
 import           Crypto.Hash.Algorithms (Blake2b_256)
 import           Data.Aeson.QQ (aesonQQ)
 import qualified Data.ByteArray as ByteArray
+import qualified Data.Foldable as F
 import           Data.Generics.Internal.VL.Lens (lens)
+import           Data.Generics.Product.Fields (field)
 import           Data.Generics.Product.Typed (HasType, typed)
+import           Data.List ((!!))
+import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import           Language.Haskell.TH.Quote (QuasiQuoter)
 import           Test.Hspec.Core.Spec (SpecM, it, xit)
+import qualified Test.Hspec.Core.Spec as H
 import           Test.Hspec.Expectations.Lifted
 import           Test.QuickCheck (arbitrary, generate)
 import           Web.HttpApiData (ToHttpApiData (..))
@@ -108,6 +130,8 @@ import           Cardano.Wallet.API.V1.Types
 import           Cardano.Wallet.Client.Http (BaseUrl, ClientError (..), Manager,
                      WalletClient)
 import qualified Cardano.Wallet.Client.Http as Client
+import           Cardano.Wallet.Kernel.Ed25519Bip44 (deriveAccountPrivateKey,
+                     derivePublicKey, genEncryptedSecretKey)
 import           Pos.Chain.Txp (TxIn (..), TxOut (..), TxOutAux (..))
 import           Pos.Core (Coin, IsBootstrapEraAddr (..), deriveLvl2KeyPair,
                      mkCoin, unsafeGetCoin)
@@ -117,7 +141,6 @@ import           Pos.Crypto (ShouldCheckPassphrase (..),
 import           Test.Integration.Framework.Request (HasHttpClient, request,
                      request_, successfulRequest, unsafeRequest, ($-))
 import           Test.Integration.Framework.Scenario (Scenario)
-
 --
 -- SCENARIO
 --
@@ -157,6 +180,18 @@ xscenario
     -> Scenarios Context
 xscenario = xit
 
+-- | Lifted version of `H.pendingWith` allowing for temporarily skipping
+-- scenarios from execution with a reason, like:
+--
+--      scenario title $ do
+--          pendingWith "This test fails due to bug #213"
+--          test
+pendingWith
+    :: (MonadIO m, MonadFail m)
+    => String
+    -> m ()
+pendingWith = liftIO . H.pendingWith
+
 --
 -- TYPES
 --
@@ -189,6 +224,8 @@ data Setup = Setup
         :: [Text]
     , _rawPassword
         :: RawPassword
+    , _rawMnemonicPassword
+        :: RawPassword
     } deriving (Show, Generic)
 
 data Fixture = Fixture
@@ -200,20 +237,24 @@ data Fixture = Fixture
         :: BackupPhrase
     , _spendingPassword
         :: SpendingPassword
+    , _eoAccounts
+        :: [(PublicKey, Word32)]
+        -- ^ WARNING We rely on lazyness here, so don't make this strict
     } deriving (Show, Generic)
 
 -- | Setup a wallet with the given parameters.
 setup
     :: Setup
     -> Scenario Context IO Fixture
-setup args = withNextFaucet $ \faucet -> do
+setup args = do
     phrase <- if null (args ^. mnemonicWords)
         then liftIO $ generate arbitrary
         else mkBackupPhrase (args ^. mnemonicWords)
-    let password = mkPassword (args ^. rawPassword)
-    wal <- setupWallet args phrase faucet
+    let walPwd@(WalletPassPhrase pwd) = mkPassword (args ^. rawPassword)
+    wal <- setupWallet args phrase
     addrs  <- forM (RandomDestination :| []) setupDestination
-    return $ Fixture wal addrs phrase password
+    let accs = genExternallyOwnedAccounts (phrase, args ^. rawMnemonicPassword) pwd
+    return $ Fixture wal addrs phrase walPwd accs
 
 -- | Apply 'a' to all actions in sequence
 verify :: (Monad m) => a -> [a -> m ()] -> m ()
@@ -238,6 +279,20 @@ defaultDistribution
 defaultDistribution c s = pure $
     PaymentDistribution (WalAddress $ head $ s ^. typed) (WalletCoin $ mkCoin c)
 
+customDistribution
+    :: NonEmpty (Account,Word64)
+    -> NonEmpty PaymentDistribution
+customDistribution payees =
+    let recepientWalAddresses = NonEmpty.fromList
+                                $ map (view walAddresses)
+                                $ concatMap (view addresses . fst)
+                                $ payees
+    in NonEmpty.zipWith
+       PaymentDistribution
+       recepientWalAddresses
+       (map ((\coin -> WalletCoin $ mkCoin coin) . snd) payees)
+
+
 defaultGroupingPolicy :: Maybe WalletInputSelectionPolicy
 defaultGroupingPolicy = Nothing
 
@@ -249,11 +304,12 @@ defaultPerPage = Nothing
 
 defaultSetup :: Setup
 defaultSetup = Setup
-    { _initialCoins   = []
-    , _walletName     = defaultWalletName
-    , _assuranceLevel = defaultAssuranceLevel
-    , _mnemonicWords  = []
-    , _rawPassword    = mempty
+    { _initialCoins        = []
+    , _walletName          = defaultWalletName
+    , _assuranceLevel      = defaultAssuranceLevel
+    , _mnemonicWords       = []
+    , _rawPassword         = mempty
+    , _rawMnemonicPassword = mempty
     }
 
 defaultSource
@@ -287,6 +343,11 @@ infixr 5 </>
 (</>) :: ToHttpApiData a => Text -> a -> Text
 base </> next = mconcat [base, "/", toQueryParam next]
 
+address
+    :: HasType WalAddress s
+    => Lens' s WalAddress
+address = typed
+
 amount
     :: HasType WalletCoin s
     => Lens' s Word64
@@ -303,6 +364,12 @@ assuranceLevel = typed
 
 backupPhrase :: HasType BackupPhrase s => Lens' s BackupPhrase
 backupPhrase = typed
+
+externallyOwnedAccounts :: HasType [(PublicKey, Word32)] s => Lens' s [(PublicKey, Word32)]
+externallyOwnedAccounts = typed
+
+failures :: Lens' (BatchImportResult a) [a]
+failures = field @"aimFailures"
 
 faucets :: HasType [FilePath] s => Lens' s [FilePath]
 faucets = typed
@@ -324,11 +391,17 @@ mnemonicWords = typed
 hasSpendingPassword :: HasType Bool s => Lens' s Bool
 hasSpendingPassword = typed
 
-rawPassword :: HasType RawPassword s => Lens' s RawPassword
-rawPassword = typed
+rawPassword :: Lens' Setup RawPassword
+rawPassword = field @"_rawPassword"
+
+rawMnemonicPassword :: Lens' Setup RawPassword
+rawMnemonicPassword = field @"_rawMnemonicPassword"
 
 spendingPassword :: HasType SpendingPassword s => Lens' s SpendingPassword
 spendingPassword = typed
+
+totalSuccess :: Lens' (BatchImportResult a) Natural
+totalSuccess = field @"aimTotalSuccess"
 
 wallet :: HasType Wallet s => Lens' s Wallet
 wallet = typed
@@ -342,10 +415,51 @@ walletId = typed
 walletName :: HasType Text s => Lens' s Text
 walletName = typed
 
+spendingPasswordLastUpdate :: Lens' Wallet WalletTimestamp
+spendingPasswordLastUpdate = field @"walSpendingPasswordLastUpdate"
+
+addresses :: HasType [WalletAddress] s => Lens' s [WalletAddress]
+addresses = typed
+
+walAddresses :: HasType WalAddress s => Lens' s WalAddress
+walAddresses = typed
 
 --
 -- EXPECTATIONS
 --
+
+
+-- | Expects data list returned by the API to be of certain length
+expectListSizeEqual
+    :: (MonadIO m, MonadFail m, Foldable xs)
+    => Int
+    -> Either ClientError (xs a)
+    -> m ()
+expectListSizeEqual l = \case
+    Left e   -> wantedSuccessButError e
+    Right xs -> length (F.toList xs) `shouldBe` l
+
+-- | Expects that returned data list's particular item field matches the expected value
+--
+--   e.g.
+--     verify response
+--          [ expectDataListItemFieldEqual 0 walletName "first"
+--          , expectDataListItemFieldEqual 1 walletName "second"
+--          ]
+expectListItemFieldEqual
+    :: (MonadIO m, MonadFail m, Show a, Eq a)
+    => Int
+    -> Lens' s a
+    -> a
+    -> Either ClientError [s]
+    -> m ()
+expectListItemFieldEqual i getter a = \case
+    Left e -> wantedSuccessButError e
+    Right s
+        | length s > i -> expectFieldEqual getter a (Right (s !! i))
+        | otherwise    -> fail $
+            "expectListItemFieldEqual: trying to access the #" <> show i <>
+            " element from a list but there's none! "
 
 -- | The type signature is more scary than it seems. This drills into a given
 --   `a` type through the provided lens and sees whether field matches.
@@ -363,6 +477,17 @@ expectFieldEqual
 expectFieldEqual getter a = \case
     Left e  -> wantedSuccessButError e
     Right s -> view getter s `shouldBe` a
+
+-- | The opposite to 'expectFieldEqual'.
+expectFieldDiffer
+    :: (MonadIO m, MonadFail m, Show a, Eq a)
+    => Lens' s a
+    -> a
+    -> Either ClientError s
+    -> m ()
+expectFieldDiffer getter a = \case
+    Left e  -> wantedSuccessButError e
+    Right s -> view getter s `shouldNotBe` a
 
 -- | Expects entire equality of two types
 expectEqual
@@ -449,7 +574,7 @@ expectTxStatusEventually
 expectTxStatusEventually statuses = \case
     Left e    -> wantedSuccessButError e
     Right txn -> do
-        result <- ask >>= \ctx -> timeout (60 * second) (waitForTxStatus ctx statuses txn)
+        result <- ask >>= \ctx -> timeout (120 * second) (waitForTxStatus ctx statuses txn)
         case result of
             Nothing -> fail "expectTxStatusEventually: waited too long for statuses."
             Just _  -> return ()
@@ -465,7 +590,7 @@ expectTxStatusNever
 expectTxStatusNever statuses = \case
     Left e    -> wantedSuccessButError e
     Right txn -> do
-        result <- ask >>= \ctx -> timeout (60 * second) (waitForTxStatus ctx statuses txn)
+        result <- ask >>= \ctx -> timeout (120 * second) (waitForTxStatus ctx statuses txn)
         case result of
             Nothing -> return ()
             Just _  -> fail "expectTxStatusNever: reached one of the provided statuses."
@@ -479,11 +604,10 @@ expectWalletEventuallyRestored
 expectWalletEventuallyRestored = \case
     Left e -> wantedSuccessButError e
     Right w -> do
-        result <- ask >>= \ctx -> timeout (60 * second) (waitForRestored ctx w)
+        result <- ask >>= \ctx -> timeout (120 * second) (waitForRestored ctx w)
         case result of
             Nothing -> fail "expectWalletEventuallyRestored: waited too long for restoration."
             Just _  -> return ()
-
 
 expectWalletError
     :: (MonadIO m, MonadFail m, Show a)
@@ -493,7 +617,6 @@ expectWalletError
 expectWalletError e' = \case
     Right a -> wantedErrorButSuccess a
     Left e  -> e `shouldBe` (ClientWalletError e')
-
 
 -- | Verifies that the response is errored from a failed JSON validation
 -- matching part of the given message.
@@ -617,6 +740,35 @@ mkPassword (RawPassword txt)
         & ByteArray.convert
         & WalletPassPhrase
 
+
+mkAddress
+    :: (MonadIO m, MonadFail m)
+    => BackupPhrase
+    -> Word32
+    -> m WalAddress
+mkAddress (BackupPhrase mnemonic) ix = do
+    let (_, esk) = safeDeterministicKeyGen
+            (mnemonicToSeed mnemonic)
+            mempty
+
+    let maddr = fst <$> deriveLvl2KeyPair
+            NetworkMainOrStage
+            (IsBootstrapEraAddr True)
+            (ShouldCheckPassphrase False)
+            mempty
+            esk
+            (getAccIndex minBound)
+            ix
+
+    case maddr of
+        Nothing ->
+            fail "The impossible happened: failed to generate a\
+                \ random address. This can only happened if you\
+                \ provided a derivation index that is out-of-bound!"
+        Just addr ->
+            return (WalAddress addr)
+
+
 -- | Execute the given setup action with using the next faucet wallet. It fails
 -- hard if there's no more faucet wallet available.
 withNextFaucet
@@ -651,9 +803,8 @@ withNextFaucet actionWithFaucet = do
 setupWallet
     :: Setup
     -> BackupPhrase
-    -> Wallet
     -> Scenario Context IO Wallet
-setupWallet args phrase faucet = do
+setupWallet args phrase = do
     wal <- successfulRequest $ Client.postWallet $- NewWallet
         phrase
         Nothing
@@ -661,26 +812,27 @@ setupWallet args phrase faucet = do
         (args ^. walletName)
         CreateWallet
 
-    let paymentSource = PaymentSource (walId faucet) minBound
-    let paymentDist (addr, coin) = pure $ PaymentDistribution (addrId addr) (WalletCoin coin)
+    unless (null $ args ^. initialCoins) $ withNextFaucet $ \faucet -> do
+        let paymentSource = PaymentSource (walId faucet) minBound
+        let paymentDist (addr, coin) = pure $ PaymentDistribution (addrId addr) (WalletCoin coin)
 
-    forM_ (args ^. initialCoins) $ \coin -> do
-        -- NOTE
-        -- Making payments to a different address each time to cope with
-        -- grouping policy. That's actually a behavior we might want to
-        -- test in the future. So, we'll need to do something smarter here.
-        addr <- successfulRequest $ Client.postAddress $- NewAddress
-            Nothing
-            minBound
-            (walId wal)
+        forM_ (args ^. initialCoins) $ \coin -> do
+            -- NOTE
+            -- Making payments to a different address each time to cope with
+            -- grouping policy. That's actually a behavior we might want to
+            -- test in the future. So, we'll need to do something smarter here.
+            addr <- successfulRequest $ Client.postAddress $- NewAddress
+                Nothing
+                minBound
+                (walId wal)
 
-        txn <- request $ Client.postTransaction $- Payment
-            paymentSource
-            (paymentDist (addr, mkCoin coin))
-            Nothing
-            Nothing
+            txn <- request $ Client.postTransaction $- Payment
+                paymentSource
+                (paymentDist (addr, mkCoin coin))
+                Nothing
+                Nothing
 
-        expectTxStatusEventually [InNewestBlocks, Persisted] txn
+            expectTxStatusEventually [InNewestBlocks, Persisted] txn
     return wal
 
 
@@ -693,31 +845,27 @@ setupDestination
     -> Scenario Context IO Address
 setupDestination = \case
     RandomDestination -> do
-        (BackupPhrase mnemonic) <- liftIO (generate arbitrary)
-
-        let (_, esk) = safeDeterministicKeyGen
-                (mnemonicToSeed mnemonic)
-                mempty
-
-        let maddr = fst <$> deriveLvl2KeyPair
-                NetworkMainOrStage
-                (IsBootstrapEraAddr True)
-                (ShouldCheckPassphrase False)
-                mempty
-                esk
-                (getAccIndex minBound)
-                1
-
-        case maddr of
-            Nothing ->
-                fail "The impossible happened: failed to generate a \
-                    \ random address. This is really unexpected since we\
-                    \ aren't doing anything fancy here ... ?"
-
-            Just addr ->
-                return addr
-
+        bp <- liftIO (generate arbitrary)
+        unWalAddress <$> mkAddress bp 1
     LockedDestination ->
         fail "Asset-locked destination aren't yet implemented. This\
             \ requires slightly more work than it seems and will be\
             \ implemented later."
+
+
+-- | Lazily generate an "infinite" list of accounts (PubKey, Index)
+-- from a mnemonic using the new address derivation scheme V2 (BIP-44 with
+-- Ed25519 elliptic curve)
+genExternallyOwnedAccounts
+    :: (BackupPhrase, RawPassword)
+    -> PassPhrase
+    -> [(PublicKey, Word32)]
+genExternallyOwnedAccounts (BackupPhrase mnemonic, RawPassword mnePassphrase) passphrase =
+    let
+        esk = genEncryptedSecretKey (mnemonic, T.encodeUtf8 mnePassphrase) passphrase
+        accountXPrv = fmap derivePublicKey . deriveAccountPrivateKey passphrase esk
+    in
+        catMaybes
+        [ (,ix) <$> accountXPrv ix
+        | ix <- getAccIndex <$> [minBound..maxBound]
+        ]

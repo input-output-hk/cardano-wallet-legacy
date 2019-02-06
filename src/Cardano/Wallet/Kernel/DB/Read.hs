@@ -32,6 +32,7 @@ import           Pos.Core (Address, Coin, SlotId)
 
 import           Cardano.Wallet.Kernel.DB.AcidState (DB, dbHdWallets)
 import           Cardano.Wallet.Kernel.DB.BlockMeta (AddressMeta)
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Read as HD
 import           Cardano.Wallet.Kernel.DB.Spec.Pending (Pending)

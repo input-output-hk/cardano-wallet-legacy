@@ -1,15 +1,15 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# OPTIONS_GHC -Wno-compat #-}
--- We are missing (MonadFail Gen), therfore [a,b,c,d] <- vectorOf 4 will trigger a warning with -compat
+
 module Test.Spec.Submission (
     spec
   ) where
 
 import           Universum hiding (elems)
 
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, eskToHdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (HdAccountId (..),
-                     HdAccountIx (..), HdRootId (..), eskToHdRootId)
+                     HdAccountIx (..))
 import           Cardano.Wallet.Kernel.DB.Spec.Pending (Pending)
 import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending
 import           Cardano.Wallet.Kernel.Submission
@@ -183,7 +183,7 @@ dependentTransactions pm = do
     outputForB <- (Txp.TxOut <$> arbitrary <*> arbitrary)
     outputForC <- (Txp.TxOut <$> arbitrary <*> arbitrary)
     outputForD <- (Txp.TxOut <$> arbitrary <*> arbitrary)
-    [a,b,c,d] <- vectorOf 4 (Txp.genTxAux pm)
+    (a,b,c,d) <- let g = Txp.genTxAux pm in (,,,) <$> g <*> g <*> g <*> g
     let a' = a { Txp.taTx = (Txp.taTx a) {
                      Txp._txInputs  = inputForA :| mempty
                    , Txp._txOutputs = outputForA :| mempty

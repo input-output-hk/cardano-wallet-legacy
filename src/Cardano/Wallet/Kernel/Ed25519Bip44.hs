@@ -14,11 +14,15 @@ module Cardano.Wallet.Kernel.Ed25519Bip44
     , purposeIndex
     , coinTypeIndex
 
+    -- encrypted secret key generation
+    , genEncryptedSecretKey
+
     -- key derivation functions
     , deriveAddressPublicKey
     , deriveAddressPrivateKey
     , derivePublicKey
     , deriveAccountPrivateKey
+    , deriveAddressKeyPair
 
     -- helpers
     , isInternalChange
@@ -26,11 +30,13 @@ module Cardano.Wallet.Kernel.Ed25519Bip44
 
 import           Universum
 
-import           Pos.Crypto (EncryptedSecretKey (..), PassPhrase,
-                     PublicKey (..), checkPassMatches, encToPublic, isHardened)
-
 import           Cardano.Crypto.Wallet (DerivationScheme (DerivationScheme2),
-                     deriveXPrv, deriveXPub)
+                     deriveXPrv, deriveXPub, generateNew)
+import           Cardano.Mnemonic (Mnemonic, entropyToByteString,
+                     mnemonicToEntropy)
+import           Pos.Crypto (EncryptedSecretKey (..), PassPhrase,
+                     PublicKey (..), checkPassMatches, encToPublic, hash,
+                     isHardened, mkEncSecretWithSaltUnsafe, mkSalt)
 import           Test.QuickCheck (Arbitrary (..), elements)
 
 -- | Purpose is a constant set to 44' (or 0x8000002C) following the BIP43 recommendation.
@@ -135,3 +141,31 @@ deriveAccountPrivateKey passPhrase masterEncPrvKey@(EncryptedSecretKey masterXPr
         -- lvl3 derivation in bip44 is hardened derivation of account' chain
         accountXPrv = deriveXPrv DerivationScheme2 passPhrase coinTypeXPrv accountIx
     pure $ EncryptedSecretKey accountXPrv passHash
+
+-- | Derives address public/private key pair from the given master private key,
+-- using bip44 and derivation scheme 2
+deriveAddressKeyPair
+    :: PassPhrase                            -- Passphrase used to encrypt Master Private Key
+    -> EncryptedSecretKey                    -- Master Private Key
+    -> Word32                                -- Hardened Account Key Index
+    -> ChangeChain                           -- Change chain
+    -> Word32                                -- Non-hardened Address Key Index
+    -> Maybe (PublicKey, EncryptedSecretKey) -- Address Public Key and Private Key pair
+deriveAddressKeyPair passPhrase masterEncPrvKey accountIx changeChain addressIx = do
+    -- derive account private key from master private key
+    accountPrvKey <- deriveAccountPrivateKey passPhrase masterEncPrvKey accountIx
+    -- derive address private key from account private key
+    addressPrvKey <- deriveAddressPrivateKey passPhrase accountPrvKey changeChain addressIx
+    pure (derivePublicKey addressPrvKey, addressPrvKey)
+
+-- | Generate a Encrypted secret key from a given mnemonic.
+genEncryptedSecretKey
+    :: (Mnemonic n, ByteString) -- A mnemonic and its associated passphrase
+    -> PassPhrase -- A passphrase to encrypt the private key in memory
+    -> EncryptedSecretKey
+genEncryptedSecretKey (mw, mpw) spw =
+    let
+        ent = entropyToByteString $ mnemonicToEntropy mw
+        xprv = generateNew ent mpw spw
+    in
+        mkEncSecretWithSaltUnsafe (mkSalt $ hash ent) spw xprv

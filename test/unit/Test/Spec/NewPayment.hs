@@ -41,10 +41,11 @@ import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
                      (CoinSelectionOptions (..), ExpenseRegulation (..),
                      InputGrouping (..), newOptions)
 import           Cardano.Wallet.Kernel.DB.AcidState
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, eskToHdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel (..),
-                     HasSpendingPassword (..), HdAccountId (..),
-                     HdAccountIx (..), HdAddressIx (..), HdRootId (..),
-                     WalletName (..), eskToHdRootId, hdAccountIdIx)
+                     HasSpendingPassword (..), HdAccountBase (..),
+                     HdAccountId (..), HdAccountIx (..), HdAddressIx (..),
+                     WalletName (..), hdAccountIdIx)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Create (initHdRoot)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
                      (HardeningMode (..), deriveIndex)
@@ -53,12 +54,12 @@ import           Cardano.Wallet.Kernel.Internal (ActiveWallet, PassiveWallet,
                      wallets)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
-import qualified Cardano.Wallet.Kernel.PrefilterTx as Kernel
 import qualified Cardano.Wallet.Kernel.Transactions as Kernel
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
 import           Cardano.Wallet.WalletLayer (ActiveWalletLayer)
 import qualified Cardano.Wallet.WalletLayer as WalletLayer
 import qualified Cardano.Wallet.WalletLayer.Kernel.Conv as Kernel.Conv
+import qualified Util.Prefiltering as Kernel
 
 import qualified Test.Spec.Fixture as Fixture
 import           Util.Buildable (ShowThroughBuild (..))
@@ -120,7 +121,10 @@ prepareFixtures nm initialBalance toPay = do
             hdAccountId = Kernel.defaultHdAccountId newRootId
             hdAddress   = Kernel.defaultHdAddress nm esk emptyPassphrase newRootId
 
-        void $ liftIO $ update (pw ^. wallets) (CreateHdWallet newRoot hdAccountId hdAddress accounts)
+        let accs0 = M.unionWith (<>)
+                (M.singleton (HdAccountBaseFO hdAccountId) (mempty, maybeToList hdAddress))
+                (M.mapKeys HdAccountBaseFO accounts)
+        void $ liftIO $ update (pw ^. wallets) (CreateHdWallet newRoot accs0)
         return $ Fixture {
                            fixtureHdRootId = newRootId
                          , fixtureAccountId = newAccountId
@@ -162,8 +166,7 @@ withPayment :: MonadIO n
 withPayment pm initialBalance toPay action = do
     withFixture pm initialBalance toPay $ \keystore activeLayer _ Fixture{..} -> do
         liftIO $ Keystore.insert fixtureHdRootId fixtureESK keystore
-        let (HdRootId (InDb rootAddress)) = fixtureHdRootId
-        let sourceWallet = V1.WalletId (sformat build rootAddress)
+        let sourceWallet = V1.WalletId (sformat build fixtureHdRootId)
         let accountIndex = Kernel.Conv.toAccountId fixtureAccountId
         let destinations =
                 fmap (\(addr, coin) -> V1.PaymentDistribution (V1.WalAddress addr) (V1.WalletCoin coin)
@@ -185,8 +188,7 @@ spec = describe "NewPayment" $ do
             monadicIO $ do
                 pm <- pick arbitrary
                 withPayment pm (InitialADA 10000) (PayLovelace 10) $ \activeLayer newPayment -> do
-                    res <- liftIO ((WalletLayer.pay activeLayer) mempty
-                                                                 IgnoreGrouping
+                    res <- liftIO ((WalletLayer.pay activeLayer) IgnoreGrouping
                                                                  SenderPaysFee
                                                                  newPayment
                                   )

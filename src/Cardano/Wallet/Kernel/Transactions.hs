@@ -10,6 +10,7 @@ module Cardano.Wallet.Kernel.Transactions (
     , PaymentError(..)
     , EstimateFeesError(..)
     , RedeemAdaError(..)
+    , NumberOfMissingUtxos(..)
     , cardanoFee
     , mkStdTx
     , prepareUnsignedTxWithSources
@@ -51,9 +52,11 @@ import           Cardano.Wallet.Kernel.DB.AcidState (DB, NewForeignError,
                      NewPendingError)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
-import           Cardano.Wallet.Kernel.DB.InDb
+import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import           Cardano.Wallet.Kernel.DB.Read as Getters
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types
+import           Cardano.Wallet.Kernel.Ed25519Bip44
+                     (ChangeChain (ExternalChain), deriveAddressKeyPair)
 import           Cardano.Wallet.Kernel.Internal (ActiveWallet (..),
                      PassiveWallet (..), walletNode)
 import qualified Cardano.Wallet.Kernel.Internal as Internal
@@ -73,6 +76,7 @@ import           Pos.Chain.Txp as Core (TxAttributes, TxAux, TxIn, TxOut,
 import qualified Pos.Client.Txp.Util as CTxp
 import           Pos.Core (Address, Coin, TxFeePolicy (..), unsafeSubCoin)
 import qualified Pos.Core as Core
+import           Pos.Core.Attributes (Attributes (attrData))
 import           Pos.Core.NetworkMagic (NetworkMagic (..), makeNetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, PassPhrase, ProtocolMagic,
                      PublicKey, RedeemSecretKey, SafeSigner (..),
@@ -84,6 +88,17 @@ import           UTxO.Util (shuffleNE)
   Generating payments and estimating fees
 -------------------------------------------------------------------------------}
 
+data NumberOfMissingUtxos = NumberOfMissingUtxos Int
+
+instance Buildable NumberOfMissingUtxos where
+    build (NumberOfMissingUtxos number) =
+        bprint ("NumberOfMissingUtxos " % build) number
+
+instance Arbitrary NumberOfMissingUtxos where
+    arbitrary = oneof [ NumberOfMissingUtxos <$> arbitrary
+                      ]
+
+
 data NewTransactionError =
     NewTransactionUnknownAccount UnknownHdAccount
   | NewTransactionUnknownAddress UnknownHdAddress
@@ -91,6 +106,7 @@ data NewTransactionError =
   | NewTransactionErrorCreateAddressFailed Kernel.CreateAddressError
   | NewTransactionErrorSignTxFailed SignTransactionError
   | NewTransactionInvalidTxIn
+  | NewTransactionNotEnoughUtxoFragmentation NumberOfMissingUtxos
 
 instance Buildable NewTransactionError where
     build (NewTransactionUnknownAccount err) =
@@ -105,6 +121,9 @@ instance Buildable NewTransactionError where
         bprint ("NewTransactionErrorSignTxFailed " % build) err
     build NewTransactionInvalidTxIn =
         bprint "NewTransactionInvalidTxIn"
+    build (NewTransactionNotEnoughUtxoFragmentation err) =
+        bprint ("NewTransactionNotEnoughUtxoFragmentation" % build) err
+
 
 instance Arbitrary NewTransactionError where
     arbitrary = oneof [
@@ -116,6 +135,7 @@ instance Arbitrary NewTransactionError where
       , NewTransactionErrorCreateAddressFailed <$> arbitrary
       , NewTransactionErrorSignTxFailed <$> arbitrary
       , pure NewTransactionInvalidTxIn
+      , NewTransactionNotEnoughUtxoFragmentation <$> arbitrary
       ]
 
 data PaymentError = PaymentNewTransactionError NewTransactionError
@@ -213,6 +233,10 @@ newUnsignedTransaction ActiveWallet{..} options accountId payees = runExceptT $ 
     availableUtxo <- withExceptT NewTransactionUnknownAccount $ exceptT $
                        currentAvailableUtxo snapshot accountId
 
+
+    withExceptT NewTransactionNotEnoughUtxoFragmentation $ exceptT $
+        checkUtxoFragmentation payees availableUtxo
+
     -- STEP 1: Run coin selection.
     CoinSelFinalResult inputs outputs coins <-
       withExceptT NewTransactionErrorCoinSelectionFailed $ ExceptT $
@@ -245,6 +269,20 @@ newUnsignedTransaction ActiveWallet{..} options accountId payees = runExceptT $ 
 
     toTxOut :: (Address, Coin) -> TxOutAux
     toTxOut (a, c) = TxOutAux (TxOut a c)
+
+    checkUtxoFragmentation
+        :: NonEmpty (Address, Coin)
+        -> Utxo
+        -> Either NumberOfMissingUtxos ()
+    checkUtxoFragmentation outputs inputs =
+        let numberOfUtxo = Map.size inputs
+            numberOfOutputs = NonEmpty.length outputs
+            diff = numberOfOutputs - numberOfUtxo
+        in if diff > 0 then
+            Left $ NumberOfMissingUtxos diff
+           else
+            Right ()
+
 
 -- | Creates a new unsigned transaction.
 --
@@ -457,7 +495,7 @@ metaForNewTx time accountId txId inputs outputs allInpOurs spentInputsCoins allO
         , _txMetaCreationAt = time
         , _txMetaIsLocal = allInpOurs && allOutOurs
         , _txMetaIsOutgoing = gainedOutputsCoins < spentInputsCoins -- it`s outgoing if our inputs spent are more than the new utxo.
-        , _txMetaWalletId = _fromDb $ getHdRootId (accountId ^. hdAccountIdParent)
+        , _txMetaWalletId = accountId ^. hdAccountIdParent
         , _txMetaAccountIx = getHdAccountIx $ accountId ^. hdAccountIdIx
     }
   where
@@ -609,13 +647,32 @@ mkSigner nm spendingPassword (Just esk) snapshot addr =
                                        . HD.hdAddressIdParent
                                        . HD.hdAccountIdIx
                                        . to HD.getHdAccountIx
-                res = Core.deriveLvl2KeyPair nm
-                                             (Core.IsBootstrapEraAddr True)
-                                             (ShouldCheckPassphrase False)
-                                             spendingPassword
-                                             esk
-                                             accountIndex
-                                             addressIndex
+                mAddressPayload = hdAddr ^. HD.hdAddressAddress
+                                          . fromDb
+                                          . to Core.addrAttributes
+                                          . to attrData
+                                          . to Core.aaPkDerivationPath
+                res = case mAddressPayload of
+                    -- If there is some payload we expect this payload to be addressIx and accountIx
+                    -- used for old address scheme so we continue with using
+                    -- old HD address derivation scheme: simple bip32 with ed25519 v0
+                    Just _ -> Core.deriveLvl2KeyPair nm
+                                    (Core.IsBootstrapEraAddr True)
+                                    (ShouldCheckPassphrase False)
+                                    spendingPassword
+                                    esk
+                                    accountIndex
+                                    addressIndex
+                    -- If there is no payload we assume it is a new address scheme (which doesn't have payload)
+                    -- New HD address derivation scheme: bip44 with ed25519 v1
+                    Nothing -> first (Core.makePubKeyAddressBoot nm) <$>
+                        deriveAddressKeyPair
+                            spendingPassword
+                            esk
+                            accountIndex
+                            ExternalChain
+                            addressIndex
+
             -- eks address fix - we need to use the esk as returned
             -- from Core.deriveLvl2KeyPair rather than rely on the
             -- one from encrypted secret key delivered to mkSigner
@@ -737,7 +794,7 @@ redeemAda w@ActiveWallet{..} accId pw rsk = runExceptT $ do
               , _txMetaCreationAt = now
               , _txMetaIsLocal    = False -- input does not belong to wallet
               , _txMetaIsOutgoing = False -- increases wallet's balance
-              , _txMetaWalletId   = _fromDb $ getHdRootId (accId ^. hdAccountIdParent)
+              , _txMetaWalletId   = accId ^. hdAccountIdParent
               , _txMetaAccountIx  = getHdAccountIx (accId ^. hdAccountIdIx)
               }
         return (txAux, txMeta)

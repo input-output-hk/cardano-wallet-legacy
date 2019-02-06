@@ -35,6 +35,7 @@ import qualified Cardano.Wallet.Kernel.Addresses as Kernel
 import qualified Cardano.Wallet.Kernel.BListener as Kernel
 import qualified Cardano.Wallet.Kernel.DB.AcidState as DB
 import qualified Cardano.Wallet.Kernel.DB.BlockContext as DB
+import           Cardano.Wallet.Kernel.DB.HdRootId (eskToHdRootId)
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
 import qualified Cardano.Wallet.Kernel.DB.Resolved as DB
@@ -42,9 +43,9 @@ import qualified Cardano.Wallet.Kernel.Internal as Internal
 import           Cardano.Wallet.Kernel.Invariants as Kernel
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import qualified Cardano.Wallet.Kernel.Pending as Kernel
-import           Cardano.Wallet.Kernel.PrefilterTx (prefilterUtxo)
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import           Cardano.Wallet.Kernel.Transactions (toMeta)
+import           Util.Prefiltering (prefilterUtxo)
 
 import           Data.Validated
 import           Util.Buildable
@@ -227,7 +228,7 @@ equivalentT useWW activeWallet esk = \mkWallet w ->
                 -> Utxo
                 -> TranslateT EquivalenceViolation m HD.HdAccountId
     walletBootT ctxt utxo = do
-        let newRootId = HD.eskToHdRootId nm esk
+        let newRootId = eskToHdRootId nm esk
         let (Just defaultAddress) = Kernel.newHdAddress nm
                                                         esk
                                                         emptyPassphrase
@@ -241,11 +242,11 @@ equivalentT useWW activeWallet esk = \mkWallet w ->
             walletName
             assuranceLevel
             esk
-            (\root defaultAccount defAddress ->
-                Left $ DB.CreateHdWallet root
-                                         defaultAccount
-                                         defAddress
-                                         (prefilterUtxo (root ^. HD.hdRootId) esk utxo)
+            (\root defaultAccount defAddress -> do
+                let accs0 = Map.unionWith (<>)
+                        (Map.singleton (HD.HdAccountBaseFO defaultAccount) (mempty, maybeToList defAddress))
+                        (Map.mapKeys HD.HdAccountBaseFO (prefilterUtxo (root ^. HD.hdRootId) esk utxo))
+                Left $ DB.CreateHdWallet root accs0
             )
         case res of
              Left e -> createWalletErr (STB e)
@@ -260,7 +261,7 @@ equivalentT useWW activeWallet esk = \mkWallet w ->
 
             utxoByAccount = prefilterUtxo rootId esk utxo
             accountIds    = Map.keys utxoByAccount
-            rootId        = HD.eskToHdRootId nm esk
+            rootId        = eskToHdRootId nm esk
 
             createWalletErr e =
                 error $ "ERROR: could not create the HdWallet due to " <> show e

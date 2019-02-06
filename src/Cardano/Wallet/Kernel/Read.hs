@@ -21,7 +21,7 @@ import           Pos.Crypto (EncryptedSecretKey)
 import           Pos.Util.Wlog (Severity (..))
 
 import           Cardano.Wallet.Kernel.DB.AcidState (DB, Snapshot (..))
-import           Cardano.Wallet.Kernel.DB.HdWallet (HdRootId)
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.Read as Getters
 import           Cardano.Wallet.Kernel.Internal
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore

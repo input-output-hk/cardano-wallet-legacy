@@ -1,8 +1,10 @@
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE LambdaCase #-}
+
 module Cardano.Wallet.WalletLayer.Kernel.Addresses (
     createAddress
   , getAddresses
   , validateAddress
+  , importAddresses
   ) where
 
 import           Universum
@@ -27,7 +29,7 @@ import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import           Cardano.Wallet.WalletLayer (CreateAddressError (..),
-                     ValidateAddressError (..))
+                     ImportAddressError (..), ValidateAddressError (..))
 import           Cardano.Wallet.WalletLayer.Kernel.Conv
 
 createAddress :: MonadIO m
@@ -184,3 +186,25 @@ validateAddress rawText db = runExcept $ do
           , addrUsed          = False
           , addrOwnership     = V1.AddressAmbiguousOwnership
           }
+
+importAddresses
+    :: (MonadIO m)
+    => Kernel.PassiveWallet
+    -> V1.WalletId
+    -> V1.AccountIndex
+    -> [V1.WalAddress]
+    -> m (Either ImportAddressError (V1.BatchImportResult V1.WalAddress))
+importAddresses wallet wId accIx addrs = runExceptT $ do
+    accId <- withExceptT ImportAddressAddressDecodingFailed $
+        fromAccountId wId accIx
+    res <- withExceptT ImportAddressError $ ExceptT $ liftIO $
+        Kernel.importAddresses accId (V1.unWalAddress <$> addrs) wallet
+    return $ foldImportResults V1.WalAddress res
+  where
+    foldImportResults
+        :: (a -> b)
+        -> [Either a ()]
+        -> V1.BatchImportResult b
+    foldImportResults f = flip foldl' mempty $ \b -> \case
+        Left a  -> b <> V1.BatchImportResult 0 [f a]
+        Right _ -> b <> V1.BatchImportResult 1 []

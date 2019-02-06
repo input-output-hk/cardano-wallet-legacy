@@ -19,7 +19,6 @@ import           Servant ((:<|>) (..), (:>), Get, JSON)
 import           Servant.Client (BaseUrl (..), ClientEnv (..), ClientM,
                      ServantError (..), client, runClientM)
 
-import           Cardano.Wallet.API (WIPAPI)
 import qualified Cardano.Wallet.API.Internal as Internal
 import qualified Cardano.Wallet.API.V1 as V1
 import           Cardano.Wallet.Client
@@ -43,6 +42,8 @@ mkHttpClient baseUrl manager = WalletClient
         = run . postAddressR
     , getAddress
         = run . getAddressR
+    , importAddresses
+        = \x y -> run . importAddressesR x y
     -- wallets endpoints
     , postWallet
         = run . postWalletR
@@ -59,10 +60,6 @@ mkHttpClient baseUrl manager = WalletClient
         = \x -> run . updateWalletR x
     , getUtxoStatistics
         = run . getUtxoStatisticsR
-    , postEosWallet
-        = run . postEosWalletR
-    , deleteEosWallet
-        = unNoContent . run . deleteEosWalletR
     , postUnsignedTransaction
         = run . postUnsignedTransactionR
     , postSignedTransaction
@@ -115,8 +112,13 @@ mkHttpClient baseUrl manager = WalletClient
 
     , importWallet
         = run . importWalletR
-    }
 
+    -- Externally Owned Wallets Endpoints
+    , postEosWallet
+        = run . postEosWalletR
+    , getEosWallet
+        = run. getEosWalletR
+    }
   where
 
     -- Must give the type. GHC will not infer it to be polymorphic in 'a'.
@@ -133,10 +135,19 @@ mkHttpClient baseUrl manager = WalletClient
                     Just err -> ClientWalletError err
                     Nothing  -> ClientHttpError servantErr
             _ -> ClientHttpError servantErr
+
     getAddressIndexR
         :<|> postAddressR
         :<|> getAddressR
+        :<|> importAddressesR
         = addressesAPI
+
+    postEosWalletR
+        :<|> getEosWalletR
+        :<|> _
+        :<|> _
+        :<|> _
+        = eosWalletsAPI
 
     postWalletR
         :<|> getWalletIndexFilterSortsR
@@ -146,12 +157,6 @@ mkHttpClient baseUrl manager = WalletClient
         :<|> updateWalletR
         :<|> getUtxoStatisticsR
         = walletsAPI
-
-    postEosWalletR
-        :<|> deleteEosWalletR
-        :<|> postUnsignedTransactionR
-        :<|> postSignedTransactionR
-        = client (Proxy @ WIPAPI)
 
     deleteAccountR
         :<|> getAccountR
@@ -166,8 +171,9 @@ mkHttpClient baseUrl manager = WalletClient
         :<|> getTransactionIndexFilterSortsR
         :<|> getTransactionFeeR
         :<|> redeemAdaR
+        :<|> postUnsignedTransactionR
+        :<|> postSignedTransactionR
         = transactionsAPI
-
 
     nextUpdateR
         :<|> applyUpdateR
@@ -178,6 +184,7 @@ mkHttpClient baseUrl manager = WalletClient
 
     addressesAPI
         :<|> walletsAPI
+        :<|> eosWalletsAPI
         :<|> accountsAPI
         :<|> transactionsAPI
         :<|> getNodeSettingsR

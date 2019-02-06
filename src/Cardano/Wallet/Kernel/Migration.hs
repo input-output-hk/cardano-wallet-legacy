@@ -15,6 +15,7 @@ import           Pos.Crypto (EncryptedSecretKey)
 import           Pos.Util.Wlog (Severity (..))
 
 import qualified Cardano.Wallet.Kernel as Kernel
+import           Cardano.Wallet.Kernel.DB.HdRootId (eskToHdRootId)
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
 import           Cardano.Wallet.Kernel.Keystore as Keystore
@@ -101,7 +102,7 @@ restore :: Kernel.PassiveWallet
 restore pw forced esk = do
     let logMsg = pw ^. Kernel.walletLogMessage
         nm     = makeNetworkMagic (pw ^. Kernel.walletProtocolMagic)
-        rootId = HD.eskToHdRootId nm esk
+        rootId = eskToHdRootId nm esk
 
     let -- DEFAULTS for wallet restoration
         -- we don't have a spending password during migration

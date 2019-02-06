@@ -14,12 +14,22 @@
 ├─ transactions/
 │  ├─ certificates/
 │  │  └─•
+│  ├─ externally-signed/
+│  │  └─•
 │  ├─ fees/
+│  │  └─•
+│  ├─ unsigned/
 │  │  └─•
 │  ├─•
 │  ┆
 │  └─•
 └─ wallets/
+   ├─ <capture>/
+   │  └─ accounts/
+   │     └─ <capture>/
+   │        └─ addresses/
+   │           └─•
+   ┆
    ├─•
    ┆
    ├─•
@@ -34,6 +44,19 @@
    │  ├─•
    │  ┆
    │  ├─•
+   │  ┆
+   │  └─•
+   ┆
+   ├─ externally-owned/
+   │  ├─•
+   │  ┆
+   │  ┆
+   │  ├─ <capture>/
+   │  │  ├─•
+   │  │  ┆
+   │  │  ├─•
+   │  │  ┆
+   │  │  └─•
    │  ┆
    │  └─•
    ┆

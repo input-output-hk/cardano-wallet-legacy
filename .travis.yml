@@ -221,12 +221,11 @@ jobs:
     # Upload API doc automatically on each build against `develop` to `gh-pages`
     script:
     - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
-    - travis_wait 42 stack --no-terminal build cardano-wallet:exe:cardano-generate-swagger-file --fast
-    - stack exec -- cardano-generate-swagger-file --target wallet@v1
+    - travis_wait 42 stack --no-terminal build cardano-wallet:exe:cardano-wallet-generate-swagger --fast
+    - stack exec -- cardano-wallet-generate-swagger --target wallet@v1
     - git add swagger.json && git commit -m $TRAVIS_COMMIT
-    - git checkout gh-pages && git cherry-pick -X theirs -
+    - git checkout gh-pages && git cherry-pick -X theirs -n - && git commit --allow-empty --no-edit
     - git push -f -q https://KtorZ:$GITHUB_API_KEY@github.com/input-output-hk/cardano-wallet gh-pages &>/dev/null # TODO: Create a specific CI user with its own key
 
   allow_failures:
-    - env: ACTION=documentation
     - env: ACTION=weeder

@@ -8,7 +8,7 @@ import           Cardano.Wallet.API.V1.Types
 
 import           Servant
 
-type API = Tags '["Transactions"] :>
+type API = Tag "Transactions" 'NoTagDescription :>
     (    "transactions" :> Summary "Generates a new transaction from the source to one or multiple target addresses."
                         :> ReqBody '[ValidJSON] Payment
                         :> Post '[ValidJSON] (APIResponse Transaction)
@@ -30,5 +30,15 @@ type API = Tags '["Transactions"] :>
     :<|> "transactions" :> "certificates"
                         :> Summary "Redeem a certificate"
                         :> ReqBody '[ValidJSON] Redemption
+                        :> Post '[ValidJSON] (APIResponse Transaction)
+
+    :<|> "transactions" :> "unsigned"
+                        :> Summary "Creates a new unsigned transaction."
+                        :> ReqBody '[ValidJSON] Payment
+                        :> Post '[ValidJSON] (APIResponse UnsignedTransaction)
+
+    :<|> "transactions" :> "externally-signed"
+                        :> Summary "Publish an externally-signed transaction."
+                        :> ReqBody '[ValidJSON] SignedTransaction
                         :> Post '[ValidJSON] (APIResponse Transaction)
     )
