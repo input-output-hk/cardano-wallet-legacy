@@ -9,7 +9,7 @@ import           Pos.Core as Core
 
 import           Servant
 
-type API = Tags '["Wallets"] :>
+type FullyOwnedAPI = Tag "Wallets" 'NoTagDescription :>
     (    "wallets" :> Summary "Creates a new or restores an existing Wallet."
                    :> ReqBody '[ValidJSON] (New Wallet)
                    :> PostCreated '[ValidJSON] (APIResponse Wallet)
@@ -40,4 +40,46 @@ type API = Tags '["Wallets"] :>
     :<|> "wallets" :> CaptureWalletId :> "statistics" :> "utxos"
                    :> Summary "Returns Utxo statistics for the Wallet identified by the given walletId."
                    :> Get '[ValidJSON] (APIResponse UtxoStatistics)
+    )
+
+type ExternallyOwnedAPI = Tag "Externally Owned Wallets" 'NoTagDescription
+    :> ( "wallets"
+        :> "externally-owned"
+        :> Summary "Creates a new or restores an existing Wallet."
+        :> ReqBody '[ValidJSON] (NewEosWallet)
+        :> PostCreated '[ValidJSON] (APIResponse EosWallet)
+
+    :<|> "wallets"
+        :> "externally-owned"
+        :> Summary "Returns the Wallet identified by the given walletId."
+        :> CaptureWalletId
+        :> Get '[ValidJSON] (APIResponse EosWallet)
+
+    :<|> "wallets"
+        :> "externally-owned"
+        :> Summary "Update the Wallet identified by the given walletId."
+        :> CaptureWalletId
+        :> ReqBody '[ValidJSON] (UpdateEosWallet)
+        :> Put '[ValidJSON] (APIResponse EosWallet)
+
+    :<|> "wallets"
+        :> "externally-owned"
+        :> Summary "Deletes the given Wallet and all its accounts."
+        :> CaptureWalletId
+        :> DeleteNoContent '[ValidJSON] NoContent
+
+    :<|> "wallets"
+        :> "externally-owned"
+        :> Summary "Returns a list of the available wallets."
+        :> WalletRequestParams
+        :> FilterBy
+           '[ WalletId
+            , Core.Coin
+            ] EosWallet
+        :> SortBy
+           '[ Core.Coin
+            , WalletTimestamp
+            ] EosWallet
+        :> Get '[ValidJSON] (APIResponse [EosWallet])
+
     )

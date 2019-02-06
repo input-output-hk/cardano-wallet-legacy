@@ -12,8 +12,9 @@ import           Pos.Crypto (EncryptedSecretKey, PassPhrase (..), PublicKey,
                      checkPassMatches, emptySalt, mkEncSecretWithSaltUnsafe)
 
 import           Cardano.Wallet.Kernel.Ed25519Bip44 (ChangeChain,
-                     deriveAccountPrivateKey, deriveAddressPrivateKey,
-                     deriveAddressPublicKey, derivePublicKey)
+                     deriveAccountPrivateKey, deriveAddressKeyPair,
+                     deriveAddressPrivateKey, deriveAddressPublicKey,
+                     derivePublicKey)
 
 import qualified Data.ByteString as BS
 import           Test.Hspec (Spec, describe, it)
@@ -223,6 +224,90 @@ prop_deriveAccountPrivateKeyHardened (InfiniteList seed _) passPhrase@(PassPhras
             masterEncPrvKey
             accountIx
 
+-- | Deriving address public/private key pair should always succeed
+-- if account index is hardened (address index is fixed)
+prop_deriveAddressKeyPairAccountKeyHardened
+    :: InfiniteList Word8
+    -> PassPhrase
+    -> Hardened
+    -> ChangeChain
+    -> NonHardened
+    -> Property
+prop_deriveAddressKeyPairAccountKeyHardened (InfiniteList seed _) passPhrase@(PassPhrase passBytes) (Hardened accountIx) changeChain (NonHardened addressIx) =
+    property $ isJust addrPrvKey
+  where
+    masterEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
+    addrPrvKey =
+        deriveAddressKeyPair
+            passPhrase
+            masterEncPrvKey
+            accountIx
+            changeChain
+            addressIx
+
+-- | Deriving address public/private key pair should always fail
+-- if account index is non-hardened (address index is fixed)
+prop_deriveAddressKeyPairAccountKeyNonHardened
+    :: InfiniteList Word8
+    -> PassPhrase
+    -> NonHardened
+    -> ChangeChain
+    -> NonHardened
+    -> Property
+prop_deriveAddressKeyPairAccountKeyNonHardened (InfiniteList seed _) passPhrase@(PassPhrase passBytes) (NonHardened accountIx) changeChain (NonHardened addressIx) =
+    property $ isNothing addrPrvKey
+  where
+    masterEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
+    addrPrvKey =
+        deriveAddressKeyPair
+            passPhrase
+            masterEncPrvKey
+            accountIx
+            changeChain
+            addressIx
+
+-- | Deriving address public/private key pair should always fail
+-- if address index is hardened (account index is fixed)
+prop_deriveAddressKeyPairAddressKeyHardened
+    :: InfiniteList Word8
+    -> PassPhrase
+    -> Hardened
+    -> ChangeChain
+    -> Hardened
+    -> Property
+prop_deriveAddressKeyPairAddressKeyHardened (InfiniteList seed _) passPhrase@(PassPhrase passBytes) (Hardened accountIx) changeChain (Hardened addressIx) =
+    property $ isNothing addrPrvKey
+  where
+    masterEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
+    addrPrvKey =
+        deriveAddressKeyPair
+            passPhrase
+            masterEncPrvKey
+            accountIx
+            changeChain
+            addressIx
+
+-- | Deriving address public/private key pair should always succeed
+-- if address index is non-hardened (account index is fixed)
+prop_deriveAddressKeyPairAddressKeyNonHardened
+    :: InfiniteList Word8
+    -> PassPhrase
+    -> Hardened
+    -> ChangeChain
+    -> NonHardened
+    -> Property
+prop_deriveAddressKeyPairAddressKeyNonHardened (InfiniteList seed _) passPhrase@(PassPhrase passBytes) (Hardened accountIx) changeChain (NonHardened addressIx) =
+    property $ isJust addrPrvKey
+  where
+    masterEncPrvKey = mkEncSecretWithSaltUnsafe emptySalt passPhrase $ generate (BS.pack $ take 32 seed) passBytes
+    addrPrvKey =
+        deriveAddressKeyPair
+            passPhrase
+            masterEncPrvKey
+            accountIx
+            changeChain
+            addressIx
+
 spec :: Spec
 spec = describe "Ed25519Bip44" $ do
     describe "Deriving address public key" $ do
@@ -246,3 +331,12 @@ spec = describe "Ed25519Bip44" $ do
             property prop_deriveAccountPrivateKeyNonHardened
         it "succeeds if account index is hardened" $
             property prop_deriveAccountPrivateKeyHardened
+    describe "Deriving address private/public key pair" $ do
+        it "fails if account index is non-hardened" $
+            property prop_deriveAddressKeyPairAccountKeyNonHardened
+        it "succeeds if account index is hardened" $
+            property prop_deriveAddressKeyPairAccountKeyHardened
+        it "fails if address index is hardened" $
+            property prop_deriveAddressKeyPairAddressKeyHardened
+        it "succeeds if account index is non-hardened" $
+            property prop_deriveAddressKeyPairAddressKeyNonHardened

@@ -26,14 +26,8 @@ import           Pos.Web (TlsParams (..))
 -- plus the wallet backend specific options.
 data WalletStartupOptions = WalletStartupOptions {
       wsoNodeArgs            :: !CommonNodeArgs
-    , wsoWalletBackendParams :: !ChooseWalletBackend
+    , wsoWalletBackendParams :: !WalletBackendParams
     } deriving Show
-
--- | TODO: Once we get rid of the legacy wallet, remove this.
-data ChooseWalletBackend =
-    WalletLegacy !WalletBackendParams
-  | WalletNew    !NewWalletBackendParams
-  deriving Show
 
 -- | DB-specific options.
 data WalletDBOptions = WalletDBOptions {
@@ -51,63 +45,23 @@ data WalletDBOptions = WalletDBOptions {
 -- Named with the suffix `Params` to honour other types of
 -- parameters like `NodeParams` or `SscParams`.
 data WalletBackendParams = WalletBackendParams
-    { enableMonitoringApi     :: !Bool
-    -- ^ Whether or not to run the monitoring API.
-    --
-    -- Note that this parameter is redundant, as we currently delegate to the
-    -- Node API and do not run a monitoring server anymore.
-    , monitoringApiPort       :: !Word16
-    -- ^ The port the monitoring API should listen to.
-    --
-    -- Note that this parameter is redundant, as we currently delegate to the
-    -- Node API and do not run a monitoring server anymore.
-    , walletTLSParams         :: !(Maybe TlsParams)
-    -- ^ The TLS parameters.
-    , walletAddress           :: !NetworkAddress
+    { walletTLSParams      :: !TlsParams
+    -- ^ The TLS parameters for the wallet server
+    , nodeTLSParams        :: !TlsParams
+    -- ^ The TLS parameters for the node server
+    , walletAddress        :: !NetworkAddress
     -- ^ The wallet address.
-    , walletDocAddress        :: !(Maybe NetworkAddress)
+    , walletDocAddress     :: !(Maybe NetworkAddress)
     -- ^ The wallet documentation address.
-    , walletRunMode           :: !RunMode
-    -- ^ The mode this node is running in.
-    , walletDbOptions         :: !WalletDBOptions
+    , walletDbOptions      :: !WalletDBOptions
     -- ^ DB-specific options.
-    , forceFullMigration      :: !Bool
-    , walletNodeAddress       :: !NetworkAddress
+    , forceFullMigration   :: !Bool
+    -- ^ Force non-lenient migration
+    , walletNodeAddress    :: !NetworkAddress
     -- ^ The IP address and port for the node backend.
-    , walletNodeTlsClientCert :: FilePath
-    -- ^ A filepath to the Node's public certficate
-    , walletNodeTlsPrivKey    :: FilePath
-    -- ^ A filepath to the TLS private key for the Node API.
-    , walletNodeTlsCaCertPath :: FilePath
-    -- ^ A filepath to the TLS CA Certificate for communicating with the Node
-    -- API.
+    , walletNodeDocAddress :: !NetworkAddress
+    -- ^ The IP address and port for the node backend documentation
     } deriving Show
-
--- | Start up parameters for the new wallet backend
---
--- TODO: This just wraps the legacy parameters at the moment.
-data NewWalletBackendParams = NewWalletBackendParams WalletBackendParams
-    deriving (Show)
-
-getWalletDbOptions :: NewWalletBackendParams -> WalletDBOptions
-getWalletDbOptions (NewWalletBackendParams WalletBackendParams{..}) =
-    walletDbOptions
-
-getFullMigrationFlag :: NewWalletBackendParams -> Bool
-getFullMigrationFlag (NewWalletBackendParams WalletBackendParams{..}) =
-    forceFullMigration
-
--- | A richer type to specify in which mode we are running this node.
-data RunMode = ProductionMode
-             -- ^ Run in production mode
-             | DebugMode
-             -- ^ Run in debug mode
-             deriving Show
-
--- | Converts a @GenesisKeysInclusion@ into a @Bool@.
-isDebugMode :: RunMode -> Bool
-isDebugMode ProductionMode = False
-isDebugMode DebugMode      = True
 
 -- | Parses and returns the @WalletStartupOptions@ from the command line.
 getWalletNodeOptions :: HasCompileInfo => IO WalletStartupOptions
@@ -125,115 +79,70 @@ getWalletNodeOptions = execParser programInfo
 
 -- | The main @Parser@ for the @WalletStartupOptions@
 walletStartupOptionsParser :: Parser WalletStartupOptions
-walletStartupOptionsParser = WalletStartupOptions <$> CLI.commonNodeArgsParser
-                                                  <*> chooseWalletBackendParser
+walletStartupOptionsParser = WalletStartupOptions
+    <$> CLI.commonNodeArgsParser
+    <*> walletBackendParamsParser
 
--- | Choose between the two backends
---
--- TODO: This implementation of the parser is not very elegant. I'd prefer
--- something along the lines of
---
--- > chooseWalletBackendParser :: Parser ChooseWalletBackend
--- > chooseWalletBackendParser = asum [
--- >       WalletNew    <$> newWalletBackendParamsParser
--- >     , WalletLegacy <$> walletBackendParamsParser
--- >     ]
---
--- but for some reason this isn't working, perhaps because optparse-applicative
--- isn't backtracking enough? Dunno.
-chooseWalletBackendParser :: Parser ChooseWalletBackend
-chooseWalletBackendParser = choose
-    <$> walletBackendParamsParser
-    <*> (switch $ mconcat [
-            long "legacy-wallet"
-          , help "Use the legacy wallet implementation (NOT RECOMMENDED)"
-          ])
-  where
-    choose opts True  = WalletLegacy $ opts
-    choose opts False = WalletNew    $ NewWalletBackendParams opts
 
 -- | The @Parser@ for the @WalletBackendParams@.
 walletBackendParamsParser :: Parser WalletBackendParams
-walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
-                                                <*> monitoringApiPortParser
-                                                <*> tlsParamsParser
-                                                <*> walletAddressParser
-                                                <*> docAddressParser
-                                                <*> runModeParser
-                                                <*> dbOptionsParser
-                                                <*> forceFullMigrationParser
-                                                <*> nodeAddressParser
-                                                <*> tlsClientCertPathParser
-                                                <*> tlsPrivKeyParser
-                                                <*> tlsCaCertPathParser
+walletBackendParamsParser = mkWalletBackendParams
+    <$> (not <$> noClientAuthParser)
+    <*> caPathParser
+    <*> serverCertPathParser
+    <*> serverKeyPathParser
+    <*> clientCertPathParser
+    <*> clientKeyPathParser
+    <*> walletAddressParser
+    <*> docAddressParser
+    <*> dbOptionsParser
+    <*> forceFullMigrationParser
+    <*> nodeAddressParser
+    <*> nodeDocAddressParser
   where
-    enableMonitoringApiParser :: Parser Bool
-    enableMonitoringApiParser =
-        switch
-        ( long "monitoring-api"
-        <> help
-            ( "Activate the node monitoring API. This option doesn't do "
-            <> "anything anymore, as the monitoring API has been folded into "
-            <> "the API exposed by the node process."
+    -- NOTE
+    -- We do this to avoid having two flag for the CA cert and the --no-client-auth
+    -- (one for the wallet server and one for the node).
+    -- This way, we enforce, by construction, that they are the same.
+    mkWalletBackendParams auth caCrt srvCrt srvKey clCrt clKey =
+        WalletBackendParams
+            (TlsParams
+                { tpCertPath   = srvCrt
+                , tpCaPath     = caCrt
+                , tpKeyPath    = srvKey
+                , tpClientAuth = auth
+                }
             )
-        )
-
-    monitoringApiPortParser :: Parser Word16
-    monitoringApiPortParser = CLI.webPortOption 8080
-        $ "Port for the monitoring API. This option doesn't do anything "
-        <> "anymore, as the monitoring API has been folded into the API exposed"
-        <> "by the node process."
+            (TlsParams
+                { tpCertPath   = clCrt
+                , tpCaPath     = caCrt
+                , tpKeyPath    = clKey
+                , tpClientAuth = auth
+                }
+            )
 
     walletAddressParser :: Parser NetworkAddress
     walletAddressParser = networkAddrOption
-        $  long "wallet-address"
+        $  long "wallet-api-address"
         <> help "IP and port for backend wallet API."
         <> value (localhost, 8090)
 
     nodeAddressParser :: Parser NetworkAddress
     nodeAddressParser = networkAddrOption
-        $  long "wallet-node-api-address"
+        $  long "node-api-address"
         <> help "IP and port for underlying wallet's node monitoring API."
         <> value (localhost, 8080)
 
-    tlsClientCertPathParser :: Parser FilePath
-    tlsClientCertPathParser = strOption
-        $ long "node-tls-client-cert"
-        <> metavar "FILEPATH"
-        <> help
-            ( "Path to TLS client public certificate used to authenticate to "
-            <> "the Node API."
-            )
-
-    tlsPrivKeyParser :: Parser FilePath
-    tlsPrivKeyParser = strOption
-        $ long "node-tls-key"
-        <> metavar "FILEPATH"
-        <> help
-            ( "Path to TLS client private key used to authenticate to the "
-            <> "Node API."
-            )
-
-    tlsCaCertPathParser :: Parser FilePath
-    tlsCaCertPathParser = strOption
-        $ long "node-tls-ca-cert"
-        <> metavar  "FILEPATH"
-        <> help
-            ( "Path to TLS CA public certificate used to authenticate to the "
-            <> "Node API."
-            )
+    nodeDocAddressParser :: Parser NetworkAddress
+    nodeDocAddressParser = networkAddrOption
+        $  long "node-doc-address"
+        <> help "IP and port for underlying wallet's node monitoring API Documentation."
+        <> value (localhost, 8180)
 
     docAddressParser :: Parser (Maybe NetworkAddress)
     docAddressParser = optional $ networkAddrOption
         $  long "wallet-doc-address"
         <> help "IP and port for backend wallet API documentation."
-
-    runModeParser :: Parser RunMode
-    runModeParser = (\debugMode -> if debugMode then DebugMode else ProductionMode) <$>
-        switch (long "wallet-debug" <>
-                help "Run wallet with debug params (e.g. include \
-                     \all the genesis keys in the set of secret keys)."
-               )
 
     forceFullMigrationParser :: Parser Bool
     forceFullMigrationParser = switch $
@@ -243,60 +152,49 @@ walletBackendParamsParser = WalletBackendParams <$> enableMonitoringApiParser
                                \migration will stop and the node will crash, \
                                \instead of just logging the error."
 
-tlsParamsParser :: Parser (Maybe TlsParams)
-tlsParamsParser = constructTlsParams <$> certPathParser
-                                     <*> keyPathParser
-                                     <*> caPathParser
-                                     <*> (not <$> noClientAuthParser)
-                                     <*> disabledParser
-  where
-    constructTlsParams tpCertPath tpKeyPath tpCaPath tpClientAuth disabled =
-        guard (not disabled) $> TlsParams{..}
-
-    certPathParser :: Parser FilePath
-    certPathParser = strOption (CLI.templateParser
-                                "tlscert"
-                                "FILEPATH"
-                                "Path to file with TLS certificate"
-                                <> value "scripts/tls-files/server.crt"
-                               )
-
-    keyPathParser :: Parser FilePath
-    keyPathParser = strOption (CLI.templateParser
-                               "tlskey"
-                               "FILEPATH"
-                               "Path to file with TLS key"
-                               <> value "scripts/tls-files/server.key"
-                              )
-
     caPathParser :: Parser FilePath
-    caPathParser = strOption (CLI.templateParser
-                              "tlsca"
-                              "FILEPATH"
-                              "Path to file with TLS certificate authority"
-                              <> value "scripts/tls-files/ca.crt"
-                             )
+    caPathParser = strOption
+        $ long "tls-ca-cert"
+        <> metavar "FILEPATH"
+        <> help "Path to TLS CA public certificate which signed both wallet and node certificates"
 
     noClientAuthParser :: Parser Bool
     noClientAuthParser = switch $
-                         long "no-client-auth" <>
-                         help "Disable TLS client verification. If turned on, \
-                              \no client certificate is required to talk to \
-                              \the API."
+        long "tls-no-client-auth" <>
+        help "Disable TLS client verification. If turned on,\
+            \ no client certificate is required to talk to the API."
 
-    disabledParser :: Parser Bool
-    disabledParser = switch $
-                     long "no-tls" <>
-                     help "Disable tls. If set, 'tlscert', 'tlskey' \
-                          \and 'tlsca' options are ignored"
+    serverCertPathParser :: Parser FilePath
+    serverCertPathParser = strOption
+        $ long "tls-wallet-server-cert"
+        <> metavar "FILEPATH"
+        <> help "Path to TLS server public certificate used to identify the wallet server"
 
+    serverKeyPathParser :: Parser FilePath
+    serverKeyPathParser = strOption
+        $ long "tls-wallet-server-key"
+        <> metavar "FILEPATH"
+        <> help "Path to TLS server private key used to identify the wallet server"
+
+    clientCertPathParser :: Parser FilePath
+    clientCertPathParser = strOption
+        $ long "tls-node-client-cert"
+        <> metavar "FILEPATH"
+        <> help "Path to TLS client public certificate used to authenticate to the node server"
+
+    clientKeyPathParser :: Parser FilePath
+    clientKeyPathParser = strOption
+        $ long "tls-node-client-key"
+        <> metavar "FILEPATH"
+        <> help "Path to TLS client private key used to authenticate to the node server"
 
 -- | The parser for the @WalletDBOptions@.
 dbOptionsParser :: Parser WalletDBOptions
-dbOptionsParser = WalletDBOptions <$> dbPathParser
-                                  <*> rebuildDbParser
-                                  <*> acidIntervalParser
-                                  <*> flushDbParser
+dbOptionsParser = WalletDBOptions
+    <$> dbPathParser
+    <*> rebuildDbParser
+    <*> acidIntervalParser
+    <*> flushDbParser
   where
     dbPathParser :: Parser FilePath
     dbPathParser = strOption (long  "wallet-db-path" <>

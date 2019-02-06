@@ -42,6 +42,10 @@ instance ToIndex Wallet WalletId where
     toIndex _ x = Just (WalletId x)
     accessIx Wallet{..} = walId
 
+instance ToIndex EosWallet WalletId where
+    toIndex _ = toIndex (Proxy @Wallet)
+    accessIx EosWallet{..} = eoswalId
+
 instance ToIndex Wallet Core.Coin where
     toIndex _ x = case readMaybe (T.unpack x) of
         Nothing                       -> Nothing
@@ -49,9 +53,17 @@ instance ToIndex Wallet Core.Coin where
         Just c                        -> Just (Core.mkCoin c)
     accessIx Wallet{..} = let (WalletCoin balance) = walBalance in balance
 
+instance ToIndex EosWallet Core.Coin where
+    toIndex _ = toIndex (Proxy @Wallet)
+    accessIx EosWallet{..} = let (WalletCoin balance) = eoswalBalance in balance
+
 instance ToIndex Wallet WalletTimestamp where
     toIndex _ = fmap WalletTimestamp . Core.parseTimestamp
     accessIx = walCreatedAt
+
+instance ToIndex EosWallet WalletTimestamp where
+    toIndex _ = toIndex (Proxy @Wallet)
+    accessIx  = eoswalCreatedAt
 
 instance ToIndex Transaction WalletTxId where
     toIndex _ = fmap WalletTxId . rightToMaybe . decodeHash
@@ -73,6 +85,10 @@ instance HasPrimKey Wallet where
     type PrimKey Wallet = WalletId
     primKey = walId
 
+instance HasPrimKey EosWallet where
+    type PrimKey EosWallet = WalletId
+    primKey = eoswalId
+
 instance HasPrimKey Account where
     type PrimKey Account = AccountIndex
     primKey = accIndex
@@ -91,6 +107,7 @@ type SecondaryTransactionIxs   = '[WalletTimestamp]
 type SecondaryAccountIxs       = '[]
 type SecondaryWalletAddressIxs = '[]
 
+type instance IndicesOf EosWallet     = SecondaryWalletIxs
 type instance IndicesOf Wallet        = SecondaryWalletIxs
 type instance IndicesOf Account       = SecondaryAccountIxs
 type instance IndicesOf Transaction   = SecondaryTransactionIxs
@@ -113,6 +130,11 @@ instance IxSet.Indexable (WalletId ': SecondaryWalletIxs)
                          (OrdByPrimKey Wallet) where
     indices = ixList (ixFun ((:[]) . unWalletCoin . walBalance))
                      (ixFun ((:[]) . walCreatedAt))
+
+instance IxSet.Indexable (WalletId ': SecondaryWalletIxs)
+                         (OrdByPrimKey EosWallet) where
+    indices = ixList (ixFun ((:[]) . unWalletCoin . eoswalBalance))
+                     (ixFun ((:[]) . eoswalCreatedAt))
 
 instance IxSet.Indexable (WalletTxId ': SecondaryTransactionIxs)
                          (OrdByPrimKey Transaction) where
@@ -137,6 +159,10 @@ type family IndexToQueryParam resource ix where
     IndexToQueryParam Wallet  Core.Coin               = "balance"
     IndexToQueryParam Wallet  WalletId                = "id"
     IndexToQueryParam Wallet  WalletTimestamp         = "created_at"
+
+    IndexToQueryParam EosWallet  Core.Coin            = "balance"
+    IndexToQueryParam EosWallet  WalletId             = "id"
+    IndexToQueryParam EosWallet  WalletTimestamp      = "created_at"
 
     IndexToQueryParam WalletAddress (WalAddress)      = "address"
 
@@ -167,6 +193,9 @@ instance KnownQueryParam Account AccountIndex
 instance KnownQueryParam Wallet Core.Coin
 instance KnownQueryParam Wallet WalletId
 instance KnownQueryParam Wallet WalletTimestamp
+instance KnownQueryParam EosWallet Core.Coin
+instance KnownQueryParam EosWallet WalletId
+instance KnownQueryParam EosWallet WalletTimestamp
 instance KnownQueryParam WalletAddress WalAddress
 instance KnownQueryParam Transaction WalletTxId
 instance KnownQueryParam Transaction WalletTimestamp

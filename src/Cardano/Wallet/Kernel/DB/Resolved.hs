@@ -1,21 +1,24 @@
--- | Resolved blocks and transactions
-module Cardano.Wallet.Kernel.DB.Resolved (
-    -- * Resolved blocks and transactions
-    ResolvedInput
-  , ResolvedTx(..)
-  , ResolvedBlock(..)
-    -- * MetaData
-  , resolvedToTxMeta
-    -- ** Lenses
-  , rtxInputs
-  , rtxOutputs
-  , rtxMeta
-  , rbTxs
-  , rbContext
-  , rbMeta
-  ) where
+{-# LANGUAGE LambdaCase #-}
 
-import           Universum
+-- | Resolved blocks and transactions
+module Cardano.Wallet.Kernel.DB.Resolved
+    ( -- * Resolved blocks and transactions
+      ResolvedTx(..)
+    , ResolvedBlock(..)
+
+      -- * Lenses
+    , rtxInputs
+    , rtxOutputs
+    , rtxMeta
+    , rbTxs
+    , rbContext
+    , rbMeta
+
+      -- * Metadata
+    , resolvedToTxMetas
+    ) where
+
+import           Universum hiding (truncate)
 
 import           Control.Lens.TH (makeLenses)
 import qualified Data.List.NonEmpty as NE
@@ -25,25 +28,21 @@ import qualified Formatting.Buildable
 
 import           Serokell.Util (listJson, mapJson, pairF)
 
-import qualified Pos.Chain.Txp as Core
-import           Pos.Core (Coin, Timestamp)
+import           Cardano.Wallet.Kernel.DB.BlockContext (BlockContext)
+import           Cardano.Wallet.Kernel.DB.HdWallet (HdAccountId (..),
+                     HdAccountIx (..), IsOurs (..), hdAccountIdIx,
+                     hdAccountIdParent, hdAddressId, hdAddressIdParent)
+import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
+import           Cardano.Wallet.Kernel.DB.TxMeta.Types (TxMeta (..))
+import           Cardano.Wallet.Kernel.Util.Core (absCoin, sumCoinsUnsafe)
+import           Pos.Chain.Txp (TxId, TxIn (..), TxOut (..), TxOutAux (..),
+                     Utxo)
+import           Pos.Core (Address, Coin, Timestamp)
 
-import           Cardano.Wallet.Kernel.DB.BlockContext
-import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
-import           Cardano.Wallet.Kernel.DB.InDb
-import           Cardano.Wallet.Kernel.DB.TxMeta.Types
-import           Cardano.Wallet.Kernel.Util.Core
 
 {-------------------------------------------------------------------------------
   Resolved blocks and transactions
 -------------------------------------------------------------------------------}
-
--- | Resolved input
---
--- A transaction input @(h, i)@ points to the @i@th output of the transaction
--- with hash @h@, which is not particularly informative. The corresponding
--- 'ResolvedInput' is obtained by looking up what that output actually is.
-type ResolvedInput = Core.TxOutAux
 
 -- | (Unsigned) transaction with inputs resolved
 --
@@ -52,44 +51,17 @@ type ResolvedInput = Core.TxOutAux
 -- represented here.
 data ResolvedTx = ResolvedTx {
       -- | Transaction inputs
-      _rtxInputs  :: InDb (NonEmpty (Core.TxIn, ResolvedInput))
+      -- A transaction input @(h, i)@ points to the @i@th output of the transaction
+      -- with hash @h@, which is not particularly informative. The corresponding
+      -- 'ResolvedInput' is obtained by looking up what that output actually is.
+      _rtxInputs  :: InDb (NonEmpty (TxIn, TxOutAux))
 
       -- | Transaction outputs
-    , _rtxOutputs :: InDb Core.Utxo
+    , _rtxOutputs :: InDb Utxo
 
      -- | Transaction Meta
-    , _rtxMeta    :: InDb (Core.TxId, Timestamp)
+    , _rtxMeta    :: InDb (TxId, Timestamp)
     }
-
--- | This is used when apply block is called, during prefiltering, so related inputs
--- and outputs to the HDAccount are known to the caller.
--- @spentInputsCoins@ is the coins from input addresses of the account. They reduce the balance.
--- @gainedOutputsCoins@ is the coins from output addresses of the account. They increase the balance.
--- @allOurs@ indictes if all inputs and outputs addresses belong to the account.
-resolvedToTxMeta :: ResolvedTx -> Coin -> Coin -> Bool -> HD.HdAccountId -> TxMeta
-resolvedToTxMeta ResolvedTx{..} spentInputsCoins gainedOutputsCoins allOurs accountId =
-  fromMaybe (error "Invalid ResolvedTx") mbMeta
-  where
-    mbMeta = do
-      inps <- NE.nonEmpty $ mapMaybe toInpQuad $ NE.toList (_fromDb _rtxInputs)
-      outs <- fromUtxo $ _fromDb _rtxOutputs
-      let (txId, timestamp) = _fromDb _rtxMeta
-      return TxMeta {
-          _txMetaId = txId
-        , _txMetaAmount = absCoin spentInputsCoins gainedOutputsCoins
-        , _txMetaInputs = inps
-        , _txMetaOutputs = outs
-        , _txMetaCreationAt = timestamp
-        , _txMetaIsLocal = allOurs
-        , _txMetaIsOutgoing = gainedOutputsCoins < spentInputsCoins -- it's outgoing if gained is less than spent.
-        , _txMetaWalletId = _fromDb $ HD.getHdRootId (accountId ^. HD.hdAccountIdParent)
-        , _txMetaAccountIx = HD.getHdAccountIx $ accountId ^. HD.hdAccountIdIx
-      }
-
-    toInpQuad (txIn, resolvedInput) = do
-      (txId, ix) <- derefIn txIn
-      let (addr, coin) = toOutPair resolvedInput
-      return (txId, ix, addr, coin)
 
 -- | (Unsigned block) containing resolved transactions
 --
@@ -109,6 +81,96 @@ data ResolvedBlock = ResolvedBlock {
 
 makeLenses ''ResolvedTx
 makeLenses ''ResolvedBlock
+
+
+{-------------------------------------------------------------------------------
+  Metadata
+-------------------------------------------------------------------------------}
+
+-- | Error returned whenever
+data ErrMalformedResolvedBlock = ErrMalformedResolvedBlock Text
+    deriving Show
+instance Exception ErrMalformedResolvedBlock
+
+
+resolvedToTxMetas
+    :: (IsOurs s)
+    => ResolvedBlock
+    -> s
+    -> (Either ErrMalformedResolvedBlock [TxMeta], s)
+resolvedToTxMetas rb = runState $ runExceptT $ fmap mconcat $ do
+    forM (rb ^. rbTxs) $ \tx -> do
+        accounts <- rtxAccountInfo tx
+        forM accounts $ \(accId, spent, gained, isLocal) -> ExceptT $ return $ do
+            inps <- traverse mkTxMetaInps (tx ^. rtxInputs . fromDb)
+            outs <- mkTxMetaOuts (tx ^. rtxOutputs . fromDb)
+            return TxMeta
+                { _txMetaId = tx ^. rtxMeta . fromDb . _1
+                , _txMetaAmount = absCoin spent gained
+                , _txMetaInputs = inps
+                , _txMetaOutputs = outs
+                , _txMetaCreationAt = tx ^. rtxMeta . fromDb . _2
+                , _txMetaIsLocal = isLocal
+                , _txMetaIsOutgoing = gained < spent
+                , _txMetaWalletId = accId ^. hdAccountIdParent
+                , _txMetaAccountIx = getHdAccountIx $ accId ^. hdAccountIdIx
+                }
+  where
+      -- | Inspect a resolved transaction in a given context:
+      --  - @accId@ for the underlying account id
+      --  - @spent@ coins from input addrs; reduce the balance.
+      --  - @gained@ coins from output addrs; increase the balance.
+      --  - @isLocal@ true if all inputs and outputs addrs belong to the account.
+      -- Note that those values aren't absolute for it depends on _who_ inspects
+      -- the transaction.
+      -- This is why we may obtain multiple meta from a single transaction but
+      -- at most, one per account id we recognized as being ours.
+    rtxAccountInfo
+        :: (IsOurs s, MonadState s m)
+        => ResolvedTx
+        -> m [(HdAccountId, Coin, Coin, Bool)]
+    rtxAccountInfo tx = do
+        let inps = fmap snd $ NE.toList $ tx ^. rtxInputs . fromDb
+        ourInps <- ours (\coins -> ([coins], [])) inps
+
+        let outs = Map.elems $ tx ^. rtxOutputs . fromDb
+        ourOuts <- ours (\coins -> ([], [coins])) outs
+
+        return $ flip map (Map.toList (Map.unionWith (<>) ourInps ourOuts)) $ \(accId, (ourInps', ourOuts')) ->
+            let isLocal =
+                    (length inps + length outs)
+                    ==
+                    (length ourInps + length ourOuts)
+            in (accId, sumCoinsUnsafe ourInps', sumCoinsUnsafe ourOuts', isLocal)
+
+    ours
+        :: (Traversable t, IsOurs s, MonadState s m, Semigroup b)
+        => (Coin -> b)
+        -> t TxOutAux
+        -> m (Map HdAccountId b)
+    ours fn = flip foldM mempty $ \m (TxOutAux (TxOut addr coin)) -> do
+        state (isOurs addr) <&> \case
+            Nothing -> m
+            Just x  -> Map.unionWith (<>) m $ Map.singleton (x ^.  hdAddressId ^. hdAddressIdParent) (fn coin)
+
+    mkTxMetaOuts
+        :: Utxo
+        -> Either ErrMalformedResolvedBlock (NonEmpty (Address, Coin))
+    mkTxMetaOuts utxo = utxo
+        & Map.elems
+        & fmap (\(TxOutAux (TxOut addr coin)) -> (addr, coin))
+        & NE.nonEmpty
+        & maybe (Left $ ErrMalformedResolvedBlock $ "Empty UTxO : " <> show utxo) Right
+
+    mkTxMetaInps
+        :: (TxIn, TxOutAux)
+        -> Either ErrMalformedResolvedBlock (TxId, Word32, Address, Coin)
+    mkTxMetaInps (txin, TxOutAux (TxOut addr coin)) =
+        uncurry (,,addr,coin) <$> case txin of
+            TxInUtxo txId ix -> Right (txId, ix)
+            TxInUnknown{} ->
+                Left $ ErrMalformedResolvedBlock $ "Tx input is unknown: " <> show txin
+
 
 {-------------------------------------------------------------------------------
   Pretty-printing

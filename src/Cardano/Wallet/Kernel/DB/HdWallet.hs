@@ -17,10 +17,10 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , HasSpendingPassword(..)
     -- * HD wallet types proper
   , HdWallets(..)
-  , HdRootId(..)
   , HdAccountId(..)
   , HdAddressId(..)
   , HdRoot(..)
+  , HdAccountBase(..)
   , HdAccount(..)
   , HdAddress(..)
     -- * HD Wallet state
@@ -32,6 +32,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , finishRestoration
     -- ** Initialiser
   , initHdWallets
+  , initHdAddress
     -- ** Lenses
     -- *** Wallet collection
   , hdWalletsRoots
@@ -52,6 +53,8 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , hdRootCreatedAt
     -- *** Account
   , hdAccountId
+  , hdAccountBase
+  , hdAccountBaseId
   , hdAccountName
   , hdAccountState
   , hdAccountStateCurrent
@@ -92,43 +95,45 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , zoomOrCreateHdAddress
   , assumeHdRootExists
   , assumeHdAccountExists
-    -- * General-utility functions
-  , eskToHdRootId
-  , pkToHdRootId
     -- * IsOurs
   , IsOurs(..)
-  , ourAddresses
+    -- Address pool
+  , mkAddressPool
   ) where
 
 import           Universum hiding ((:|))
 
-import           Control.Lens (Getter, at, lazy, to, (+~), _Wrapped)
+import           Control.Lens (Getter, at, lazy, lens, to, (+~), (?~), _Wrapped)
 import           Control.Lens.TH (makeLenses)
-import qualified Data.ByteString as BS
 import qualified Data.IxSet.Typed as IxSet (Indexable (..))
+import qualified Data.Map as Map
 import           Data.SafeCopy (base, deriveSafeCopy)
 
-import           Test.QuickCheck (Arbitrary (..), oneof, vectorOf)
+import           Test.QuickCheck (Arbitrary (..), oneof)
 
 import           Formatting (bprint, build, (%))
 import qualified Formatting.Buildable
 import           Serokell.Util (listJson)
 
-import           Pos.Chain.Txp (TxOut (..), TxOutAux (..))
 import qualified Pos.Core as Core
 import           Pos.Core.Chrono (NewestFirst (..))
-import           Pos.Core.NetworkMagic (NetworkMagic (..))
 import           Pos.Crypto (HDPassphrase)
 import qualified Pos.Crypto as Core
 
 import           Cardano.Wallet.API.V1.Types (WalAddress (..))
+import           Cardano.Wallet.Kernel.AddressPool (AddressPool,
+                     emptyAddressPool, lookupAddressPool)
+import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.BlockContext
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.Spec
 import           Cardano.Wallet.Kernel.DB.Util.AcidState
 import           Cardano.Wallet.Kernel.DB.Util.IxSet hiding (foldl')
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet hiding (Indexable)
 import qualified Cardano.Wallet.Kernel.DB.Util.Zoomable as Z
+import           Cardano.Wallet.Kernel.Ed25519Bip44 (ChangeChain (..),
+                     deriveAddressPublicKey)
 import           Cardano.Wallet.Kernel.NodeStateAdaptor (SecurityParameter (..))
 import qualified Cardano.Wallet.Kernel.Util.StrictList as SL
 import           Cardano.Wallet.Kernel.Util.StrictNonEmpty (StrictNonEmpty (..))
@@ -206,98 +211,16 @@ deriveSafeCopy 1 'base ''HdAddressIx
 deriveSafeCopy 1 'base ''AssuranceLevel
 deriveSafeCopy 1 'base ''HasSpendingPassword
 
-
-{-------------------------------------------------------------------------------
-  Address relationship: isOurs?
--------------------------------------------------------------------------------}
-
-class IsOurs s where
-    isOurs :: Core.Address -> s -> (Maybe HdAddress, s)
-
--- | NOTE: We could modify the given state here to actually store decrypted
--- addresses in a `Map` to trade a decryption against a map lookup for already
--- decrypted addresses.
-instance IsOurs [(HdRootId, Core.EncryptedSecretKey)] where
-    isOurs addr s = (,s) $ foldl' (<|>) Nothing $ flip map s $ \(rootId, esk) -> do
-        (accountIx, addressIx) <- decryptHdLvl2DerivationPath (eskToHdPassphrase esk) addr
-        let accId = HdAccountId rootId accountIx
-        let addrId = HdAddressId accId addressIx
-        return $ HdAddress addrId (InDb addr)
-
--- | Extract our addresses from block outputs.
-ourAddresses
-    :: [TxOutAux]
-    -> [(HdRootId, Core.EncryptedSecretKey)]
-    -> [HdAddress]
-ourAddresses outs = evalState $
-    fmap catMaybes $ mapM (state . isOurs . txOutAddress . toaOut) outs
-
-decryptHdLvl2DerivationPath
-    :: Core.HDPassphrase
-    -> Core.Address
-    -> Maybe (HdAccountIx, HdAddressIx)
-decryptHdLvl2DerivationPath hdPass addr = do
-    hdPayload <- Core.aaPkDerivationPath $ Core.addrAttributesUnwrapped addr
-    derPath <- Core.unpackHDAddressAttr hdPass hdPayload
-    case derPath of
-        [a,b] -> Just (HdAccountIx a, HdAddressIx b)
-        _     -> Nothing
-
-
 {-------------------------------------------------------------------------------
   General-utility functions
 -------------------------------------------------------------------------------}
 
--- | Computes the 'HdRootId' from the given 'EncryptedSecretKey'. See the
--- comment in the definition of 'makePubKeyAddressBoot' on why this is
--- acceptable.
---
--- TODO: This may well disappear as part of [CBR-325].
-eskToHdRootId :: NetworkMagic -> Core.EncryptedSecretKey -> HdRootId
-eskToHdRootId nm = HdRootId . InDb . (Core.makePubKeyAddressBoot nm) . Core.encToPublic
-
 eskToHdPassphrase :: Core.EncryptedSecretKey -> HDPassphrase
 eskToHdPassphrase = Core.deriveHDPassphrase . Core.encToPublic
-
-pkToHdRootId :: NetworkMagic -> Core.PublicKey -> HdRootId
-pkToHdRootId nm = HdRootId . InDb . (Core.makePubKeyAddressBoot nm)
 
 {-------------------------------------------------------------------------------
   HD wallets
 -------------------------------------------------------------------------------}
-
--- | HD wallet root ID.
---
--- Conceptually, this is just an 'Address' in the form
--- of 'Ae2tdPwUPEZ18ZjTLnLVr9CEvUEUX4eW1LBHbxxxJgxdAYHrDeSCSbCxrvx', but is,
--- in a sense, a special breed as it's derived from the 'PublicKey' (derived
--- from some BIP-39 mnemonics, typically) and which does not depend from any
--- delegation scheme, as you cannot really pay into this 'Address'. This
--- ensures that, given an 'EncryptedSecretKey' we can derive its 'PublicKey'
--- and from that the 'Core.Address'.
--- On the \"other side\", given a RESTful 'WalletId' (which is ultimately
--- just a Text) it's possible to call 'decodeTextAddress' to grab a valid
--- 'Core.Address', and then transform this into a 'Kernel.WalletId' type
--- easily.
---
--- NOTE: Comparing 'HdRootId' is a potentially expensive computation, as it
--- implies comparing large addresses. Use with care.
---
--- TODO: It would be better not to have the address here, and just use an 'Int'
--- as a primary key. This however is a slightly larger refactoring we don't
--- currently have time for.
-newtype HdRootId = HdRootId { getHdRootId :: InDb Core.Address }
-  deriving (Eq, Ord, Show, Generic)
-
-instance NFData HdRootId
-
-
-instance Arbitrary HdRootId where
-  arbitrary = do
-      (_, esk) <- Core.safeDeterministicKeyGen <$> (BS.pack <$> vectorOf 32 arbitrary)
-                                               <*> pure mempty
-      nm <- arbitrary
-      pure (eskToHdRootId nm esk)
 
 -- | HD wallet account ID
 data HdAccountId = HdAccountId {
@@ -369,12 +292,31 @@ instance Arbitrary HdRoot where
                        <*> arbitrary
                        <*> (fmap InDb arbitrary)
 
+-- | Contains specific stuff which is related to
+-- FO-wallets or EO-wallets.
+data HdAccountBase =
+      -- Branch for FO-wallets.
+      HdAccountBaseFO !HdAccountId
+      -- Branch for EOS-wallets.
+    | HdAccountBaseEO {
+          _hdAccountBaseEOId             :: !HdAccountId
+        , _hdAccountBaseEOAccountKey     :: !Core.PublicKey
+        , _hdAccountBaseEOAddressPoolGap :: !AddressPoolGap
+        }
+    deriving (Eq, Ord)
+
+instance Arbitrary HdAccountBase where
+    arbitrary = oneof
+        [ HdAccountBaseFO <$> arbitrary
+        , HdAccountBaseEO <$> arbitrary <*> arbitrary <*> arbitrary
+        ]
+
 -- | Account in a HD wallet
 --
 -- Key derivation is cheap
 data HdAccount = HdAccount {
       -- | Account index
-      _hdAccountId            :: !HdAccountId
+      _hdAccountBase          :: !HdAccountBase
 
       -- | Account name
     , _hdAccountName          :: !AccountName
@@ -400,7 +342,22 @@ data HdAddress = HdAddress {
     , _hdAddressAddress :: !(InDb Core.Address)
     } deriving (Eq, Ord)
 
-
+-- | New address in the specified account
+--
+-- Since the DB does not contain the private key of the wallet, we cannot
+-- do the actual address derivation here; this will be the responsibility of
+-- the caller (which will require the use of the spending password, if
+-- one exists).
+--
+-- Similarly, it will be the responsibility of the caller to pick a random
+-- address index, as we do not have access to a random number generator here.
+initHdAddress :: HdAddressId
+              -> Core.Address
+              -> HdAddress
+initHdAddress addrId address = HdAddress {
+      _hdAddressId      = addrId
+    , _hdAddressAddress = InDb address
+    }
 
 {-------------------------------------------------------------------------------
   Account state
@@ -497,11 +454,11 @@ makeLenses ''HdRoot
 makeLenses ''HdAccount
 makeLenses ''HdAddress
 
-deriveSafeCopy 1 'base ''HdRootId
 deriveSafeCopy 1 'base ''HdAccountId
 deriveSafeCopy 1 'base ''HdAddressId
 
 deriveSafeCopy 1 'base ''HdRoot
+deriveSafeCopy 1 'base ''HdAccountBase
 deriveSafeCopy 1 'base ''HdAccount
 deriveSafeCopy 1 'base ''HdAddress
 
@@ -513,8 +470,22 @@ deriveSafeCopy 1 'base ''HdAccountIncomplete
   Derived lenses
 -------------------------------------------------------------------------------}
 
+hdAccountBaseId :: Lens' HdAccountBase HdAccountId
+hdAccountBaseId = lens getHdAccountId setHdAccountId
+  where
+    getHdAccountId :: HdAccountBase -> HdAccountId
+    getHdAccountId (HdAccountBaseFO accountId)     = accountId
+    getHdAccountId (HdAccountBaseEO accountId _ _) = accountId
+
+    setHdAccountId :: HdAccountBase -> HdAccountId -> HdAccountBase
+    setHdAccountId (HdAccountBaseFO _) newAccountId = HdAccountBaseFO newAccountId
+    setHdAccountId (HdAccountBaseEO _ pKey gap) newAccountId = HdAccountBaseEO newAccountId pKey gap
+
+hdAccountId :: Lens' HdAccount HdAccountId
+hdAccountId = hdAccountBase . hdAccountBaseId
+
 hdAccountRootId :: Lens' HdAccount HdRootId
-hdAccountRootId = hdAccountId . hdAccountIdParent
+hdAccountRootId = hdAccountBase . hdAccountBaseId . hdAccountIdParent
 
 hdAddressAccountId :: Lens' HdAddress HdAccountId
 hdAddressAccountId = hdAddressId . hdAddressIdParent
@@ -555,6 +526,86 @@ hdAccountRestorationState a = case a ^. hdAccountState of
       ( _hdIncompleteHistorical ^. currentCheckpoint . cpContext . lazy,
         _hdIncompleteCurrent    ^. oldestCheckpoint  . pcheckpointContext)
 
+{-------------------------------------------------------------------------------
+  Address relationship: isOurs?
+-------------------------------------------------------------------------------}
+
+class IsOurs s where
+    isOurs :: Core.Address -> s -> (Maybe HdAddress, s)
+
+{-------------------------------------------------------------------------------
+  isOurs for Hd Random wallets
+-------------------------------------------------------------------------------}
+
+-- | NOTE: We could modify the given state here to actually store decrypted
+-- addresses in a `Map` to trade a decryption against a map lookup for already
+-- decrypted addresses.
+instance IsOurs [(HdRootId, Core.EncryptedSecretKey)] where
+    isOurs addr s = (,s) $ foldl' (<|>) Nothing $ flip map s $ \(rootId, esk) -> do
+        (accountIx, addressIx) <- decryptHdLvl2DerivationPath (eskToHdPassphrase esk) addr
+        let accId = HdAccountId rootId accountIx
+        let addrId = HdAddressId accId addressIx
+        return $ HdAddress addrId (InDb addr)
+
+decryptHdLvl2DerivationPath
+    :: Core.HDPassphrase
+    -> Core.Address
+    -> Maybe (HdAccountIx, HdAddressIx)
+decryptHdLvl2DerivationPath hdPass addr = do
+    hdPayload <- Core.aaPkDerivationPath $ Core.addrAttributesUnwrapped addr
+    derPath <- Core.unpackHDAddressAttr hdPass hdPayload
+    case derPath of
+        [a,b] -> Just (HdAccountIx a, HdAddressIx b)
+        _     -> Nothing
+
+{-------------------------------------------------------------------------------
+  create AddressPool for account
+-------------------------------------------------------------------------------}
+
+mkAddressPool
+    :: (Core.PublicKey -> Core.Address)
+    -> Core.PublicKey
+    -> AddressPoolGap
+    -> AddressPool Core.Address
+mkAddressPool mkAddress accPK gap = emptyAddressPool gap newAddress
+  where
+    newAddress :: Word32 -> Core.Address
+    newAddress addrIx = case deriveAddressPublicKey accPK ExternalChain addrIx of
+        Nothing     -> error "mkAddressPool: maximum number of addresses reached."
+        Just addrPK -> mkAddress addrPK
+
+{-------------------------------------------------------------------------------
+  isOurs for Hd Sequential wallets
+-------------------------------------------------------------------------------}
+
+-- | Search for an address in a map of AddressPools indexed by HdAccountId.
+--  This map represents the State context.
+--  If an Address is found, we update the state with a possibly updated AddressPool
+--  (since the address pool may have been extended in response to the address discovery)
+--  Otherwise if we don't find the address, we return the state unchanged.
+instance IsOurs (Map HdAccountId (AddressPool Core.Address)) where
+    isOurs addr pools = case addrMatch of
+        (Just (hdAddr, pool')) ->
+            (Just hdAddr, pools & at (accountId hdAddr) ?~ pool')
+        Nothing ->
+            (Nothing,pools)
+        where
+            addrMatch
+                = foldl' (<|>) Nothing $ map lookupAddressInPool' (Map.toList pools)
+
+            accountId a = a ^. hdAddressId . hdAddressIdParent
+
+            lookupAddressInPool'
+                :: (HdAccountId, AddressPool Core.Address)
+                -> Maybe (HdAddress, AddressPool Core.Address)
+            lookupAddressInPool' (accId, pool)
+                = case lookupAddressPool addr pool of
+                    (Nothing, _) -> Nothing
+                    (Just (_, ix), pool') -> (Just (mkHdAddress accId ix, pool'))
+
+            mkHdAddress :: HdAccountId -> Word32 -> HdAddress
+            mkHdAddress accId_ ix_
+                = initHdAddress (HdAddressId accId_ (HdAddressIx ix_)) addr
 
 {-------------------------------------------------------------------------------
   Unknown identifiers
@@ -630,7 +681,7 @@ instance HasPrimKey HdRoot where
 
 instance HasPrimKey HdAccount where
     type PrimKey HdAccount = HdAccountId
-    primKey = _hdAccountId
+    primKey = view hdAccountId
 
 instance HasPrimKey (Indexed HdAddress) where
     type PrimKey (Indexed HdAddress) = HdAddressId
@@ -909,7 +960,7 @@ instance Buildable HasSpendingPassword where
         bprint ("updated " % build) lastUpdate
 
 instance Buildable HdRoot where
-    build HdRoot{..} = bprint
+    build root@HdRoot{..} = bprint
       ( "HdRoot "
       % "{ id:          " % build
       % ", name:        " % build
@@ -918,22 +969,40 @@ instance Buildable HdRoot where
       % ", createdAt:   " % build
       % "}"
       )
-      _hdRootId
+      (root ^. hdRootId)
       _hdRootName
       _hdRootHasPassword
       _hdRootAssurance
       (_fromDb _hdRootCreatedAt)
 
+instance Buildable HdAccountBase where
+    build (HdAccountBaseFO accountId) = bprint
+      ( "HdAccountBaseFO "
+      % "{ id: " % build
+      % "}"
+      )
+      accountId
+    build (HdAccountBaseEO accountId pKey gap) = bprint
+      ( "HdAccountBaseEO "
+      % "{ id: " % build
+      % "{ public key: " % build
+      % "{ gap: " % build
+      % "}"
+      )
+      accountId
+      pKey
+      gap
+
 instance Buildable HdAccount where
     build HdAccount{..} = bprint
       ( "HdAccount "
-      % "{ id            " % build
+      % "{ base          " % build
       % ", name          " % build
       % ", state         " % build
       % ", autoPkCounter " % build
       % "}"
       )
-      _hdAccountId
+      _hdAccountBase
       _hdAccountName
       _hdAccountState
       _hdAccountAutoPkCounter
@@ -971,9 +1040,6 @@ instance Buildable HdAddress where
       )
       _hdAddressId
       (_fromDb _hdAddressAddress)
-
-instance Buildable HdRootId where
-    build (HdRootId addr) = bprint ("HdRootId " % build) (_fromDb addr)
 
 instance Buildable HdAccountId where
     build HdAccountId{..} = bprint

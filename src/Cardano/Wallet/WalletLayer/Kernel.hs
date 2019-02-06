@@ -120,8 +120,7 @@ bracketPassiveWallet pm mode logFunction keystore node fInjects f = do
         , updateAccount        = Accounts.updateAccount       w
         , deleteAccount        = Accounts.deleteAccount       w
         , createAddress        = Addresses.createAddress      w
-        , addUpdate            = Internal.addUpdate           w
-        , waitForUpdate        = Internal.waitForUpdate       w
+        , importAddresses      = Addresses.importAddresses    w
         , resetWalletState     = Internal.resetWalletState    w
         , importWallet         = Internal.importWallet        w
         , applyBlocks          = invokeIO . Actions.ApplyBlocks
@@ -129,7 +128,9 @@ bracketPassiveWallet pm mode logFunction keystore node fInjects f = do
 
           -- Read-only operations
         , getWallets           =                   join (ro $ Wallets.getWallets w)
+        , getEosWallets        =                   join (ro $ Wallets.getEosWallets w)
         , getWallet            = \wId           -> join (ro $ Wallets.getWallet w wId)
+        , getEosWallet         = \wId           -> join (ro $ Wallets.getEosWallet w wId)
         , getUtxos             = \wId           -> ro $ Wallets.getWalletUtxos wId
         , getAccounts          = \wId           -> ro $ Accounts.getAccounts         wId
         , getAccount           = \wId acc       -> ro $ Accounts.getAccount          wId acc

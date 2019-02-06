@@ -5,18 +5,19 @@ module Cardano.Wallet.WalletLayer
     , CreateWallet(..)
     -- ** Errors
     , CreateWalletError(..)
-    , CreateEosWalletError(..)
     , GetWalletError(..)
+    , GetAddressPoolGapError(..)
+    , GetEosWalletError(..)
     , UpdateWalletError(..)
     , UpdateWalletPasswordError(..)
     , DeleteWalletError(..)
-    , DeleteEosWalletError(..)
     , GetUtxosError(..)
     , NewPaymentError(..)
     , EstimateFeesError(..)
     , RedeemAdaError(..)
     , CreateAddressError(..)
     , ValidateAddressError(..)
+    , ImportAddressError(..)
     , CreateAccountError(..)
     , GetAccountError(..)
     , GetAccountsError(..)
@@ -37,19 +38,18 @@ import           Test.QuickCheck (Arbitrary (..), oneof)
 
 import           Pos.Chain.Block (Blund)
 import           Pos.Chain.Txp (Tx, Utxo)
-import           Pos.Chain.Update (ConfirmedProposalState, SoftwareVersion)
 import           Pos.Core (Coin)
 import qualified Pos.Core as Core
 import           Pos.Core.Chrono (NE, NewestFirst (..), OldestFirst (..))
 import           Pos.Core.NetworkMagic (NetworkMagic)
-import           Pos.Crypto (EncryptedSecretKey, PassPhrase)
+import           Pos.Crypto (EncryptedSecretKey)
 
 import           Cardano.Wallet.API.Request (RequestParams (..))
 import           Cardano.Wallet.API.Request.Filter (FilterOperations (..))
 import           Cardano.Wallet.API.Request.Sort (SortOperations (..))
 import           Cardano.Wallet.API.Response (APIResponse, SliceOf (..))
 import           Cardano.Wallet.API.V1.Types (Account, AccountBalance,
-                     AccountIndex, AccountUpdate, EosWallet, EosWalletId,
+                     AccountIndex, AccountUpdate, BatchImportResult, EosWallet,
                      NewAccount, NewAddress, NewEosWallet, NewWallet,
                      PasswordUpdate, Payment, Redemption, SignedTransaction,
                      SpendingPassword, Transaction, UnsignedTransaction,
@@ -93,23 +93,6 @@ instance Buildable CreateWalletError where
     build (CreateWalletError kernelError) =
         bprint ("CreateWalletError " % build) kernelError
 
-data CreateEosWalletError =
-    CreateEosWalletError Kernel.CreateEosWalletError
-
--- | Unsound show instance needed for the 'Exception' instance.
-instance Show CreateEosWalletError where
-    show = formatToString build
-
-instance Exception CreateEosWalletError
-
-instance Arbitrary CreateEosWalletError where
-    arbitrary = oneof [ CreateEosWalletError <$> arbitrary
-                      ]
-
-instance Buildable CreateEosWalletError where
-    build (CreateEosWalletError kernelError) =
-        bprint ("CreateEosWalletError " % build) kernelError
-
 data GetWalletError =
       GetWalletError Kernel.UnknownHdRoot
     | GetWalletErrorNotFound WalletId
@@ -131,6 +114,40 @@ instance Buildable GetWalletError where
         bprint ("GetWalletErrorNotFound " % build) walletId
     build (GetWalletWalletIdDecodingFailed txt) =
         bprint ("GetWalletWalletIdDecodingFailed " % build) txt
+
+data GetAddressPoolGapError =
+      GetEosWalletErrorNoAccounts Text
+    | GetEosWalletErrorWrongAccounts Text
+    | GetEosWalletErrorGapsDiffer Text
+    deriving Eq
+
+instance Buildable GetAddressPoolGapError where
+    build (GetEosWalletErrorNoAccounts txt) =
+        bprint ("GetEosWalletErrorNoAccounts " % build) txt
+    build (GetEosWalletErrorWrongAccounts txt) =
+        bprint ("FO-accounts found in EOS-wallet " % build) txt
+    build (GetEosWalletErrorGapsDiffer txt) =
+        bprint ("Address pool gaps differ, for EOS-wallet " % build) txt
+
+data GetEosWalletError =
+      GetEosWalletError Kernel.UnknownHdRoot
+    | GetEosWalletWalletIdDecodingFailed Text
+    | GetEosWalletErrorAddressPoolGap GetAddressPoolGapError
+    deriving Eq
+
+-- | Unsound show instance needed for the 'Exception' instance.
+instance Show GetEosWalletError where
+    show = formatToString build
+
+instance Exception GetEosWalletError
+
+instance Buildable GetEosWalletError where
+    build (GetEosWalletError kernelError) =
+        bprint ("GetEosWalletError " % build) kernelError
+    build (GetEosWalletWalletIdDecodingFailed txt) =
+        bprint ("GetEosWalletWalletIdDecodingFailed " % build) txt
+    build (GetEosWalletErrorAddressPoolGap gapError) =
+        bprint ("GetEosWalletErrorAddressPoolGap " % build) gapError
 
 data UpdateWalletError =
       UpdateWalletError Kernel.UnknownHdRoot
@@ -185,19 +202,6 @@ instance Buildable DeleteWalletError where
         bprint ("DeleteWalletWalletIdDecodingFailed " % build) txt
     build (DeleteWalletError kernelError) =
         bprint ("DeleteWalletError " % build) kernelError
-
-data DeleteEosWalletError =
-    DeleteEosWalletError Kernel.UnknownHdRoot
-
--- | Unsound show instance needed for the 'Exception' instance.
-instance Show DeleteEosWalletError where
-    show = formatToString build
-
-instance Exception DeleteEosWalletError
-
-instance Buildable DeleteEosWalletError where
-    build (DeleteEosWalletError kernelError) =
-        bprint ("DeleteEosWalletError " % build) kernelError
 
 data GetUtxosError =
       GetUtxosWalletIdDecodingFailed Text
@@ -262,6 +266,30 @@ instance Exception ValidateAddressError
 instance Buildable ValidateAddressError where
     build (ValidateAddressDecodingFailed rawText) =
         bprint ("ValidateAddressDecodingFailed " % build) rawText
+
+data ImportAddressError =
+      ImportAddressError Kernel.ImportAddressError
+    | ImportAddressAddressDecodingFailed Text
+    -- ^ Decoding the input 'Text' as an 'Address' failed.
+    deriving Eq
+
+-- | Unsound show instance needed for the 'Exception' instance.
+instance Show ImportAddressError where
+    show = formatToString build
+
+instance Exception ImportAddressError
+
+instance Arbitrary ImportAddressError where
+    arbitrary = oneof [ ImportAddressError <$> arbitrary
+                      , pure (ImportAddressAddressDecodingFailed "Ae2tdPwUPEZ18ZjTLnLVr9CEvUEUX4eW1LBHbxxx")
+                      ]
+
+instance Buildable ImportAddressError where
+    build (ImportAddressError kernelError) =
+        bprint ("ImportAddressError " % build) kernelError
+    build (ImportAddressAddressDecodingFailed txt) =
+        bprint ("ImportAddressAddressDecodingFailed " % build) txt
+
 
 ------------------------------------------------------------
 -- Errors when dealing with Accounts
@@ -420,11 +448,12 @@ instance Exception GetTxError
 -- | The passive wallet (data) layer. See @PassiveWallet@.
 data PassiveWalletLayer m = PassiveWalletLayer
     {
-    -- wallets
+    -- fully-owned wallets
       createWallet         :: CreateWallet -> m (Either CreateWalletError Wallet)
-    , createEosWallet      :: NewEosWallet -> m (Either CreateEosWalletError EosWallet)
     , getWallets           :: m (IxSet Wallet)
+    , getEosWallets        :: m (Either GetEosWalletError (IxSet EosWallet))
     , getWallet            :: WalletId -> m (Either GetWalletError Wallet)
+    , getEosWallet         :: WalletId -> m (Either GetEosWalletError EosWallet)
     , updateWallet         :: WalletId
                            -> WalletUpdate
                            -> m (Either UpdateWalletError Wallet)
@@ -432,7 +461,9 @@ data PassiveWalletLayer m = PassiveWalletLayer
                            -> PasswordUpdate
                            -> m (Either UpdateWalletPasswordError Wallet)
     , deleteWallet         :: WalletId -> m (Either DeleteWalletError ())
-    , deleteEosWallet      :: EosWalletId -> m (Either DeleteEosWalletError ())
+    -- externally-owned wallets
+    , createEosWallet      :: NewEosWallet -> m (Either CreateWalletError EosWallet)
+    , deleteEosWallet      :: WalletId -> m (Either DeleteWalletError ())
     , getUtxos             :: WalletId
                            -> m (Either GetUtxosError [(Account, Utxo)])
     -- accounts
@@ -465,6 +496,10 @@ data PassiveWalletLayer m = PassiveWalletLayer
     , getAddresses         :: RequestParams -> m (SliceOf WalletAddress)
     , validateAddress      :: Text
                            -> m (Either ValidateAddressError WalletAddress)
+    , importAddresses      :: WalletId
+                           -> AccountIndex
+                           -> [WalAddress]
+                           -> m (Either ImportAddressError (BatchImportResult WalAddress))
 
     -- transactions
     , getTransactions      :: Maybe WalletId
@@ -483,10 +518,6 @@ data PassiveWalletLayer m = PassiveWalletLayer
     -- internal
     , resetWalletState     :: m ()
     , importWallet         :: WalletImport -> m (Either ImportWalletError Wallet)
-
-    -- updates
-    , waitForUpdate        :: m ConfirmedProposalState
-    , addUpdate            :: SoftwareVersion -> m ()
     }
 
 ------------------------------------------------------------
@@ -499,9 +530,7 @@ data ActiveWalletLayer m = ActiveWalletLayer {
       walletPassiveLayer :: PassiveWalletLayer m
 
       -- | Performs a payment.
-    , pay :: PassPhrase
-          -- The \"spending password\" to decrypt the 'EncryptedSecretKey'.
-          -> InputGrouping
+    , pay :: InputGrouping
           -- An preference on how to group inputs during coin selection.
           -> ExpenseRegulation
           -- Who pays the fee, if the sender or the receivers.

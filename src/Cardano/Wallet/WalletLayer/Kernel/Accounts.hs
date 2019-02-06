@@ -22,7 +22,6 @@ import           Cardano.Wallet.API.V1.Types (WalletAddress)
 import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
-import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import           Cardano.Wallet.Kernel.DB.Read (addressesByAccountId)
 import qualified Cardano.Wallet.Kernel.DB.TxMeta.Types as Kernel
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (Indexed (..), IxSet)
@@ -128,9 +127,8 @@ deleteAccount wallet wId accIx = runExceptT $ do
     accId <- withExceptT DeleteAccountWalletIdDecodingFailed $
         fromAccountId wId accIx
     withExceptT DeleteAccountError $ ExceptT $ liftIO $ do
-        let walletId = HD.getHdRootId rootId ^. fromDb
         let accountIx = Just $ V1.getAccIndex accIx
-        Kernel.deleteTxMetas (wallet ^. Kernel.walletMeta) walletId accountIx
+        Kernel.deleteTxMetas (wallet ^. Kernel.walletMeta) rootId accountIx
         Kernel.deleteAccount accId wallet
 
 updateAccount :: MonadIO m

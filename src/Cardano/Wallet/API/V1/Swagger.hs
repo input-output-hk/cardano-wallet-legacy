@@ -335,7 +335,7 @@ $errors
 
     -- 'UnsupportedMimeTypeError'
     , mkRow fmtErr $ UnsupportedMimeTypePresent "Expected Content-Type's main MIME-type to be 'application/json'."
-
+    , mkRow fmtErr $ UtxoNotEnoughFragmented (ErrUtxoNotEnoughFragmented 1 msgUtxoNotEnoughFragmented)
     -- TODO 'MnemonicError' ?
     ]
   mkRow fmt err = T.intercalate "|" (fmt err)
@@ -398,7 +398,7 @@ curl -X POST https://localhost:8090/api/v1/wallets \
   --cacert ./scripts/tls-files/ca.crt \
   -d '{
   "operation": "create",
-  "backupPhrase": [$deMnemonicExample],
+  "backupPhrase": $deMnemonicExample,
   "assuranceLevel": "normal",
   "name": "MyFirstWallet",
   "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
@@ -684,6 +684,52 @@ curl -X POST https://localhost:8090/api/v1/transactions \
 ```
 
 
+About UTXO Fragmentation
+------------------------
+
+As described in [Sending Money to Multiple
+Recipients](#section/Common-Use-Cases/Sending-Money-to-Multiple-Recipients),
+it is possible to send ada to more than one destination. Cardano only allows a given UTXO to cover at most one single transaction output. As a
+result, when the number of transaction outputs is greater than the number
+of available UTXOs, the API returns a `UTXONotEnoughFragmented` error which
+looks like the following:
+
+```
+{
+    "status": "error",
+    "diagnostic": {
+        "details": {
+            "help": "UTXO is not enough fragmented to handle the number of outputs of this transaction. Query /api/v1/wallets/{walletId}/statistics/UTXOs endpoint for more information",
+            "missingUTXOs": 1
+        }
+    },
+    "message": "UTXONotEnoughFragmented"
+}
+```
+
+To make sure the source account has a sufficient level of UTXO fragmentation
+(i.e. number of UTXOs), please monitor the state of the UTXOs as described in [Getting
+UTXO Statistics](#section/Common-Use-Cases/Getting-UTXO-Statistics). The
+number of wallet UTXOs should be no less than the transaction outputs, and
+the sum of all UTXOs should be enough to cover the total
+transaction amount, including fees.
+
+
+Contrary to a classic accounting model, there's no such thing as spending
+_part of a UTXO_, and one has to wait for a transaction to be included in a
+block before spending the remaining change. This is very similar to using bank
+notes: one can't spend a $$20 bill at two different shops at the same time, even if it is enough to cover both purchases — one has to
+wait for change from the first transaction before making the second one.
+There's no "ideal" level of fragmentation; it depends on one's needs. However,
+the more UTXOs that are available, the higher the concurrency capacity
+of one's wallet, allowing multiple transactions to be made at the same time.
+
+Similarly, there's no practical maximum number of UTXOs, but there is nevertheless a maximum
+transaction size. By having many small UTXOs, one is taking the risk of hitting that
+restriction, should too many inputs be selected to fill a transaction. The only way to
+work around this is to make multiple smaller transactions.
+
+
 Estimating Transaction Fees
 ---------------------------
 
@@ -917,7 +963,7 @@ curl -X GET 'https://127.0.0.1:8090/api/v1/transactions?wallet_id=Ae2tdPwU...3AV
 ```
 
 
-Getting Utxo statistics
+Getting Utxo Statistics
 ---------------------------------
 
 You can get Utxo statistics of a given wallet using
@@ -936,6 +982,50 @@ $readUtxoStatistics
 
 Make sure to carefully read the section about [Pagination](#section/Pagination) to fully
 leverage the API capabilities.
+
+
+Importing (Unused) Addresses From a Previous Node (or Version)
+--------------------------------------------------------------
+
+When restoring a wallet, only the information available on the blockchain can
+be retrieved. Some pieces of information aren't stored on
+the blockchain and are only defined as _Metadata_ of the wallet backend. This
+includes:
+
+- The wallet's name
+- The wallet's assurance level
+- The wallet's spending password
+- The wallet's unused addresses
+
+Unused addresses are not recorded on the blockchain and, in the case of random
+derivation, it is unlikely that the same addresses will be generated on two
+different node instances. However, some API users may wish to preserve unused
+addresses between different instances of the wallet backend.
+
+To enable this, the wallet backend provides an endpoint ([`POST /api/v1/wallets/{{walletId}}/accounts/{{accountId}/addresses`](#tag/Addresses%2Fpaths%2F~1api~1v1~1wallets~1{walletId}~1accounts~1{accountId}~1addresses%2Fpost))
+to import a list of addresses into a given account. Note that this endpoint is
+quite lenient when it comes to errors: it tries to import all provided addresses
+one by one, and ignores any that can't be imported for whatever reason. The
+server will respond with the total number of successes and, if any, a list of
+addresses that failed to be imported. Trying to import an address that is already
+present will behave as a no-op.
+
+For example:
+
+```
+curl -X POST \
+  https://127.0.0.1:8090/api/v1/wallets/Ae2tdPwUPE...8V3AVTnqGZ/accounts/2147483648/addresses \
+  -H 'Accept: application/json;charset=utf-8' \
+  --cacert ./scripts/tls-files/ca.crt \
+  --cert ./scripts/tls-files/client.pem \
+  -d '[
+    "Ae2tdPwUPE...8V3AVTnqGZ",
+    "Ae2odDwvbA...b6V104CTV8"
+  ]'
+```
+
+> **IMPORTANT**: This feature is experimental and performance is
+> not guaranteed. Users are advised to import small batches only.
 |]
   where
     createAccount        = decodeUtf8 $ encodePretty $ genExample @(APIResponse Account)
@@ -971,8 +1061,8 @@ swaggerSchemaUIServer =
     <script>
         // Force Strict-URL Routing for assets relative paths
         (function onload() {
-            if (!window.location.href.endsWith("/")) {
-                window.location.href += "/";
+            if (!window.location.pathname.endsWith("/")) {
+                window.location.pathname += "/";
             }
         }());
     </script>

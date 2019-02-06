@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
 module Cardano.Wallet.WalletLayer.Kernel.Wallets (
       createWallet
     , createEosWallet
@@ -7,7 +8,9 @@ module Cardano.Wallet.WalletLayer.Kernel.Wallets (
     , deleteWallet
     , deleteEosWallet
     , getWallet
+    , getEosWallet
     , getWallets
+    , getEosWallets
     , getWalletUtxos
     , blundToResolvedBlock
     ) where
@@ -17,6 +20,8 @@ import           Universum
 import           Control.Monad.Except (throwError)
 import           Data.Coerce (coerce)
 import           Data.Default (def)
+import           Data.List (nub)
+import           Formatting (build, sformat)
 
 import           Pos.Chain.Txp (Utxo)
 import           Pos.Core (mkCoin)
@@ -28,13 +33,12 @@ import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (dbHdWallets)
-import qualified Cardano.Wallet.Kernel.DB.EosHdWallet as EosHD
+import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import qualified Cardano.Wallet.Kernel.DB.TxMeta.Types as Kernel
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (IxSet)
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
-import           Cardano.Wallet.Kernel.EosWalletId (EosWalletId)
 import           Cardano.Wallet.Kernel.Internal (walletKeystore, walletMeta,
                      walletProtocolMagic, _wriProgress)
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
@@ -43,9 +47,9 @@ import qualified Cardano.Wallet.Kernel.Read as Kernel
 import           Cardano.Wallet.Kernel.Restore (blundToResolvedBlock,
                      restoreWallet)
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
-import           Cardano.Wallet.WalletLayer (CreateEosWalletError (..),
-                     CreateWallet (..), CreateWalletError (..),
-                     DeleteEosWalletError (..), DeleteWalletError (..),
+import           Cardano.Wallet.WalletLayer (CreateWallet (..),
+                     CreateWalletError (..), DeleteWalletError (..),
+                     GetAddressPoolGapError (..), GetEosWalletError (..),
                      GetUtxosError (..), GetWalletError (..),
                      UpdateWalletError (..), UpdateWalletPasswordError (..))
 import           Cardano.Wallet.WalletLayer.Kernel.Conv
@@ -136,7 +140,6 @@ createWallet wallet newWalletRequest = liftIO $ do
         , walCreatedAt                  = V1.WalletTimestamp createdAt
         , walAssuranceLevel             = v1AssuranceLevel
         , walSyncState                  = V1.Synced
-        , walType                       = V1.WalletRegular
         }
       where
         (hasSpendingPassword, lastUpdate) =
@@ -153,27 +156,27 @@ createWallet wallet newWalletRequest = liftIO $ do
 createEosWallet :: MonadIO m
                 => Kernel.PassiveWallet
                 -> V1.NewEosWallet
-                -> m (Either CreateEosWalletError V1.EosWallet)
-createEosWallet wallet newEosWalletRequest = runExceptT $ do
-    let accountsPublicKeys = V1.neweoswalAccountsPublicKeys newEosWalletRequest
-        addressPoolGap = maybe (def :: AddressPoolGap) id $
-            V1.neweoswalAddressPoolGap newEosWalletRequest
-        name = V1.neweoswalName newEosWalletRequest
-        assuranceLevel = V1.neweoswalAssuranceLevel newEosWalletRequest
-    root <- withExceptT CreateEosWalletError $ ExceptT $ liftIO $
-        Kernel.createEosHdWallet
-            wallet
-            accountsPublicKeys
-            addressPoolGap
-            (fromAssuranceLevel assuranceLevel)
-            (HD.WalletName name)
-    return $ V1.EosWallet {
-          eoswalId             = EosHD._eosHdRootId root
-        , eoswalName           = name
-        , eoswalAddressPoolGap = addressPoolGap
+                -> m (Either CreateWalletError V1.EosWallet)
+createEosWallet wallet req = runExceptT $ do
+    let gap  = fromMaybe def (V1.neweoswalAddressPoolGap req)
+    let accs = mkAccount <$> V1.neweoswalAccounts req
+    let name = HD.WalletName $ V1.neweoswalName req
+    let alvl = fromAssuranceLevel $ V1.neweoswalAssuranceLevel req
+
+    hdRoot <- withExceptT CreateWalletError $ ExceptT $ liftIO $
+        Kernel.createEosHdWallet wallet accs gap alvl name
+
+    return $ V1.EosWallet
+        { eoswalId             = toRootId $ hdRoot ^. HD.hdRootId
+        , eoswalName           = V1.neweoswalName req
+        , eoswalAddressPoolGap = gap
         , eoswalBalance        = V1.WalletCoin (mkCoin 0)
-        , eoswalAssuranceLevel = assuranceLevel
+        , eoswalAssuranceLevel = V1.neweoswalAssuranceLevel req
+        , eoswalCreatedAt      = V1.WalletTimestamp $ hdRoot ^. HD.hdRootCreatedAt . fromDb
         }
+  where
+    mkAccount (V1.AccountPublicKeyWithIx pk ix) =
+        (pk, HD.HdAccountIx (V1.getAccIndex ix))
 
 -- | Updates the 'SpendingPassword' for this wallet.
 updateWallet :: MonadIO m
@@ -220,18 +223,21 @@ deleteWallet wallet wId = runExceptT $ do
     rootId <- withExceptT DeleteWalletWalletIdDecodingFailed $ fromRootId wId
     withExceptT DeleteWalletError $ ExceptT $ liftIO $ do
         let nm = makeNetworkMagic (wallet ^. walletProtocolMagic)
-        let walletId = HD.getHdRootId rootId ^. fromDb
         Kernel.removeRestoration wallet rootId
-        Kernel.deleteTxMetas (wallet ^. walletMeta) walletId Nothing
+        Kernel.deleteTxMetas (wallet ^. walletMeta) rootId Nothing
         Kernel.deleteHdWallet nm wallet rootId
 
 -- | Deletes external wallets. Please note that there's no actions in the
 -- 'Keystore', because it contains only root secret keys.
-deleteEosWallet :: Kernel.PassiveWallet
-                -> EosWalletId
-                -> m (Either DeleteEosWalletError ())
-deleteEosWallet _wallet _eosWalletId =
-    error "TODO: it will be implemented in https://github.com/input-output-hk/cardano-wallet/issues/36"
+deleteEosWallet :: MonadIO m
+                => Kernel.PassiveWallet
+                -> V1.WalletId
+                -> m (Either DeleteWalletError ())
+deleteEosWallet wallet wId = runExceptT $ do
+    rootId <- withExceptT DeleteWalletWalletIdDecodingFailed $ fromRootId wId
+    withExceptT DeleteWalletError $ ExceptT $ liftIO $ do
+        Kernel.deleteTxMetas (wallet ^. walletMeta) rootId Nothing
+        Kernel.deleteEosHdWallet wallet rootId
 
 -- | Gets a specific wallet.
 getWallet :: MonadIO m
@@ -245,6 +251,39 @@ getWallet wallet wId db = runExceptT $ do
                 withExceptT GetWalletError $ exceptT $
                     Kernel.lookupHdRootId db rootId
     updateSyncState wallet rootId v1wal
+
+-- | Gets a specific EOS-wallet.
+getEosWallet
+    :: MonadIO m
+    => Kernel.PassiveWallet
+    -> V1.WalletId
+    -> Kernel.DB
+    -> m (Either GetEosWalletError V1.EosWallet)
+getEosWallet _wallet wId db = runExceptT $ do
+    rootId <- withExceptT GetEosWalletWalletIdDecodingFailed (fromRootId wId)
+    hdRoot <- withExceptT GetEosWalletError $ exceptT $
+        Kernel.lookupHdRootId db rootId
+    fmap (toEosWallet db hdRoot) $
+        withExceptT GetEosWalletErrorAddressPoolGap $ exceptT $
+            addressPoolGapByRootId rootId db
+
+addressPoolGapByRootId
+    :: HD.HdRootId
+    -> Kernel.DB
+    -> Either GetAddressPoolGapError AddressPoolGap
+addressPoolGapByRootId rootId db = do
+    let accounts = IxSet.toList $ Kernel.accountsByRootId db rootId
+        bases = flip map accounts $ \hdAccount -> case hdAccount ^. HD.hdAccountBase of
+                    -- It is EOS-wallet, so all accounts must have EO-branch.
+                    HD.HdAccountBaseFO _       -> Left ()
+                    HD.HdAccountBaseEO _ _ gap -> Right gap
+        (errors, gaps) = partitionEithers bases
+    if | null bases            -> Left $ GetEosWalletErrorNoAccounts anId
+       | not . null $ errors   -> Left $ GetEosWalletErrorWrongAccounts anId
+       | length (nub gaps) > 1 -> Left $ GetEosWalletErrorGapsDiffer anId
+       | otherwise             -> let [gap] = gaps in Right gap
+  where
+    anId = sformat build rootId
 
 -- | Gets all the wallets known to this edge node.
 --
@@ -262,6 +301,21 @@ getWallets wallet db =
         updateSyncState wallet rootId (toWallet db root)
   where
     allRoots = db ^. dbHdWallets . HD.hdWalletsRoots
+
+getEosWallets
+    :: MonadIO m
+    => Kernel.PassiveWallet
+    -> Kernel.DB
+    -> m (Either GetEosWalletError (IxSet V1.EosWallet))
+getEosWallets _wallet db = do
+    let result = traverse (\root -> either Left (Right . toEosWallet db root) $
+                    addressPoolGapByRootId (root ^. HD.hdRootId) db)
+                    allRoots
+    return $ case result of
+        Left e           -> Left $ GetEosWalletErrorAddressPoolGap e
+        Right eosWallets -> Right $ IxSet.fromList eosWallets
+  where
+    allRoots = IxSet.toList $ db ^. dbHdWallets . HD.hdWalletsRoots
 
 -- | Gets Utxos per account of a wallet.
 getWalletUtxos

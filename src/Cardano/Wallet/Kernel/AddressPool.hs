@@ -15,11 +15,23 @@
 -------------------------------------------------------------------------------}
 
 module Cardano.Wallet.Kernel.AddressPool
-    ( AddressPool
+    (
+    -- * Types
+      AddressPool
+    , ErrAddressPoolInvalid(..)
+
+    -- * Construction
+    , emptyAddressPool
     , initAddressPool
+
+    -- * Manipulation
     , lookupAddressPool
+
+    -- * Inspection
     , getAddressPoolSize
     , getAddressPoolGap
+    , getKnownAddresses
+    , verifyPool
     ) where
 
 import           Universum
@@ -29,6 +41,7 @@ import qualified Data.Map as Map
 import           Formatting (bprint, build, int, (%))
 import qualified Formatting.Buildable
 import           Serokell.Util (listJson)
+import           Test.QuickCheck (Arbitrary (..), elements)
 
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 
@@ -41,13 +54,13 @@ import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 -- varying wallet types
 data AddressPool address = AddressPool
     { _addresses -- all addresses currently in the pool, discovered or not
-        :: Map address Word
+        :: !(Map address Word32)
 
     , _gap -- the "gap" to maintain after the last discovered address in a pool
-        :: AddressPoolGap
+        :: !AddressPoolGap
 
     , _nextAddresses -- compute next 'gap' addresses from an index
-        :: Word -> Map address Word
+        :: Word32 -> Map address Word32
     }
 makeLenses ''AddressPool
 
@@ -59,30 +72,51 @@ instance Buildable address => Buildable (AddressPool address) where
         (map (uncurry $ bprint (build%":"%build)) $ Map.toList $ pool ^. addresses)
 
 
+data ErrAddressPoolInvalid
+    = ErrIndexesAreNotSequential
+    | ErrNotEnoughAddresses
+    deriving (Eq, Show)
+
+instance Exception ErrAddressPoolInvalid
+
+instance Arbitrary ErrAddressPoolInvalid where
+    arbitrary = elements
+        [ ErrIndexesAreNotSequential
+        , ErrNotEnoughAddresses
+        ]
+
+
 {-------------------------------------------------------------------------------
-  Usage
+  Constructions
 -------------------------------------------------------------------------------}
+
+emptyAddressPool
+    :: (Ord address)
+    => AddressPoolGap
+    -> (Word32 -> address)
+    -> AddressPool address
+emptyAddressPool g newAddress = AddressPool
+    { _addresses = (mkNextAddresses g newAddress) 0
+    , _gap = g
+    , _nextAddresses = mkNextAddresses g newAddress
+    }
 
 initAddressPool
     :: (Ord address)
     => AddressPoolGap
-    -> (Word -> address)
-    -> AddressPool address
-initAddressPool gap_ newAddress = AddressPool
-    { _addresses = nextAddresses_ 0
-    , _gap = gap_
-    , _nextAddresses = nextAddresses_
+    -> (Word32 -> address)
+    -> [(address, Word32)]
+    -> Either ErrAddressPoolInvalid (AddressPool address)
+initAddressPool g newAddress addrs0 = verifyPool $ AddressPool
+    { _addresses = Map.fromList addrs0
+    , _gap = g
+    , _nextAddresses = mkNextAddresses g newAddress
     }
-  where
-    nextAddresses_ fromIx =
-        let
-            toIx = fromIx + (fromIntegral gap_) - 1
-        in
-            invariant (toIx > fromIx) "initAddressPool: toIx should be greater than fromIx"
-            $ Map.fromList
-            $ map (\ix -> (newAddress ix, ix))
-            [fromIx .. toIx]
 
+
+{-------------------------------------------------------------------------------
+  Manipulation
+-------------------------------------------------------------------------------}
 
 -- | Lookup an address in the pool. When we find an address in a pool, the pool
 -- may be amended in the following ways
@@ -95,14 +129,31 @@ lookupAddressPool
     :: (Ord address)
     => address
     -> AddressPool address
-    -> (Maybe (address, Word), AddressPool address)
+    -> (Maybe (address, Word32), AddressPool address)
 lookupAddressPool target pool =
     case pool ^. (addresses . at target) of
         Just ix ->
             (Just (target, ix), extendAddressPool ix pool)
-
         Nothing ->
             (Nothing, pool)
+
+
+{-------------------------------------------------------------------------------
+  Inspection
+-------------------------------------------------------------------------------}
+--
+-- | Check some invariant on the given pool
+verifyPool
+    :: AddressPool address
+    -> Either ErrAddressPoolInvalid (AddressPool address)
+verifyPool pool@(AddressPool addrs g _) = do
+    when pIndexesAreNotSequential $ Left ErrIndexesAreNotSequential
+    when pNotEnoughAddresses $ Left ErrNotEnoughAddresses
+    pure pool
+  where
+    ixs = sort $ Map.elems addrs
+    pNotEnoughAddresses = Map.size addrs < fromIntegral g
+    pIndexesAreNotSequential = not (null ixs) && [0..(fromIntegral (length ixs) - 1)] /= ixs
 
 -- | Get the underlying pool's size
 getAddressPoolSize
@@ -114,6 +165,14 @@ getAddressPoolGap
     :: AddressPool address -> AddressPoolGap
 getAddressPoolGap pool = pool ^. gap
 
+getKnownAddresses
+    :: AddressPool address
+    -> [(address, Word32)]
+getKnownAddresses pool =
+    let xs = sortOn snd $ Map.toList (pool ^. addresses)
+    in take (length xs - fromIntegral (pool ^. gap))  xs
+
+
 {-------------------------------------------------------------------------------
   Internals
 -------------------------------------------------------------------------------}
@@ -122,7 +181,7 @@ getAddressPoolGap pool = pool ^. gap
 --   otherwise we return the pool untouched.
 extendAddressPool
     :: (Ord address)
-    => Word
+    => Word32
     -> AddressPool address
     -> AddressPool address
 extendAddressPool ix pool
@@ -133,10 +192,19 @@ extendAddressPool ix pool
     isOnEdge = fromIntegral edge - ix <= fromIntegral (pool ^. gap)
     next = (pool ^. nextAddresses) (ix + 1)
 
-
-{-------------------------------------------------------------------------------
-  Utils
--------------------------------------------------------------------------------}
+mkNextAddresses
+    :: (Ord address)
+    => AddressPoolGap
+    -> (Word32 -> address)
+    -> Word32
+    -> Map address Word32
+mkNextAddresses g newAddress fromIx =
+    invariant (toIx > fromIx) "nextAddresses: toIx should be greater than fromIx"
+    $ Map.fromList
+    $ map (\ix -> (newAddress ix, ix))
+    [fromIx .. toIx]
+  where
+    toIx = fromIx + (fromIntegral g) - 1
 
 -- | Fails hard if an invariant does not hold, or proceed.
 invariant

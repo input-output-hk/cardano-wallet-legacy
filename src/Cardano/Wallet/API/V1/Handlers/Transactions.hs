@@ -14,8 +14,6 @@ import           Universum
 
 import           Servant
 
-import           Data.Coerce (coerce)
-
 import           Pos.Client.Txp.Util (defaultInputSelectionPolicy)
 
 import           Cardano.Wallet.API.Request
@@ -37,6 +35,8 @@ handlers aw = newTransaction aw
          :<|> getTransactionsHistory (WalletLayer.walletPassiveLayer aw)
          :<|> estimateFees aw
          :<|> redeemAda aw
+         :<|> newUnsignedTransaction aw
+         :<|> submitSignedTransaction aw
 
 -- | Given a 'Payment' as input, tries to generate a new 'Transaction', submitting
 -- it to the network eventually.
@@ -49,10 +49,7 @@ newTransaction aw payment@Payment{..} = liftIO $ do
     -- of CBR-291.
     let inputGrouping = toInputGrouping $ fromMaybe (WalletInputSelectionPolicy defaultInputSelectionPolicy)
                                                     pmtGroupingPolicy
-    res <- liftIO $ (WalletLayer.pay aw) (maybe mempty coerce pmtSpendingPassword)
-                                         inputGrouping
-                                         SenderPaysFee
-                                         payment
+    res <- liftIO $ (WalletLayer.pay aw) inputGrouping SenderPaysFee payment
     case res of
          Left err        -> throwM err
          Right (_, meta) -> txFromMeta aw NewPaymentUnknownAccountId meta
@@ -109,3 +106,31 @@ redeemAda aw redemption = liftIO $ do
   where
     embedErr :: UnknownHdAccount -> WalletLayer.RedeemAdaError
     embedErr = WalletLayer.RedeemAdaError . Kernel.RedeemAdaUnknownAccountId
+
+
+-- | Creates new unsigned transaction.
+--
+-- NOTE: This function does /not/ perform a payment, it just prepares raw
+-- transaction which will be signed and submitted to the blockchain later.
+newUnsignedTransaction :: ActiveWalletLayer IO
+                       -> Payment
+                       -> Handler (APIResponse UnsignedTransaction)
+newUnsignedTransaction aw payment@Payment{..} = do
+    let inputGrouping = toInputGrouping $ fromMaybe (WalletInputSelectionPolicy defaultInputSelectionPolicy)
+                                                    pmtGroupingPolicy
+    res <- liftIO $ (WalletLayer.createUnsignedTx aw) inputGrouping
+                                                      SenderPaysFee
+                                                      payment
+    case res of
+        Left err         -> throwM err
+        Right unsignedTx -> return $ single unsignedTx
+
+-- | Submits externally-signed transaction to the blockchain.
+submitSignedTransaction :: ActiveWalletLayer IO
+                        -> SignedTransaction
+                        -> Handler (APIResponse Transaction)
+submitSignedTransaction aw signedTx = liftIO $ do
+    res <- liftIO $ (WalletLayer.submitSignedTx aw) signedTx
+    case res of
+        Left err -> throwM err
+        Right (_, meta) -> txFromMeta aw WalletLayer.NewPaymentUnknownAccountId meta

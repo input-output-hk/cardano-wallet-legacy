@@ -20,7 +20,7 @@ import           Pos.Chain.Txp (Tx (..), TxSigData (..))
 import           Pos.Core (AddrAttributes (..), Address (..), Coin, TxFeePolicy)
 import           Pos.Core.Attributes (Attributes (..))
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
-import           Pos.Crypto (PassPhrase, PublicKey, Signature (..))
+import           Pos.Crypto (PublicKey, Signature (..))
 
 import           Cardano.Crypto.Wallet (xsignature)
 import qualified Cardano.Wallet.API.V1.Types as V1
@@ -43,12 +43,11 @@ import           Cardano.Wallet.WalletLayer.Kernel.Conv
 -- | Generates a new transaction @and submit it as pending@.
 pay :: MonadIO m
     => Kernel.ActiveWallet
-    -> PassPhrase
     -> InputGrouping
     -> ExpenseRegulation
     -> V1.Payment
     -> m (Either NewPaymentError (Tx, TxMeta))
-pay activeWallet pw grouping regulation payment = liftIO $ do
+pay activeWallet grouping regulation payment = liftIO $ do
     policy <- Node.getFeePolicy (Kernel.walletPassive activeWallet ^. Kernel.walletNode)
     limitExecutionTimeTo (60 :: Second) NewPaymentTimeLimitReached $
       runExceptT $ do
@@ -58,6 +57,7 @@ pay activeWallet pw grouping regulation payment = liftIO $ do
         -- Verify that all payee addresses are of the same `NetworkMagic`
         -- as our `ActiveWallet`.
         let nm = makeNetworkMagic $ Kernel.walletPassive activeWallet ^. walletProtocolMagic
+            pw = maybe mempty coerce $ V1.pmtSpendingPassword payment
         ExceptT $ pure $ verifyPayeesNM nm payees
 
         -- Pay the payees

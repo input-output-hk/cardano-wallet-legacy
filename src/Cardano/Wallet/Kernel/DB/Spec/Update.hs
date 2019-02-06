@@ -46,7 +46,8 @@ import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending
 import           Cardano.Wallet.Kernel.DB.Spec.Read
 import           Cardano.Wallet.Kernel.DB.Util.AcidState
 import           Cardano.Wallet.Kernel.NodeStateAdaptor (SecurityParameter (..))
-import           Cardano.Wallet.Kernel.PrefilterTx (PrefilteredBlock (..))
+import           Cardano.Wallet.Kernel.Prefiltering (PrefilteredBlock,
+                     pfbInputs, pfbMeta, pfbOutputs)
 import qualified Cardano.Wallet.Kernel.Util.Core as Core
 import qualified Cardano.Wallet.Kernel.Util.Strict as Strict
 import qualified Cardano.Wallet.Kernel.Util.StrictList as SL
@@ -185,32 +186,32 @@ cancelPending txids = liftCheckpoints $ map (cpPending %~ Pending.delete txids)
 --
 -- Additionally returns the set of transactions removed from pending.
 applyBlock :: SecurityParameter
-           -> PrefilteredBlock
+           -> (BlockContext, PrefilteredBlock)
            -> Update' ApplyBlockFailed
                       (Checkpoints Checkpoint)
                       (Set Txp.TxId)
-applyBlock (SecurityParameter k) pb = do
+applyBlock (SecurityParameter k) (ctx, pb) = do
     checkpoints@(Checkpoints ls)  <- get
     let current           = checkpoints ^. currentCheckpoint
         utxo              = current ^. checkpointUtxo        . fromDb
         balance           = current ^. checkpointUtxoBalance . fromDb
         (utxo', balance') = updateUtxo      pb (utxo, balance)
         (pending', rem1)  = updatePending   (pfbInputs pb) (current ^. checkpointPending)
-        blockMeta'        = (current ^. checkpointBlockMeta) <> (localBlockMeta $ pfbMeta pb)
+        blockMeta'        = (current ^. checkpointBlockMeta) <> (localBlockMeta $ pfbMeta (ctx, pb))
         (foreign', rem2)  = updatePending   (pfbInputs pb) (current ^. checkpointForeign)
-    if (pfbContext pb) `blockContextSucceeds` (current ^. checkpointContext . lazy) then do
+    if ctx `blockContextSucceeds` (current ^. checkpointContext . lazy) then do
       put $ Checkpoints . takeNewest k . NewestFirst $ Checkpoint {
           _checkpointUtxo        = InDb utxo'
         , _checkpointUtxoBalance = InDb balance'
         , _checkpointPending     = pending'
         , _checkpointBlockMeta   = blockMeta'
         , _checkpointForeign     = foreign'
-        , _checkpointContext     = Strict.Just $ pfbContext pb
+        , _checkpointContext     = Strict.Just ctx
         } SNE.<| getNewestFirst ls
       return $ Set.unions [rem1, rem2]
     else
       throwError $ ApplyBlockNotSuccessor
-                     (pfbContext pb)
+                     ctx
                      (current ^. checkpointContext . lazy)
 
 -- | Like 'applyBlock', but to a list of partial checkpoints instead
@@ -218,32 +219,32 @@ applyBlock (SecurityParameter k) pb = do
 -- NOTE: Unlike 'applyBlock', we do /NOT/ throw away partial checkpoints. If
 -- we did, it might be impossible for the historical checkpoints to ever
 -- catch up with the current ones.
-applyBlockPartial :: PrefilteredBlock
+applyBlockPartial :: (BlockContext, PrefilteredBlock)
                   -> Update' ApplyBlockFailed
                              (Checkpoints PartialCheckpoint)
                              (Set Txp.TxId)
-applyBlockPartial pb = do
+applyBlockPartial (ctx, pb) = do
     checkpoints@(Checkpoints ls)  <- get
     let current           = checkpoints ^. currentCheckpoint
         utxo              = current ^. pcheckpointUtxo        . fromDb
         balance           = current ^. pcheckpointUtxoBalance . fromDb
         (utxo', balance') = updateUtxo           pb (utxo, balance)
         (pending', rem1)  = updatePending        (pfbInputs pb) (current ^. pcheckpointPending)
-        blockMeta'        = (current ^. pcheckpointBlockMeta) <> pfbMeta pb
+        blockMeta'        = (current ^. pcheckpointBlockMeta) <> pfbMeta (ctx, pb)
         (foreign', rem2)  = updatePending        (pfbInputs pb) (current ^. pcheckpointForeign)
-    if (pfbContext pb) `blockContextSucceeds` (current ^. cpContext . lazy) then do
+    if ctx `blockContextSucceeds` (current ^. cpContext . lazy) then do
       put $ Checkpoints $ NewestFirst $ PartialCheckpoint {
           _pcheckpointUtxo        = InDb utxo'
         , _pcheckpointUtxoBalance = InDb balance'
         , _pcheckpointPending     = pending'
         , _pcheckpointBlockMeta   = blockMeta'
         , _pcheckpointForeign     = foreign'
-        , _pcheckpointContext     = pfbContext pb
+        , _pcheckpointContext     = ctx
         } SNE.<| getNewestFirst ls
       return $ Set.unions [rem1, rem2]
     else
       throwError $ ApplyBlockNotSuccessor
-                     (pfbContext pb)
+                     ctx
                      (current ^. cpContext . lazy)
 
 -- | Rollback
@@ -285,7 +286,7 @@ observableRollbackUseInTestsOnly = rollback
 -- (since they are new confirmed).
 switchToFork :: SecurityParameter
              -> Maybe Core.HeaderHash  -- ^ Roll back until we meet this block.
-             -> OldestFirst [] PrefilteredBlock -- ^ Blocks to apply
+             -> OldestFirst [] (BlockContext, PrefilteredBlock) -- ^ Blocks to apply
              -> Update' ApplyBlockFailed
                         (Checkpoints Checkpoint)
                         (Pending, Set Txp.TxId)
@@ -317,7 +318,7 @@ switchToFork k oldest blocksToApply = do
 
     applyBlocks :: Pending -- Accumulator: reintroduced pending transactions
                 -> Set Txp.TxId -- Accumulator: removed pending transactions
-                -> [PrefilteredBlock]
+                -> [(BlockContext, PrefilteredBlock)]
                 -> Update' ApplyBlockFailed
                            (Checkpoints Checkpoint)
                            (Pending, Set Txp.TxId)
@@ -334,19 +335,19 @@ switchToFork k oldest blocksToApply = do
 
 -- | Update (utxo,balance) with the given prefiltered block
 updateUtxo :: PrefilteredBlock -> (Utxo, Core.Coin) -> (Utxo, Core.Coin)
-updateUtxo PrefilteredBlock{..} (utxo, balance) =
+updateUtxo pb (utxo, balance) =
     (utxo', balance')
   where
     -- See wallet spec figure 6 (Wallet with prefiltering):
     --
     -- * pfbOutputs corresponds to what the spec calls utxo^+ / txouts_b
     -- * pfbInputs  corresponds to what the spec calls txins_b
-    utxoUnion = Map.union utxo pfbOutputs
-    utxoMin   = utxoUnion `Core.utxoRestrictToInputs` pfbInputs
-    utxo'     = utxoUnion `Core.utxoRemoveInputs` pfbInputs
+    utxoUnion = Map.union utxo (pfbOutputs pb)
+    utxoMin   = utxoUnion `Core.utxoRestrictToInputs` (pfbInputs pb)
+    utxo'     = utxoUnion `Core.utxoRemoveInputs` (pfbInputs pb)
     balance'  = Core.unsafeIntegerToCoin $
                     Core.coinToInteger balance
-                  + Core.utxoBalance pfbOutputs
+                  + Core.utxoBalance (pfbOutputs pb)
                   - Core.utxoBalance utxoMin
 
 -- | Update the pending transactions with the given prefiltered block

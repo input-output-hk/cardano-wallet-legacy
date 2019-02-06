@@ -7,6 +7,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet.Update (
 
 import           Universum
 
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.Util.AcidState
 import           UTxO.Util (modifyAndGetNew)

@@ -11,8 +11,8 @@ import           Control.Monad.Except
 import           Formatting (build, sformat)
 import           GHC.TypeLits (symbolVal)
 
-import           Pos.Core (Address, Coin, SlotCount, SlotId, decodeTextAddress,
-                     flattenSlotId, getBlockCount)
+import           Pos.Core (Address, Coin, SlotCount, SlotId, flattenSlotId,
+                     getBlockCount)
 import           Pos.Node.API (unV1)
 import           Pos.Util.Wlog (Severity (..))
 
@@ -23,8 +23,8 @@ import           Cardano.Wallet.API.Request.Pagination
 import qualified Cardano.Wallet.API.Request.Sort as S
 import           Cardano.Wallet.API.Response
 import qualified Cardano.Wallet.API.V1.Types as V1
+import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
-import           Cardano.Wallet.Kernel.DB.InDb (InDb (..))
 import           Cardano.Wallet.Kernel.DB.TxMeta (TxMeta (..))
 import qualified Cardano.Wallet.Kernel.DB.TxMeta as TxMeta
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
@@ -71,9 +71,6 @@ getTransactions wallet mbWalletId mbAccountIndex mbAddress params fop sop = lift
                 (castFiltering $ mapIx unV1 <$> F.findMatchingFilterOp fop)
                 (castFiltering $ mapIx unV1 <$> F.findMatchingFilterOp fop)
                 mbSorting
-            db <- liftIO $ Kernel.getWalletSnapshot wallet
-            sc <- liftIO $ Node.getSlotCount (wallet ^. Kernel.walletNode)
-            currentSlot <- liftIO $ Node.getTipSlotId (wallet ^. Kernel.walletNode)
             if null metas then
                 -- A bit artificial, but we force the termination and make sure
                 -- in the meantime that the algorithm only exits by one and only
@@ -81,7 +78,7 @@ getTransactions wallet mbWalletId mbAccountIndex mbAddress params fop sop = lift
                 go cp (min pp $ length acc) (acc, total <|> mbTotalEntries)
             else do
                 txs <- catMaybes <$> forM metas (\meta -> do
-                    runExceptT (metaToTx db sc currentSlot meta) >>= \case
+                    toTransaction wallet meta >>= \case
                         Left e -> do
                             let warn = lift . ((wallet ^. Kernel.walletLogMessage) Warning)
                             warn $ "Inconsistent entry in the metadata store: " <> sformat build e
@@ -111,9 +108,9 @@ castAccountFiltering mbWalletId mbAccountIndex =
         (Nothing, Just _)  -> throwError GetTxMissingWalletIdError
         -- AccountIndex doesn`t uniquely identify an Account, so we shouldn`t continue without a WalletId.
         (Just (V1.WalletId wId), _) ->
-            case decodeTextAddress wId of
-                Left _         -> throwError $ GetTxAddressDecodingFailed wId
-                Right rootAddr -> return $ TxMeta.AccountFops rootAddr (V1.getAccIndex <$> mbAccountIndex)
+            case HD.decodeHdRootId wId of
+                Nothing     -> throwError $ GetTxAddressDecodingFailed wId
+                Just rootId -> return $ TxMeta.AccountFops rootId (V1.getAccIndex <$> mbAccountIndex)
 
 -- This function reads at most the head of the SortOperations and expects to find "created_at".
 castSorting :: Monad m => S.SortOperations V1.Transaction -> ExceptT GetTxError m (Maybe TxMeta.Sorting)
@@ -166,7 +163,7 @@ metaToTx db slotCount current TxMeta{..} = do
         txStatus = status
     }
         where
-            hdRootId    = HD.HdRootId $ InDb _txMetaWalletId
+            hdRootId    = _txMetaWalletId
             hdAccountId = HD.HdAccountId hdRootId (HD.HdAccountIx _txMetaAccountIx)
 
             inputsToPayDistr :: (a , b, Address, Coin) -> V1.PaymentDistribution

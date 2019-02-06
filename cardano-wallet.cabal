@@ -27,12 +27,10 @@ library
       OverloadedStrings
       RecordWildCards
       ScopedTypeVariables
-      ScopedTypeVariables
       TemplateHaskell
       TupleSections
       TypeApplications
       TypeFamilies
-      TypeOperators
       TypeOperators
       UndecidableInstances
   ghc-options:
@@ -178,8 +176,6 @@ library
       Cardano.Wallet.API.V1.Transactions
       Cardano.Wallet.API.V1.Types
       Cardano.Wallet.API.V1.Wallets
-      Cardano.Wallet.API.WIP
-      Cardano.Wallet.API.WIP.Handlers
       Cardano.Wallet.Action
       Cardano.Wallet.Client
       Cardano.Wallet.Client.Http
@@ -190,7 +186,6 @@ library
       Cardano.Wallet.Kernel.AddressPoolGap
       Cardano.Wallet.Kernel.Addresses
       Cardano.Wallet.Kernel.Ed25519Bip44
-      Cardano.Wallet.Kernel.EosWalletId
       Cardano.Wallet.Kernel.BListener
       Cardano.Wallet.Kernel.CoinSelection
       Cardano.Wallet.Kernel.CoinSelection.FromGeneric
@@ -203,9 +198,8 @@ library
       Cardano.Wallet.Kernel.DB.BlockContext
       Cardano.Wallet.Kernel.DB.BlockMeta
       Cardano.Wallet.Kernel.DB.Compression
-      Cardano.Wallet.Kernel.DB.EosHdWallet
-      Cardano.Wallet.Kernel.DB.EosHdWallet.Create
       Cardano.Wallet.Kernel.DB.HdWallet
+      Cardano.Wallet.Kernel.DB.HdRootId
       Cardano.Wallet.Kernel.DB.HdWallet.Create
       Cardano.Wallet.Kernel.DB.HdWallet.Delete
       Cardano.Wallet.Kernel.DB.HdWallet.Derivation
@@ -236,7 +230,7 @@ library
       Cardano.Wallet.Kernel.Mode
       Cardano.Wallet.Kernel.NodeStateAdaptor
       Cardano.Wallet.Kernel.Pending
-      Cardano.Wallet.Kernel.PrefilterTx
+      Cardano.Wallet.Kernel.Prefiltering
       Cardano.Wallet.Kernel.Read
       Cardano.Wallet.Kernel.Restore
       Cardano.Wallet.Kernel.Submission
@@ -288,11 +282,9 @@ executable cardano-wallet-server
       OverloadedStrings
       RecordWildCards
       ScopedTypeVariables
-      ScopedTypeVariables
       TemplateHaskell
       TypeApplications
       TypeFamilies
-      TypeOperators
       TypeOperators
       UndecidableInstances
   ghc-options:
@@ -380,6 +372,7 @@ test-suite unit
   ghc-options:
       -threaded -rtsopts
       -Wall
+      -Werror
       -O2
 
   build-depends:
@@ -450,6 +443,7 @@ test-suite unit
       Arbitrary
       Golden.APILayout
       Golden.APIV1Types
+      Golden.Ed25519Addresses
       Golden.WalletError
       Test.Infrastructure.Generator
       Test.Infrastructure.Genesis
@@ -478,6 +472,7 @@ test-suite unit
       Util.Buildable
       Util.Buildable.Hspec
       Util.Buildable.QuickCheck
+      Util.Prefiltering
       Wallet.Abstract
       Wallet.Basic
       Wallet.Incremental
@@ -568,8 +563,8 @@ test-suite integration
       MultiParamTypeClasses
       NoImplicitPrelude
       NoMonomorphismRestriction
-      OverloadedStrings
       OverloadedLabels
+      OverloadedStrings
       QuasiQuotes
       ScopedTypeVariables
       TupleSections
@@ -586,6 +581,7 @@ test-suite integration
   build-depends:
       base
     , QuickCheck
+    , servant-client
     , aeson
     , aeson-qq
     , async
@@ -601,6 +597,7 @@ test-suite integration
     , cardano-wallet
     , containers
     , cryptonite
+    , directory
     , filepath
     , generic-lens
     , hspec
@@ -632,3 +629,4 @@ test-suite integration
       Test.Integration.Scenario.Addresses
       Test.Integration.Scenario.Transactions
       Test.Integration.Scenario.Wallets
+      Test.Integration.Scenario.Node

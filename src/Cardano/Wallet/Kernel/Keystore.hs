@@ -44,7 +44,7 @@ import           Pos.Util.UserSecret (UserSecret, getUSPath, isEmptyUserSecret,
                      writeRaw, writeUserSecretRelease, _wusRootKey)
 import           Pos.Util.Wlog (addLoggerName)
 
-import           Cardano.Wallet.Kernel.DB.HdWallet (HdRootId, eskToHdRootId)
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, eskToHdRootId)
 import qualified Cardano.Wallet.Kernel.Util.Strict as Strict
 
 -- Internal storage necessary to smooth out the legacy 'UserSecret' API.

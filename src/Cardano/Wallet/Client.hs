@@ -76,6 +76,11 @@ data WalletClient m
          :: NewAddress -> Resp m WalletAddress
     , getAddress
          :: Text -> Resp m WalletAddress
+    , importAddresses
+        :: WalletId
+        -> AccountIndex
+        -> [WalAddress]
+        -> Resp m (BatchImportResult WalAddress)
     -- wallets endpoints
     , postWallet
          :: New Wallet -> Resp m Wallet
@@ -95,10 +100,6 @@ data WalletClient m
          :: WalletId -> Update Wallet -> Resp m Wallet
     , getUtxoStatistics
         :: WalletId -> Resp m UtxoStatistics
-    , postEosWallet
-         :: New EosWallet -> Resp m EosWallet
-    , deleteEosWallet
-         :: EosWalletId -> m (Either ClientError ())
     , postUnsignedTransaction
          :: Payment -> Resp m UnsignedTransaction
     , postSignedTransaction
@@ -157,6 +158,14 @@ data WalletClient m
         :: m (Either ClientError ())
     , importWallet
         :: WalletImport -> Resp m Wallet
+
+    -- Externally Owned Wallets Endpoints
+    , postEosWallet
+        :: NewEosWallet
+        -> Resp m EosWallet
+    , getEosWallet
+        :: WalletId
+        -> Resp m EosWallet
     } deriving Generic
 
 
@@ -236,6 +245,8 @@ natMapClient phi f wc = WalletClient
         f . phi . postAddress wc
     , getAddress =
         f . phi . getAddress wc
+    , importAddresses =
+        \x y -> f . phi . importAddresses wc x y
     , postWallet =
         f . phi . postWallet wc
     , getWalletIndexFilterSorts =
@@ -250,10 +261,6 @@ natMapClient phi f wc = WalletClient
         \x -> f . phi . updateWallet wc x
     , getUtxoStatistics =
         f . phi . getUtxoStatistics wc
-    , postEosWallet =
-        f . phi . postEosWallet wc
-    , deleteEosWallet =
-        f . phi . deleteEosWallet wc
     , postUnsignedTransaction =
         f . phi . postUnsignedTransaction wc
     , postSignedTransaction =
@@ -295,6 +302,10 @@ natMapClient phi f wc = WalletClient
         f $ phi $ resetWalletState wc
     , importWallet =
         f . phi . importWallet wc
+    , postEosWallet =
+        f . phi . postEosWallet wc
+    , getEosWallet =
+        f . phi . getEosWallet wc
     }
 
 -- | Run the given natural transformation over the 'WalletClient'.

@@ -17,12 +17,13 @@ import           Cardano.Wallet.WalletLayer (ActiveWalletLayer,
 
 
 handlers :: NodeHttpClient -> ActiveWalletLayer IO -> Server V1.API
-handlers nodeClient w =
-    Addresses.handlers         passiveWallet
-    :<|> Wallets.handlers      passiveWallet
-    :<|> Accounts.handlers     passiveWallet
-    :<|> Transactions.handlers w
-    :<|> Settings.handlers     nodeClient
-    :<|> Info.handlers         nodeClient
+handlers nc aw =
+    Addresses.handlers pw
+    :<|> Wallets.fullyOwnedHandlers pw
+    :<|> Wallets.externallyOwnedHandlers pw
+    :<|> Accounts.handlers pw
+    :<|> Transactions.handlers aw
+    :<|> Settings.handlers nc
+    :<|> Info.handlers nc
   where
-    passiveWallet = walletPassiveLayer w
+    pw = walletPassiveLayer aw
