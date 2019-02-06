@@ -71,6 +71,14 @@ instance PersistField Core.Address where
            Left _  -> Left $ "Failed to parse Address out of PersistValue: " <> show f
            Right a -> pure a
 
+instance PersistField HdRootId where
+    toPersistValue = toPersistValue . sformat build
+    fromPersistValue f = do
+        rootId <- decodeHdRootId <$> fromPersistValue f
+        case rootId of
+           Nothing -> returnError Sqlite.ConversionFailed f "not a valid HdRootId"
+           Just a -> pure a
+
 instance Read Core.Address where
     readsPrec _ = error "Needed for HttpApiData"
 
