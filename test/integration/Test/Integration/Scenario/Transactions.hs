@@ -2,6 +2,7 @@ module Test.Integration.Scenario.Transactions
     ( spec
     ) where
 
+
 import           Universum
 
 import qualified Data.List.NonEmpty as NonEmpty
@@ -52,6 +53,52 @@ spec = do
         [100000]
         (10, 11)
         [ expectWalletError (UtxoNotEnoughFragmented (Client.ErrUtxoNotEnoughFragmented 1 Client.msgUtxoNotEnoughFragmented)) ]
+
+    multioutputTransactionScenario
+        "cannot construct a transaction where one of the output has zero amount (a)"
+        [100000, 100000]
+        (0, 11)
+        [ expectWalletError (ZeroAmountCoin (Client.ErrZeroAmountCoin 1 Client.msgZeroAmountCoin)) ]
+
+    multioutputTransactionScenario
+        "cannot construct a transaction where one of the output has zero amount (b) "
+        [100000, 100000]
+        (11, 0)
+        [ expectWalletError (ZeroAmountCoin (Client.ErrZeroAmountCoin 1 Client.msgZeroAmountCoin)) ]
+
+    multioutputTransactionScenario
+        "cannot construct a transaction with both outputs having zero amount"
+        [100000, 100000]
+        (0, 0)
+        [ expectWalletError (ZeroAmountCoin (Client.ErrZeroAmountCoin 2 Client.msgZeroAmountCoin)) ]
+
+    scenario "cannot construct a transaction with zero amount output" $ do
+        fixture <- setup $ defaultSetup
+            & initialCoins .~ [1000000]
+
+        response <- request $ Client.postTransaction $- Payment
+            (defaultSource fixture)
+            (defaultDistribution 0 fixture)
+            defaultGroupingPolicy
+            noSpendingPassword
+
+        verify response
+            [ expectWalletError ( ZeroAmountCoin (Client.ErrZeroAmountCoin 1 Client.msgZeroAmountCoin))
+            ]
+
+    scenario "cannot estimate a transaction fee with zero amount output" $ do
+        fixture <- setup $ defaultSetup
+            & initialCoins .~ [1000000]
+
+        response <- request $ Client.getTransactionFee $- Payment
+            (defaultSource fixture)
+            (defaultDistribution 0 fixture)
+            defaultGroupingPolicy
+            noSpendingPassword
+
+        verify response
+            [ expectWalletError ( ZeroAmountCoin (Client.ErrZeroAmountCoin 1 Client.msgZeroAmountCoin))
+            ]
 
 
     scenario "cannot send subsequent transaction when the first one is pending" $ do

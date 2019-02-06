@@ -11,6 +11,7 @@ module Cardano.Wallet.Kernel.Transactions (
     , EstimateFeesError(..)
     , RedeemAdaError(..)
     , NumberOfMissingUtxos(..)
+    , NumberOfZeroAmountOutputs(..)
     , cardanoFee
     , mkStdTx
     , prepareUnsignedTxWithSources
@@ -98,6 +99,16 @@ instance Arbitrary NumberOfMissingUtxos where
     arbitrary = oneof [ NumberOfMissingUtxos <$> arbitrary
                       ]
 
+data NumberOfZeroAmountOutputs = NumberOfZeroAmountOutputs Int
+
+instance Buildable NumberOfZeroAmountOutputs where
+    build (NumberOfZeroAmountOutputs number) =
+        bprint ("NumberOfZeroAmountOutputs " % build) number
+
+instance Arbitrary NumberOfZeroAmountOutputs where
+    arbitrary = oneof [ NumberOfZeroAmountOutputs <$> arbitrary
+                      ]
+
 
 data NewTransactionError =
     NewTransactionUnknownAccount UnknownHdAccount
@@ -107,6 +118,7 @@ data NewTransactionError =
   | NewTransactionErrorSignTxFailed SignTransactionError
   | NewTransactionInvalidTxIn
   | NewTransactionNotEnoughUtxoFragmentation NumberOfMissingUtxos
+  | NewTransactionZeroAmountCoin NumberOfZeroAmountOutputs
 
 instance Buildable NewTransactionError where
     build (NewTransactionUnknownAccount err) =
@@ -123,7 +135,8 @@ instance Buildable NewTransactionError where
         bprint "NewTransactionInvalidTxIn"
     build (NewTransactionNotEnoughUtxoFragmentation err) =
         bprint ("NewTransactionNotEnoughUtxoFragmentation" % build) err
-
+    build (NewTransactionZeroAmountCoin err) =
+        bprint ("NewTransactionZeroAmountCoin" % build) err
 
 instance Arbitrary NewTransactionError where
     arbitrary = oneof [
@@ -136,6 +149,7 @@ instance Arbitrary NewTransactionError where
       , NewTransactionErrorSignTxFailed <$> arbitrary
       , pure NewTransactionInvalidTxIn
       , NewTransactionNotEnoughUtxoFragmentation <$> arbitrary
+      , NewTransactionZeroAmountCoin <$> arbitrary
       ]
 
 data PaymentError = PaymentNewTransactionError NewTransactionError
@@ -233,9 +247,11 @@ newUnsignedTransaction ActiveWallet{..} options accountId payees = runExceptT $ 
     availableUtxo <- withExceptT NewTransactionUnknownAccount $ exceptT $
                        currentAvailableUtxo snapshot accountId
 
-
     withExceptT NewTransactionNotEnoughUtxoFragmentation $ exceptT $
         checkUtxoFragmentation payees availableUtxo
+
+    withExceptT NewTransactionZeroAmountCoin $ exceptT $
+        checkCoins payees
 
     -- STEP 1: Run coin selection.
     CoinSelFinalResult inputs outputs coins <-
@@ -280,6 +296,18 @@ newUnsignedTransaction ActiveWallet{..} options accountId payees = runExceptT $ 
             diff = numberOfOutputs - numberOfUtxo
         in if diff > 0 then
             Left $ NumberOfMissingUtxos diff
+           else
+            Right ()
+
+    checkCoins
+        :: NonEmpty (Address, Coin)
+        -> Either NumberOfZeroAmountOutputs ()
+    checkCoins outputs =
+        let numberOfZeroAmountOutputs = length
+                                      $ NonEmpty.filter (== 0)
+                                      $ NonEmpty.map (Core.getCoin . snd) outputs
+        in if numberOfZeroAmountOutputs > 0 then
+            Left $ NumberOfZeroAmountOutputs numberOfZeroAmountOutputs
            else
             Right ()
 

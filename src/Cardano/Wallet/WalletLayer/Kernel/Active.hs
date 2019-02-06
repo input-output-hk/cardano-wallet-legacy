@@ -17,7 +17,8 @@ import           Data.Time.Units (Second)
 
 import           Pos.Binary.Class (decodeFull')
 import           Pos.Chain.Txp (Tx (..), TxSigData (..))
-import           Pos.Core (AddrAttributes (..), Address (..), Coin, TxFeePolicy)
+import           Pos.Core (AddrAttributes (..), Address (..), Coin (..),
+                     TxFeePolicy)
 import           Pos.Core.Attributes (Attributes (..))
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
 import           Pos.Crypto (PublicKey, Signature (..))
@@ -53,7 +54,6 @@ pay activeWallet grouping regulation payment = liftIO $ do
       runExceptT $ do
         (opts, accId, payees) <- withExceptT NewPaymentWalletIdDecodingFailed $
                                    setupPayment policy grouping regulation payment
-
         -- Verify that all payee addresses are of the same `NetworkMagic`
         -- as our `ActiveWallet`.
         let nm = makeNetworkMagic $ Kernel.walletPassive activeWallet ^. walletProtocolMagic

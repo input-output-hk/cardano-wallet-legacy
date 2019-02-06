@@ -234,7 +234,7 @@ spec = do
 
         forM_ matrix $ \(endpoint, expectations) -> scenario endpoint $ do
             pendingWith "Test fails due to bug #220"
-            forM_ ([3,6,6,9,0]) $ \coins -> do
+            forM_ ([3,6,6,9]) $ \coins -> do
                 setup $ defaultSetup
                     & initialCoins .~ [coins]
 

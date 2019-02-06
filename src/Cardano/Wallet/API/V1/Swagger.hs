@@ -336,6 +336,7 @@ $errors
     -- 'UnsupportedMimeTypeError'
     , mkRow fmtErr $ UnsupportedMimeTypePresent "Expected Content-Type's main MIME-type to be 'application/json'."
     , mkRow fmtErr $ UtxoNotEnoughFragmented (ErrUtxoNotEnoughFragmented 1 msgUtxoNotEnoughFragmented)
+    , mkRow fmtErr $ ZeroAmountCoin (ErrZeroAmountCoin 1 msgZeroAmountCoin)
     -- TODO 'MnemonicError' ?
     ]
   mkRow fmt err = T.intercalate "|" (fmt err)
@@ -682,6 +683,7 @@ curl -X POST https://localhost:8090/api/v1/transactions \
   "spendingPassword": "5416b2988745725998907addf4613c9b0764f04959030e1b81c603b920a115d0"
 }'
 ```
+One has to make sure that each amount field in destinations is positive.
 
 
 About UTXO Fragmentation
