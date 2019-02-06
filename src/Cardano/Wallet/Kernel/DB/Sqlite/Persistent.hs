@@ -72,35 +72,35 @@ import qualified Pos.Core as Core
 
 share [ mkPersist sqlSettings { mpsPrefixFields = False } , mkMigrate "migrateAll" ] [persistLowerCase|
 
-TxMeta
-    txMetaTableId         Txp.TxId
-    txMetaTableAmount     Core.Coin
-    txMetaTableCreatedAt  Core.Timestamp
-    txMetaTableIsLocal    Bool
-    txMetaTableIsOutgoing Bool
-    txMetaTableWalletId   Core.Address
-    txMetaTableAccountIx  Word32
+TxMeta sql=tx_metas
+    txMetaTableId         Txp.TxId       sql=meta_id
+    txMetaTableAmount     Core.Coin      sql=meta_amount
+    txMetaTableCreatedAt  Core.Timestamp sql=meta_created_at
+    txMetaTableIsLocal    Bool           sql=meta_is_local
+    txMetaTableIsOutgoing Bool           sql=meta_is_outgoing
+    txMetaTableWalletId   Core.Address   sql=meta_wallet_id
+    txMetaTableAccountIx  Word32         sql=meta_account_ix
 
     Primary txMetaTableId txMetaTableWalletId txMetaTableAccountIx
 
     deriving Eq Show Generic
 
-TxOutput
-    outputTableTxId    Txp.TxId
-    outputTableIndex   Word32
-    outputTableAddress Core.Address
-    outputTableCoin    Core.Coin
+TxOutput sql=tx_metas_outputs
+    outputTableTxId    Txp.TxId     sql=meta_id
+    outputTableIndex   Word32       sql=output_index
+    outputTableAddress Core.Address sql=output_address
+    outputTableCoin    Core.Coin    sql=output_coin
 
     Primary outputTableTxId outputTableIndex
 
     deriving Show Generic
 
-TxInput
-    inputTableTxId         Txp.TxId
-    inputTableForeignTxid  Txp.TxId
-    inputTableForeignIndex Word32
-    inputTableAddress      Core.Address
-    inputTableCoin         Core.Coin
+TxInput sql=tx_metas_inputs
+    inputTableTxId         Txp.TxId     sql=meta_id
+    inputTableForeignTxid  Txp.TxId     sql=input_foreign_id
+    inputTableForeignIndex Word32       sql=input_foreign_index
+    inputTableAddress      Core.Address sql=input_address
+    inputTableCoin         Core.Coin    sql=input_coin
 
     Primary inputTableTxId inputTableForeignTxid inputTableForeignIndex
 
@@ -222,8 +222,11 @@ runPersistConn c a =
 
 convertError :: Sqlite.SqliteException -> Sqlite.SQLiteResponse
 convertError (Sqlite.SqliteException { seError, seFunctionName, seDetails }) =
-    receiveSQLError (SqliteDirect.SQLError seError' seDetails seFunctionName)
+    -- error (seDetails)
+    receiveSQLError (SqliteDirect.SQLError seError' seDetails' seFunctionName)
   where
+    -- the persistent-sqlite includes a `: ` before the details
+    seDetails' = Text.drop 2 seDetails
     seError' = case seError of
         Sqlite.ErrorOK                 -> SqliteDirect.ErrorOK
         Sqlite.ErrorError              -> SqliteDirect.ErrorError
