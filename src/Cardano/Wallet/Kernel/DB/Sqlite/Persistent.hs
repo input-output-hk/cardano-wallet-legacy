@@ -68,8 +68,6 @@ import qualified Cardano.Wallet.Kernel.DB.TxMeta.Types as Kernel
 import qualified Pos.Chain.Txp as Txp
 import qualified Pos.Core as Core
 
-{-# ANN module ("HLint: ignore Reduce duplication" :: Text) #-}
-
 share [ mkPersist sqlSettings { mpsPrefixFields = False } , mkMigrate "migrateAll" ] [persistLowerCase|
 
 TxMeta sql=tx_metas
@@ -451,19 +449,10 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
            Nothing   -> metaQuery
            Just addr -> metaQueryWithAddr addr
 
-        let txids = E.valList (map txMetaTableId meta)
+        let txids = map txMetaTableId meta
 
-        input <-
-            E.select $
-            E.from $ \inp -> do
-            E.where_ (inp E.^. InputTableTxId `E.in_` txids)
-            pure inp
-
-        output <-
-            E.select $
-            E.from $ \out -> do
-            E.where_ (out E.^. OutputTableTxId `E.in_` txids)
-            pure out
+        input <- selectList [InputTableTxId <-. txids] []
+        output <- selectList [OutputTableTxId <-. txids] []
 
         return $ do
             mt  <- nonEmpty meta
