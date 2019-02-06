@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Cardano.Wallet.Kernel.DB.Sqlite.Persistent.Orphans where
 
@@ -10,8 +11,9 @@ import           Prelude (Read (..))
 
 import           Data.Time.Units (fromMicroseconds, toMicroseconds)
 import           Database.Persist.Sqlite
-import           Formatting (sformat)
+import           Formatting (build, sformat)
 
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, decodeHdRootId)
 import qualified Pos.Chain.Txp as Txp
 import qualified Pos.Core as Core
 import           Pos.Crypto.Hashing (decodeAbstractHash, hashHexF)
@@ -76,7 +78,7 @@ instance PersistField HdRootId where
     fromPersistValue f = do
         rootId <- decodeHdRootId <$> fromPersistValue f
         case rootId of
-           Nothing -> returnError Sqlite.ConversionFailed f "not a valid HdRootId"
+           Nothing -> Left $ "Failed to parse HdRootId out of PersistValue: " <> show f
            Just a -> pure a
 
 instance Read Core.Address where
@@ -84,3 +86,9 @@ instance Read Core.Address where
 
 instance PersistFieldSql Core.Address where
     sqlType _ = sqlType (Proxy @Text)
+
+instance PersistFieldSql HdRootId where
+    sqlType _ = sqlType (Proxy @Text)
+
+instance Read HdRootId where
+    readsPrec _ = error "Needed for HttpApiData"

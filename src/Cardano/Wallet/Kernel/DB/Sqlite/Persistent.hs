@@ -59,6 +59,7 @@ import qualified Database.SQLite.SimpleErrors.Types as Sqlite
 import qualified Database.SQLite3 as SqliteDirect
 import           GHC.Generics (Generic)
 
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.Sqlite.Persistent.Orphans ()
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types (AccountFops (..),
                      FilterOperation (..), Limit (..), Offset (..),
@@ -76,7 +77,7 @@ TxMeta sql=tx_metas
     txMetaTableCreatedAt  Core.Timestamp sql=meta_created_at
     txMetaTableIsLocal    Bool           sql=meta_is_local
     txMetaTableIsOutgoing Bool           sql=meta_is_outgoing
-    txMetaTableWalletId   Core.Address   sql=meta_wallet_id
+    txMetaTableWalletId   HdRootId       sql=meta_wallet_id
     txMetaTableAccountIx  Word32         sql=meta_account_ix
 
     Primary txMetaTableId txMetaTableWalletId txMetaTableAccountIx
@@ -296,7 +297,7 @@ putTxMeta conn txMeta = void $ putTxMetaT conn txMeta
 deleteTxMetas
     :: SqlBackend
         -- ^ Database Handle
-    -> Core.Address
+    -> HdRootId
         -- ^ Target wallet
     -> Maybe Word32
         -- ^  A target account index. If none, delete metas for all accounts
@@ -396,7 +397,7 @@ toTxMeta TxMeta{..} inputs outputs = Kernel.TxMeta
 getTxMeta
     :: SqlBackend
     -> Txp.TxId
-    -> Core.Address
+    -> HdRootId
     -> Word32
     -> IO (Maybe Kernel.TxMeta)
 getTxMeta conn txid walletId accountIx = do
