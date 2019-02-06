@@ -494,9 +494,12 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
         E.from $ \t -> do
         sorting t
         filters t
+        limitOffset
+        return t
+
+    limitOffset = do
         E.limit (fromIntegral limit)
         E.offset (fromIntegral offset)
-        return t
 
     metaQueryC =
         E.select $
@@ -540,12 +543,12 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
         E.select $
         E.from $ \(meta `E.InnerJoin` inp `E.InnerJoin` out) -> do
         E.on (meta E.^. TxMetaTableId E.==. inp E.^. InputTableTxId)
-        E.on (inp E.^. InputTableAddress E.==. out E.^. OutputTableAddress)
+        E.on (inp E.^. InputTableTxId E.==. out E.^. OutputTableTxId)
         filters meta
         E.where_
             $ inp E.^. InputTableAddress E.==. E.val addr
-            E.&&. out E.^. OutputTableAddress E.==. E.val addr
-        pure E.countRows
+            E.||. out E.^. OutputTableAddress E.==. E.val addr
+        pure $ E.countDistinct (meta E.^. TxMetaTableId)
 
     sorting meta =
         case mbSorting of
@@ -561,15 +564,16 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
         E.distinct $
         E.from $ \(meta `E.InnerJoin` inp `E.InnerJoin` out) -> do
         E.on (meta E.^. TxMetaTableId E.==. inp E.^. InputTableTxId)
-        E.on (inp E.^. InputTableAddress E.==. out E.^. OutputTableAddress)
+        E.on (inp E.^. InputTableTxId E.==. out E.^. OutputTableTxId)
 
         sorting meta
-
         filters meta
 
         E.where_
             $ inp E.^. InputTableAddress E.==. E.val addr
-            E.&&. out E.^. OutputTableAddress E.==. E.val addr
+            E.||. out E.^. OutputTableAddress E.==. E.val addr
+
+        limitOffset
 
         return meta
 

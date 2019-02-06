@@ -175,7 +175,9 @@ spec = do
                 let ins = testMeta ^. txMetaInputs
                 let doubleSpendTx = testMeta {_txMetaInputs = ins <> ins}
                 putTxMetaT hdl doubleSpendTx `shouldThrow`
-                    (\(StorageFailure _) -> True)
+                    (\case
+                        StorageFailure _ -> True
+                        _ -> False)
 
         it "rolls back if an insertion fails" $ withMaxSuccess 5 $ monadicIO $ do
             testMetaSTB <- pick genMeta
@@ -186,7 +188,9 @@ spec = do
                 conn <- SQlite.newConnection ":memory:"
                 SQlite.unsafeMigrateMetaDB conn
                 SQlite.putTxMetaT conn doubleSpendTx `shouldThrow`
-                    (\(StorageFailure _) -> True)
+                    (\case
+                        StorageFailure _ -> True
+                        _ -> False)
                 metasTable <- SQlite.getTxMetasTable conn
                 inputsTable <- SQlite.getInputsTable conn
                 outputsTable <- SQlite.getOutputsTable conn
@@ -297,7 +301,9 @@ spec = do
                 let meta2 = meta {_txMetaInputs = inp2}
                 putTxMetaT hdl meta1 `shouldReturn` Tx
                 putTxMetaT hdl meta2 `shouldThrow`
-                    (\(InvariantViolated (TxIdInvariantViolated _)) -> True)
+                    (\case
+                        InvariantViolated (TxIdInvariantViolated _) -> True
+                        _ -> False)
 
         it "two accounts can`t insert the same tx with different Inputs" $ withMaxSuccess 5 $ monadicIO $ do
             ins <- map getInput  <$> pick (uniqueElements 4)
@@ -509,7 +515,7 @@ spec = do
                         map Isomorphic expectedResults `shouldContain` map Isomorphic result
                         total `shouldBe` (Just $ length expectedResults)
 
-        it "fitlering addresses" $ withMaxSuccess 5 $ monadicIO $ do
+        it "filtering addresses" $ withMaxSuccess 5 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
@@ -517,7 +523,7 @@ spec = do
                     Nothing -> error "txMeta was found with less elements than it should"
                     Just (addr, m) -> do
                         forM_ metas (putTxMeta hdl)
-                        (result, _) <- (getTxMetas hdl) (Offset 0) (Limit 5) Everything (Just addr) NoFilterOp NoFilterOp Nothing
+                        (result, _) <- getTxMetas hdl (Offset 0) (Limit 5) Everything (Just addr) NoFilterOp NoFilterOp Nothing
                         map Isomorphic result `shouldContain` [Isomorphic m]
 
         it "returns meta with the correct address in Inputs or Outputs (SQL union)" $ withMaxSuccess 5 $ monadicIO $ do
@@ -525,14 +531,15 @@ spec = do
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
                 case getAddressTransform metas of
-                    Nothing -> error "txMeta was found with less elements than it should"
+                    Nothing ->
+                        expectationFailure "txMeta was found with less elements than it should"
                     Just (metasA, addr, m1, m2) -> do
                         forM_ metasA (putTxMeta hdl)
-                        (result, count) <- (getTxMetas hdl) (Offset 0) (Limit 5) Everything (Just addr) NoFilterOp NoFilterOp Nothing
+                        (result, count) <- getTxMetas hdl (Offset 0) (Limit 5) Everything (Just addr) NoFilterOp NoFilterOp Nothing
                         let iso = map Isomorphic result
-                        count `shouldSatisfy` (justbeq 2)
                         iso  `shouldContain` [Isomorphic m1]
                         iso  `shouldContain` [Isomorphic m2]
+                        count `shouldBeJustAndGreaterThan` 2
 
         it "txs with same address in both inputs and outputs are reported once (SQL union removes duplicates)" $ withMaxSuccess 5 $ monadicIO $ do
             testMetasSTB <- pick (genMetas 5)
@@ -543,9 +550,9 @@ spec = do
                     Just (metasA, addr, m1, m2) -> do
                         -- m2 has addr in both inputs and outputs.
                         forM_ metasA (putTxMeta hdl)
-                        (result, count) <- (getTxMetas hdl) (Offset 0) (Limit 5) Everything (Just addr) NoFilterOp NoFilterOp Nothing
+                        (result, count) <- getTxMetas hdl (Offset 0) (Limit 5) Everything (Just addr) NoFilterOp NoFilterOp Nothing
                         let iso = map Isomorphic result
-                        count `shouldSatisfy` (justbeq 2)
+                        count `shouldBeJustAndGreaterThan` 2
                         iso  `shouldContain` [Isomorphic m1]
                         iso  `shouldContain` [Isomorphic m2]
                         let sameTxIdWithM2 = filter (\m -> _txMetaId m == _txMetaId m2) result
@@ -566,8 +573,8 @@ spec = do
                         let iso = map Isomorphic result
                         length result1 `shouldBe` 1
                         length result2 `shouldSatisfy` (>= 1)
-                        count1 `shouldSatisfy` (justbeq 2)
-                        count2 `shouldSatisfy` (justbeq 2)
+                        count1 `shouldBeJustAndGreaterThan` 2
+                        count2 `shouldBeJustAndGreaterThan` 2
                         count1 `shouldBe` count2
                         iso  `shouldContain` [Isomorphic m1]
                         iso  `shouldContain` [Isomorphic m2]
@@ -614,8 +621,8 @@ spec = do
                         length result `shouldBe` 2
                         -- it`s possible that the generator created the
                         -- same address more than once. So we may expect more than 2 results here.
-                        count1 `shouldSatisfy` (justbeq 2)
-                        count2 `shouldSatisfy` (justbeq 2)
+                        count1 `shouldBeJustAndGreaterThan` 2
+                        count2 `shouldBeJustAndGreaterThan` 2
                         count1 `shouldBe` count2
                         map Isomorphic result `shouldBe` sortByCreationAt Descending (map Isomorphic [m1, m2])
 
@@ -634,8 +641,8 @@ spec = do
                         length result `shouldBe` 2
                         -- it`s possible that the generator created the
                         -- same address more than once. So we may expect more than 2 results here.
-                        count1 `shouldSatisfy` (justbeq 2)
-                        count2 `shouldSatisfy` (justbeq 2)
+                        count1 `shouldBeJustAndGreaterThan` 2
+                        count2 `shouldBeJustAndGreaterThan` 2
                         count1 `shouldBe` count2
                         map Isomorphic result `shouldBe` sortByCreationAt Descending (map Isomorphic [m1, m2])
 
@@ -644,10 +651,12 @@ spec = do
             run $ withTemporaryDb $ \hdl -> do
                 let metas = map unSTB testMetasSTB
                 case getAddress metas of
-                    Nothing -> expectationFailure "txMeta was found with less elements than it should"
-                    Just (addr,m@ TxMeta{..}) -> do
+                    Nothing ->
+                        expectationFailure "txMeta was found with less elements than it should"
+                    Just (addr, m@TxMeta{..}) -> do
                         forM_ metas (putTxMeta hdl)
-                        (result, total) <- (getTxMetas hdl)
+                        (result, total) <-
+                            getTxMetas hdl
                                 (Offset 0)
                                 (Limit 5)
                                 (AccountFops _txMetaWalletId $ Just _txMetaAccountIx)
@@ -677,12 +686,15 @@ spec = do
                         map Isomorphic result `shouldBe` []
                         total `shouldBe` (Just 0)
 
--- Tests that the values is there and is Bigger or Equal to n.
-justbeq :: Int -> Maybe Int -> Bool
-justbeq n mb =
+shouldBeJustAndGreaterThan :: HasCallStack => Maybe Int -> Int -> Expectation
+shouldBeJustAndGreaterThan mb n =
     case mb of
-        Nothing -> False
-        Just x  -> x >= n
+        Nothing -> expectationFailure $ "Expected Just, got Nothing"
+        Just x
+            | x >= n -> pure ()
+            | otherwise -> expectationFailure
+                $ "Expected 'Just " ++ show x
+                ++ "' to be greater than or equal to " ++ show n
 
 -- The following functions transform the TxMeta created by genMeta. The result follows the pattern:
 --   Nothing if the inputs [TxMeta] are less than needed
@@ -732,11 +744,10 @@ getAddressTransform ls = case ls of
     []  -> Nothing
     [_] -> Nothing
     m1 : m2 : rest ->
-
         Just (rest <> [m2', m1], addr, m1, m2')
-            where
-                (_, _, addr, coin) = head $ _txMetaInputs m1
-                m2' = m2 {_txMetaOutputs = NonEmpty.fromList [(addr, coin)]}
+      where
+        (_, _, addr, coin) = head $ _txMetaInputs m1
+        m2' = m2 { _txMetaOutputs = NonEmpty.fromList [(addr, coin)] }
 
 -- The address returned is found in the Inputs of the first TxMeta
 -- and the Outputs of the second.
@@ -747,6 +758,9 @@ getAddressTransform' ls = case ls of
     m1 : m2 : rest ->
 
         Just (rest <> [m2', m1], addr, m1, m2')
-            where
-                (_, _, addr, coin) = head $ _txMetaInputs m1
-                m2' = m2 {_txMetaOutputs = NonEmpty.fromList [(addr, coin)], _txMetaInputs = _txMetaInputs m1}
+      where
+        (_, _, addr, coin) = head $ _txMetaInputs m1
+        m2' = m2
+            { _txMetaOutputs = NonEmpty.fromList [(addr, coin)]
+            , _txMetaInputs = _txMetaInputs m1
+            }
