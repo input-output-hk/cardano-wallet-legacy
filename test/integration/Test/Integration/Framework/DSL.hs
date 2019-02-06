@@ -866,6 +866,9 @@ setupWallet args phrase password = do
                 (paymentDist (addr, mkCoin coin))
                 Nothing
                 Nothing
+            void $ print "txn"
+            void $ print txn
+
             expectTxStatusEventually [InNewestBlocks, Persisted] txn
 
     return wal
