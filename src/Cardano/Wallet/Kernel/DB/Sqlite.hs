@@ -29,4 +29,4 @@ module Cardano.Wallet.Kernel.DB.Sqlite (
     , getOutputsTable
     ) where
 
-import Cardano.Wallet.Kernel.DB.Sqlite.Beam
+import Cardano.Wallet.Kernel.DB.Sqlite.Persistent

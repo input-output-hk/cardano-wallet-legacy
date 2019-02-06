@@ -314,7 +314,9 @@ spec = do
                 let txId = (meta ^. txMetaId)
                 putTxMeta hdl meta1
                 putTxMeta hdl meta2 `shouldThrow`
-                    (\(InvariantViolated (TxIdInvariantViolated _)) -> True)
+                    (\case
+                        InvariantViolated (TxIdInvariantViolated _) -> True
+                        _ -> False)
                 txIdIsomorphic meta1 meta2 `shouldBe` False
                 metaRes1 <- getTxMeta hdl txId walletId accountIx1
                 metaRes2 <- getTxMeta hdl txId walletId accountIx2
@@ -340,7 +342,9 @@ spec = do
                 let txId = (meta ^. txMetaId)
                 putTxMeta hdl meta1
                 putTxMeta hdl meta2 `shouldThrow`
-                    (\(InvariantViolated (TxIdInvariantViolated _)) -> True)
+                    (\case
+                        InvariantViolated (TxIdInvariantViolated _) -> True
+                        _ -> False)
                 txIdIsomorphic meta1 meta2 `shouldBe` False
                 metaRes1 <- getTxMeta hdl txId walletId accountIx1
                 metaRes2 <- getTxMeta hdl txId walletId accountIx2

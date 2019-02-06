@@ -78,6 +78,7 @@ library
     , cryptonite
     , data-default
     , data-default-class
+    , direct-sqlite
     , directory
     , esqueleto
     , exceptions
@@ -92,6 +93,7 @@ library
     , ixset-typed
     , lens
     , memory
+    , monad-logger
     , mtl
     , mwc-random
     , neat-interpolation
@@ -433,6 +435,7 @@ test-suite unit
     , universum
     , unordered-containers
     , vector
+
 
   type:
      exitcode-stdio-1.0

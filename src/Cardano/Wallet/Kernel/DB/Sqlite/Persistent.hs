@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE GADTs              #-}
+{-# LANGUAGE NamedFieldPuns     #-}
 {-# LANGUAGE QuasiQuotes        #-}
 {-# LANGUAGE RankNTypes         #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -39,23 +40,26 @@ module Cardano.Wallet.Kernel.DB.Sqlite.Persistent (
 
 import           Universum
 
-import qualified Database.SQLite.Simple as Sqlite
-import qualified Database.SQLite.SimpleErrors.Types as Sqlite
-
-import           Cardano.Wallet.Kernel.DB.Sqlite.Persistent.Orphans ()
+import           Control.Exception (throwIO, toException)
+import           Control.Monad (void)
+import           Control.Monad.Logger (runNoLoggingT)
+import           Control.Monad.Trans.Resource (runResourceT)
 import qualified Data.Foldable as Foldable
+import           Data.List.NonEmpty (NonEmpty (..), nonEmpty)
+import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map as M
+import qualified Data.Text as Text
 import           Data.Traversable (for)
 import qualified Database.Esqueleto as E
 import           Database.Persist.Sqlite as Persist
 import           Database.Persist.TH
-
-import           Control.Exception (throwIO, toException)
-import           Control.Monad (void)
-import           Data.List.NonEmpty (NonEmpty (..), nonEmpty)
-import qualified Data.List.NonEmpty as NonEmpty
+import qualified Database.Sqlite as Sqlite
+import           Database.SQLite.SimpleErrors.Parser (receiveSQLError)
+import qualified Database.SQLite.SimpleErrors.Types as Sqlite
+import qualified Database.SQLite3 as SqliteDirect
 import           GHC.Generics (Generic)
 
+import           Cardano.Wallet.Kernel.DB.Sqlite.Persistent.Orphans ()
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types (AccountFops (..),
                      FilterOperation (..), Limit (..), Offset (..),
                      SortCriteria (..), SortDirection (..), Sorting (..))
@@ -210,48 +214,88 @@ fromOutputs ls = go <$> NonEmpty.sort ls
 -- Orphans & other boilerplate
 
 runPersistConn
-    :: Sqlite.Connection
+    :: SqlBackend
     -> SqlPersistM a
     -> IO (Either Sqlite.SQLiteResponse a)
-runPersistConn c a = try (unsafeRunPersistConn c a)
+runPersistConn c a =
+    bimap convertError id <$> try (unsafeRunPersistConn c a)
+
+convertError :: Sqlite.SqliteException -> Sqlite.SQLiteResponse
+convertError (Sqlite.SqliteException { seError, seFunctionName, seDetails }) =
+    receiveSQLError (SqliteDirect.SQLError seError' seDetails seFunctionName)
+  where
+    seError' = case seError of
+        Sqlite.ErrorOK                 -> SqliteDirect.ErrorOK
+        Sqlite.ErrorError              -> SqliteDirect.ErrorError
+        Sqlite.ErrorInternal           -> SqliteDirect.ErrorInternal
+        Sqlite.ErrorPermission         -> SqliteDirect.ErrorPermission
+        Sqlite.ErrorAbort              -> SqliteDirect.ErrorAbort
+        Sqlite.ErrorBusy               -> SqliteDirect.ErrorBusy
+        Sqlite.ErrorLocked             -> SqliteDirect.ErrorLocked
+        Sqlite.ErrorNoMemory           -> SqliteDirect.ErrorNoMemory
+        Sqlite.ErrorReadOnly           -> SqliteDirect.ErrorReadOnly
+        Sqlite.ErrorInterrupt          -> SqliteDirect.ErrorInterrupt
+        Sqlite.ErrorIO                 -> SqliteDirect.ErrorIO
+        Sqlite.ErrorNotFound           -> SqliteDirect.ErrorNotFound
+        Sqlite.ErrorCorrupt            -> SqliteDirect.ErrorCorrupt
+        Sqlite.ErrorFull               -> SqliteDirect.ErrorFull
+        Sqlite.ErrorCan'tOpen          -> SqliteDirect.ErrorCan'tOpen
+        Sqlite.ErrorProtocol           -> SqliteDirect.ErrorProtocol
+        Sqlite.ErrorEmpty              -> SqliteDirect.ErrorEmpty
+        Sqlite.ErrorSchema             -> SqliteDirect.ErrorSchema
+        Sqlite.ErrorTooBig             -> SqliteDirect.ErrorTooBig
+        Sqlite.ErrorConstraint         -> SqliteDirect.ErrorConstraint
+        Sqlite.ErrorMismatch           -> SqliteDirect.ErrorMismatch
+        Sqlite.ErrorMisuse             -> SqliteDirect.ErrorMisuse
+        Sqlite.ErrorNoLargeFileSupport -> SqliteDirect.ErrorNoLargeFileSupport
+        Sqlite.ErrorAuthorization      -> SqliteDirect.ErrorAuthorization
+        Sqlite.ErrorFormat             -> SqliteDirect.ErrorFormat
+        Sqlite.ErrorRange              -> SqliteDirect.ErrorRange
+        Sqlite.ErrorNotAConnection     -> SqliteDirect.ErrorNotADatabase
+        Sqlite.ErrorRow                -> SqliteDirect.ErrorRow
+        Sqlite.ErrorDone               -> SqliteDirect.ErrorDone
+
 
 unsafeRunPersistConn
-    :: Sqlite.Connection
+    :: SqlBackend
     -> SqlPersistM a
     -> IO a
-unsafeRunPersistConn  = error "TODO"
+unsafeRunPersistConn conn query = do
+    runResourceT $ runNoLoggingT $ runSqlConn query conn
 
 
 -- | Migrates the 'MetaDB', failing with an IO exception in case this is not
 -- possible.
-unsafeMigrateMetaDB :: Sqlite.Connection -> IO ()
+unsafeMigrateMetaDB :: SqlBackend -> IO ()
 unsafeMigrateMetaDB conn = do
-    unsafeRunPersistConn conn (error "find runner" migrateAll)
+    unsafeRunPersistConn conn (void (runMigrationSilent migrateAll))
 
 -- | Simply a conveniency wrapper to avoid 'Kernel.TxMeta' to explicitly
 -- import Sqlite modules.
-newConnection :: FilePath -> IO Sqlite.Connection
-newConnection = Sqlite.open
+newConnection :: FilePath -> IO SqlBackend
+newConnection fp = open' (mkSqliteConnectionInfo (Text.pack fp)) (\_ _ _ _ -> pure ())
 
 -- | Closes an open 'Connection' to the @Sqlite@ database stored in the
 -- input 'MetaDBHandle'.
 -- Even if open failed with error, this function should be called http://www.sqlite.org/c3ref/open.html
 -- TODO: provide a bracket style interface to ensure this.
-closeMetaDB :: Sqlite.Connection -> IO ()
-closeMetaDB = Sqlite.close
+closeMetaDB :: SqlBackend -> IO ()
+closeMetaDB = mempty -- Sqlite.close
 
 -- | Delete everything out of the SQLite datbase.
-clearMetaDB :: Sqlite.Connection -> IO ()
-clearMetaDB _conn = do
-    error "TODO"
+clearMetaDB :: SqlBackend -> IO ()
+clearMetaDB conn = void $ runPersistConn conn $ do
+    deleteWhere @_ @_ @TxOutput []
+    deleteWhere @_ @_ @TxInput []
+    deleteWhere @_ @_ @TxMeta []
 
 -- | Save the given 'Kernel.TxMeta' to the database.
-putTxMeta :: Sqlite.Connection -> Kernel.TxMeta -> IO ()
+putTxMeta :: SqlBackend -> Kernel.TxMeta -> IO ()
 putTxMeta conn txMeta = void $ putTxMetaT conn txMeta
 
 -- | Clear some metadata from the database
 deleteTxMetas
-    :: Sqlite.Connection
+    :: SqlBackend
         -- ^ Database Handle
     -> Core.Address
         -- ^ Target wallet
@@ -272,7 +316,7 @@ deleteTxMetas conn walletId mAccountIx = do
 
 -- | Inserts a new 'Kernel.TxMeta' in the database, given its opaque
 -- 'MetaDBHandle'.
-putTxMetaT :: Sqlite.Connection -> Kernel.TxMeta -> IO Kernel.PutReturn
+putTxMetaT :: SqlBackend -> Kernel.TxMeta -> IO Kernel.PutReturn
 putTxMetaT conn txMeta = do
     let tMeta   = mkTxMeta txMeta
         inputs  = mkInputs txMeta
@@ -351,7 +395,7 @@ toTxMeta TxMeta{..} inputs outputs = Kernel.TxMeta
 
 -- | Fetches a 'Kernel.TxMeta' from the database, given its 'Txp.TxId'.
 getTxMeta
-    :: Sqlite.Connection
+    :: SqlBackend
     -> Txp.TxId
     -> Core.Address
     -> Word32
@@ -367,16 +411,16 @@ getTxMeta conn txid walletId accountIx = do
          Left e  -> throwIO $ Kernel.StorageFailure (toException e)
          Right r -> return r
 
-getTxMetasById :: Sqlite.Connection -> Txp.TxId -> IO (Maybe Kernel.TxMeta)
+getTxMetasById :: SqlBackend -> Txp.TxId -> IO (Maybe Kernel.TxMeta)
 getTxMetasById conn txId = safeHead . fst <$> getTxMetas conn (Offset 0)
     (Limit 10) Everything Nothing (FilterByIndex txId) NoFilterOp Nothing
 
-getAllTxMetas :: Sqlite.Connection -> IO [Kernel.TxMeta]
+getAllTxMetas :: SqlBackend -> IO [Kernel.TxMeta]
 getAllTxMetas conn = fst <$> getTxMetas conn (Offset 0)
     (Limit $ fromIntegral (maxBound :: Int)) Everything Nothing NoFilterOp NoFilterOp Nothing
 
 getTxMetas
-    :: Sqlite.Connection
+    :: SqlBackend
     -> Offset
     -> Limit
     -> AccountFops
@@ -404,7 +448,7 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
 
         meta <- fmap entityVal <$> case mbAddress of
            Nothing   -> metaQuery
-           Just addr -> error "todo" -- metaQueryWithAddr addr
+           Just addr -> metaQueryWithAddr addr
 
         let txids = E.valList (map txMetaTableId meta)
 
@@ -448,13 +492,7 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
     metaQuery =
         E.select $
         E.from $ \t -> do
-        case mbSorting of
-            Nothing ->
-                E.orderBy [E.desc (t E.^. TxMetaTableCreatedAt)]
-            Just (Sorting SortByCreationAt dir) ->
-                E.orderBy [toEsqSortDir dir (t E.^. TxMetaTableCreatedAt)]
-            Just (Sorting SortByAmount     dir) ->
-                E.orderBy [toEsqSortDir dir (t E.^. TxMetaTableAmount)]
+        sorting t
         filters t
         E.limit (fromIntegral limit)
         E.offset (fromIntegral offset)
@@ -497,83 +535,44 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
                 inputData E.>=. (E.val from)
                 E.&&. inputData E.<=. (E.val to)
             FilterIn ls -> E.in_ inputData (E.valList ls)
---
+
     metaQueryWithAddrC addr =
         E.select $
-        E.from $ \(inp `InnerJoin` out) -> do
-        E.on (inp E.^. InputTableAddress meta)
-        meta <- findAndUnion addr
+        E.from $ \(meta `E.InnerJoin` inp `E.InnerJoin` out) -> do
+        E.on (meta E.^. TxMetaTableId E.==. inp E.^. InputTableTxId)
+        E.on (inp E.^. InputTableAddress E.==. out E.^. OutputTableAddress)
         filters meta
-        pure countRows
+        E.where_
+            $ inp E.^. InputTableAddress E.==. E.val addr
+            E.&&. out E.^. OutputTableAddress E.==. E.val addr
+        pure E.countRows
 
-        -- 'findAndUnion' gets all of the inputs and outputs with the given
-        -- address, and takes the union of the transaction IDs. Then we join the
-        -- transaction meta table onto this result. The result is a table of
-        -- transaction metadata where each transaction has either an input or an
-        -- output with the given address.
-        --
-        -- SELECT inputTableTxId
-        -- FROM inputTable
-        -- WHERE inputTableAddress = addr
-        -- UNION
-        -- SELECT outputTableTxId
-        -- FROM outputTable
-        -- WHERE outputTabelAddress = addr
-        --
-        -- Esqueleto does not support unions! So we need to identify another
-        -- approach to solving this problem.
-        --
-        -- The easy way out is to do a raw SQL query and use that. We would need
-        -- to use the ERaw data constructor to make a SqlExpr that returns
-        -- a `ValueList TxId`, and then we could do something like:
-
-        -- SELECT txMeta.*
-        -- FROM txMeta
-        -- WHERE txMeta.txId IN (
-        --     SELECT inputTableTxId
-        --     FROM inputTable
-        --     WHERE inputTableAddress = addr
-        --     UNION
-        --     SELECT outputTableTxId
-        --     FROM outputTable
-        --     WHERE outputTabelAddress = addr
-        -- )
-        --
-        -- In code, it'd look a bit like:
-        --
-        -- E.select $
-        -- E.from $ \txMeta -> do
-        -- E.where $ txMeta E.^. TxMetaTableTxId `E.in_` E.ERaw $ \info ->
-        --      ( sqlQuery, [] )
-    findAndUnion addr = do
-        error "TODO"
-
---        let input = do
---        inp <- SQL.all_ $ _mDbInputs metaDB
---                SQL.guard_ $ ((_inputTableAddress inp) ==. (SQL.val_ addr))
---                pure $ _inputTableTxId inp
---        let output = do
---                out <- SQL.all_ $ _mDbOutputs metaDB
---                SQL.guard_ $ ((_outputTableAddress out) ==. (SQL.val_ addr))
---                pure $ _outputTableTxId out
---        -- union removes txId duplicates.
---        txid <- SQL.union_ input output
---        SQL.join_ (_mDbMeta metaDB) (\ mt -> ((_txMetaTableId mt) ==. txid))
---
-    metaQueryWithAddr addr = do
-        meta <- case mbSorting of
+    sorting meta =
+        case mbSorting of
             Nothing ->
-                SQL.orderBy_ (SQL.desc_ . _txMetaTableCreatedAt) (findAndUnion addr)
+                E.orderBy [E.desc (meta E.^. TxMetaTableCreatedAt)]
             Just (Sorting SortByCreationAt dir) ->
-                SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableCreatedAt) (findAndUnion addr)
+                E.orderBy [toEsqSortDir dir (meta E.^. TxMetaTableCreatedAt)]
             Just (Sorting SortByAmount     dir) ->
-                SQL.orderBy_ (toBeamSortDirection dir . _txMetaTableAmount) (findAndUnion addr)
+                E.orderBy [toEsqSortDir dir (meta E.^. TxMetaTableAmount)]
+
+    metaQueryWithAddr addr =
+        E.select $
+        E.distinct $
+        E.from $ \(meta `E.InnerJoin` inp `E.InnerJoin` out) -> do
+        E.on (meta E.^. TxMetaTableId E.==. inp E.^. InputTableTxId)
+        E.on (inp E.^. InputTableAddress E.==. out E.^. OutputTableAddress)
+
+        sorting meta
+
         filters meta
+
+        E.where_
+            $ inp E.^. InputTableAddress E.==. E.val addr
+            E.&&. out E.^. OutputTableAddress E.==. E.val addr
+
         return meta
---
---
---
---
+
     transform :: NonEmpty (Txp.TxId, a) -> M.Map Txp.TxId (NonEmpty a)
     transform = Foldable.foldl' updateFn M.empty
 
@@ -603,14 +602,20 @@ toEsqSortDir Ascending  = E.asc
 toEsqSortDir Descending = E.desc
 -- Lower level api intended for testing
 
-getTxMetasTable :: Sqlite.Connection -> IO [TxMeta]
+getTxMetasTable :: SqlBackend -> IO [TxMeta]
 getTxMetasTable conn = deentity . unsafeRunPersistConn conn $ selectList [] []
 
-getInputsTable :: Sqlite.Connection -> IO [TxInput]
+getInputsTable :: SqlBackend -> IO [TxInput]
 getInputsTable conn = deentity . unsafeRunPersistConn conn $ selectList [] []
 
-getOutputsTable :: Sqlite.Connection -> IO [TxOutput]
+getOutputsTable :: SqlBackend -> IO [TxOutput]
 getOutputsTable conn = deentity . unsafeRunPersistConn conn $ selectList [] []
 
 deentity :: (Functor f, Functor g) => f (g (Entity rec)) -> f (g rec)
 deentity = fmap (fmap entityVal)
+
+-- vendored from persistent-sqlite
+open' :: (IsSqlBackend backend) => SqliteConnectionInfo -> LogFunc -> IO backend
+open' connInfo logFunc = do
+    conn <- Sqlite.open $ view Persist.sqlConnectionStr connInfo
+    wrapConnectionInfo connInfo conn logFunc `onException` Sqlite.close conn

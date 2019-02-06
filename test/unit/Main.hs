@@ -75,7 +75,7 @@ main = do
         Test.Spec.NewPayment.spec
         Test.Spec.Submission.spec
         Test.Spec.Translation.spec
-        Test.Spec.TxMetaStorage.spec
+        describe "TxMetaStorage" Test.Spec.TxMetaStorage.spec
         Test.Spec.WalletWorker.spec
         Test.Spec.Wallets.spec
 
