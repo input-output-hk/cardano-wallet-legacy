@@ -22,6 +22,7 @@
 #
 # Examples:
 #  ./import-addresses.sh Ae2tdPwUPEZLXCZQkmwcatABSc5Fw1bp3dk5nBkNnkNHy6teLdxqQm8NPgW addr.txt
+#
 
 PATH=.:$PATH; source docopts.sh --auto "$@"
 

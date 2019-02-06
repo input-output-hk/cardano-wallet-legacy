@@ -37,7 +37,7 @@ do
 
       if [ "${ARGS[--json]}" == "true" ]; then
         if [ $i == ${ARGS[--number]} ]; then
-	  echo "${ADDRESS}"
+	        echo "${ADDRESS}"
         else
           echo "${ADDRESS},"
         fi
