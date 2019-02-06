@@ -588,8 +588,8 @@ spec = do
                     Just (metasA, addr, m1, _) -> do
                         let txid = _txMetaId m1
                         forM_ metasA (putTxMeta hdl)
-                        (result, count) <- (getTxMetas hdl) (Offset 0) (Limit 5) Everything (Just addr) (FilterByIndex txid) NoFilterOp Nothing
-                        count `shouldBe` (Just 1) -- here it`s exactly one because we filter on TxId.
+                        (result, count) <- getTxMetas hdl (Offset 0) (Limit 5) Everything (Just addr) (FilterByIndex txid) NoFilterOp Nothing
+                        count `shouldBe` Just 1 -- here it`s exactly one because we filter on TxId.
                         map Isomorphic result `shouldBe` [Isomorphic m1]
 
         it "correctly filters on txid meta with the correct address in Inputs or Outputs" $ withMaxSuccess 5 $ monadicIO $ do
