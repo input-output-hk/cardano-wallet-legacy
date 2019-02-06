@@ -235,6 +235,7 @@
             (hsPkgs.cardano-wallet)
             (hsPkgs.containers)
             (hsPkgs.cryptonite)
+            (hsPkgs.directory)
             (hsPkgs.filepath)
             (hsPkgs.generic-lens)
             (hsPkgs.hspec)
