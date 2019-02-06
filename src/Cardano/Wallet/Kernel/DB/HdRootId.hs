@@ -10,18 +10,18 @@ module Cardano.Wallet.Kernel.DB.HdRootId (
 
 import           Universum
 
-import           Data.Aeson (FromJSON (..), withText, ToJSON (..))
+import           Data.Aeson (FromJSON (..), ToJSON (..), withText)
 import qualified Data.ByteString as BS
 import           Data.ByteString.Base58 (bitcoinAlphabet, decodeBase58,
                      encodeBase58)
 import           Data.SafeCopy (base, deriveSafeCopy)
+import qualified Data.Text as Text
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
 import           Formatting (bprint, build, sformat)
 import qualified Formatting.Buildable
 import           Test.QuickCheck (Arbitrary (..))
 import           Test.QuickCheck.Gen (chooseAny, oneof, vectorOf)
-import qualified Data.Text as Text
 
 import qualified Pos.Binary.Class as Bi
 import           Pos.Core (Address, addrToBase58, makePubKeyAddressBoot)
