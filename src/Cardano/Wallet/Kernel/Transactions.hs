@@ -195,6 +195,9 @@ pay activeWallet spendingPassword opts accountId payees = do
                  succeeded <- newPending activeWallet accountId txAux partialMeta
                  case succeeded of
                       Left e   -> do
+                          let a1 = "####### pay : retry"
+                          void $ print a1
+
                           -- If the next retry would bring us to the
                           -- end of our allowed retries, we fail with
                           -- a proper error
@@ -204,7 +207,10 @@ pay activeWallet spendingPassword opts accountId payees = do
                                    PaymentSubmissionMaxAttemptsReached
                                Just _  ->
                                    PaymentNewPendingError e
-                      Right meta -> return $ Right (taTx $ txAux, meta)
+                      Right meta -> do
+                          let a1 = "####### pay : succeeded"
+                          void $ print a1
+                          return $ Right (taTx $ txAux, meta)
 
 -- See <https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter>
 retryPolicy :: RetryPolicyM IO
