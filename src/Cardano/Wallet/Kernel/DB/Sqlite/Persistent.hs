@@ -222,7 +222,6 @@ runPersistConn c a =
 
 convertError :: Sqlite.SqliteException -> Sqlite.SQLiteResponse
 convertError (Sqlite.SqliteException { seError, seFunctionName, seDetails }) =
-    -- error (seDetails)
     receiveSQLError (SqliteDirect.SQLError seError' seDetails' seFunctionName)
   where
     -- the persistent-sqlite includes a `: ` before the details
@@ -258,14 +257,12 @@ convertError (Sqlite.SqliteException { seError, seFunctionName, seDetails }) =
         Sqlite.ErrorRow                -> SqliteDirect.ErrorRow
         Sqlite.ErrorDone               -> SqliteDirect.ErrorDone
 
-
 unsafeRunPersistConn
     :: SqlBackend
     -> SqlPersistM a
     -> IO a
 unsafeRunPersistConn conn query = do
     runResourceT $ runNoLoggingT $ runSqlConn query conn
-
 
 -- | Migrates the 'MetaDB', failing with an IO exception in case this is not
 -- possible.
@@ -282,8 +279,9 @@ newConnection fp = open' (mkSqliteConnectionInfo (Text.pack fp)) (\_ _ _ _ -> pu
 -- input 'MetaDBHandle'.
 -- Even if open failed with error, this function should be called http://www.sqlite.org/c3ref/open.html
 -- TODO: provide a bracket style interface to ensure this.
+-- TODO: alias the `withSwliteConn` when using the bracket.
 closeMetaDB :: SqlBackend -> IO ()
-closeMetaDB = mempty -- Sqlite.close
+closeMetaDB = close'
 
 -- | Delete everything out of the SQLite datbase.
 clearMetaDB :: SqlBackend -> IO ()
@@ -490,7 +488,6 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
                     Left _  -> Nothing
                     Right c -> E.unValue <$> c
             return (txMeta, count')
---
   where
     metaQuery =
         E.select $
@@ -545,13 +542,19 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
     metaQueryWithAddrC addr =
         E.select $
         E.from $ \(meta `E.InnerJoin` inp `E.InnerJoin` out) -> do
-        E.on (meta E.^. TxMetaTableId E.==. inp E.^. InputTableTxId)
-        E.on (inp E.^. InputTableTxId E.==. out E.^. OutputTableTxId)
+        joinConditions meta inp out
         filters meta
+        eitherHasAddress inp out addr
+        pure $ E.countDistinct (meta E.^. TxMetaTableId)
+
+    eitherHasAddress inp out addr =
         E.where_
             $ inp E.^. InputTableAddress E.==. E.val addr
             E.||. out E.^. OutputTableAddress E.==. E.val addr
-        pure $ E.countDistinct (meta E.^. TxMetaTableId)
+
+    joinConditions meta inp out = do
+        E.on (meta E.^. TxMetaTableId E.==. inp E.^. InputTableTxId)
+        E.on (inp E.^. InputTableTxId E.==. out E.^. OutputTableTxId)
 
     sorting meta =
         case mbSorting of
@@ -566,18 +569,11 @@ getTxMetas conn (Offset offset) (Limit limit) accountFops mbAddress fopTxId fopT
         E.select $
         E.distinct $
         E.from $ \(meta `E.InnerJoin` inp `E.InnerJoin` out) -> do
-        E.on (meta E.^. TxMetaTableId E.==. inp E.^. InputTableTxId)
-        E.on (inp E.^. InputTableTxId E.==. out E.^. OutputTableTxId)
-
+        joinConditions meta inp out
         sorting meta
         filters meta
-
-        E.where_
-            $ inp E.^. InputTableAddress E.==. E.val addr
-            E.||. out E.^. OutputTableAddress E.==. E.val addr
-
+        eitherHasAddress inp out addr
         limitOffset
-
         return meta
 
     transform :: NonEmpty (Txp.TxId, a) -> M.Map Txp.TxId (NonEmpty a)
@@ -607,7 +603,6 @@ toEsqSortDir
     -> E.SqlExpr E.OrderBy
 toEsqSortDir Ascending  = E.asc
 toEsqSortDir Descending = E.desc
--- Lower level api intended for testing
 
 getTxMetasTable :: SqlBackend -> IO [TxMeta]
 getTxMetasTable conn = deentity . unsafeRunPersistConn conn $ selectList [] []
