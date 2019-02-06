@@ -155,7 +155,7 @@ newtype AccountName = AccountName { getAccountName :: Text }
 
 -- | Account index
 newtype HdAccountIx = HdAccountIx { getHdAccountIx :: Word32 }
-  deriving (Eq, Ord, Generic)
+  deriving (Eq, Ord, Generic, Show)
 
 instance NFData HdAccountIx
 
@@ -229,7 +229,7 @@ data HdAccountId = HdAccountId {
       _hdAccountIdParent :: !HdRootId
     , _hdAccountIdIx     :: !HdAccountIx
     }
-  deriving (Eq, Generic)
+  deriving (Eq, Generic, Show)
 
 instance NFData HdAccountId
 

@@ -111,7 +111,7 @@ data WalletSubmissionState = WalletSubmissionState {
       _wssPendingMap  ::  M.Map HdAccountId Pending
     , _wssSchedule    ::  Schedule
     , _wssCurrentSlot :: !Slot
-    } deriving Generic
+    } deriving (Show, Generic)
 
 instance NFData WalletSubmissionState
 
@@ -143,14 +143,14 @@ data Schedule = Schedule {
     -- @N.B@ It should be the wallet's responsibility (not the submission layer's)
     -- to make sure that when it gives up on a transaction @A@, it also gives
     -- up on all transactions @Bs@ that depend on @A@.
-    } deriving Generic
+    } deriving (Show, Generic)
 
 instance NFData Schedule
 
 -- | A type representing an item (in this context, a transaction) scheduled
 -- to be regularly sent in a given slot (computed by a given 'RetryPolicy').
 data ScheduleSend = ScheduleSend HdAccountId Txp.TxId Txp.TxAux SubmissionCount
-                  deriving (Eq, Generic)
+                  deriving (Eq, Generic, Show)
 
 instance NFData ScheduleSend
 
@@ -159,7 +159,7 @@ instance NFData ScheduleSend
 -- we need to confirm that indeed the transaction identified by the given 'TxId' has
 -- been adopted, i.e. it's not in the local pending set anymore.
 data ScheduleEvictIfNotConfirmed = ScheduleEvictIfNotConfirmed HdAccountId Txp.TxId
-                                 deriving (Eq, Generic)
+                                 deriving (Eq, Generic, Show)
 
 instance NFData ScheduleEvictIfNotConfirmed
 
@@ -171,7 +171,7 @@ data ScheduleEvents = ScheduleEvents {
     , _seToConfirm :: [ScheduleEvictIfNotConfirmed]
     -- ^ A list of transactions which we need to check if they have been
     -- confirmed (i.e. adopted) by the blockchain.
-    } deriving Generic
+    } deriving (Show, Generic)
 
 instance NFData ScheduleEvents
 
@@ -236,7 +236,7 @@ mapSlot f (Slot w) = Slot (f w)
 -- Live\" for transactions, we will be able to remove the 'maxRetries' value
 -- and simply use the @TTL@ to judge whether or not we should retry.
 newtype SubmissionCount = SubmissionCount { getSubmissionCount :: Int }
-    deriving (Eq, Generic)
+    deriving (Eq, Generic, Show)
 
 instance NFData SubmissionCount
 
@@ -357,13 +357,14 @@ tick ws =
         currentSlot = wss ^. wssCurrentSlot
         rho         = _wsResubmissionFunction ws
         pendingMap  = ws ^. wsState . wssPendingMap
+        mystate = ws ^. wsState
 
         (scheduleSend, toConfirm, newSchedule) = tickSlot currentSlot ws
         (schedule', toSend) = rho currentSlot scheduleSend newSchedule
         evicted = evictedThisSlot toConfirm pendingMap
         newState = ws & wsState . wssSchedule    .~ schedule'
                       & wsState . wssCurrentSlot %~ mapSlot succ
-        in Debug.trace ("####### tick: toSend:" ++ show toSend ++ " evicted :" ++ (show $ M.elems evicted)) $ (evicted, toSend, remPending evicted newState)
+        in Debug.trace ("####### tick: toSend:" ++ show toSend ++ " evicted :" ++ (show $ M.elems evicted) ++ " pedingMap:" ++ (show $ M.elems pendingMap) ++ " scheduleSend : " ++ (show scheduleSend) ++ " state:"++ show mystate) $ (evicted, toSend, remPending evicted newState)
     where
         evictedThisSlot :: [ScheduleEvictIfNotConfirmed]
                         -> M.Map HdAccountId Pending
