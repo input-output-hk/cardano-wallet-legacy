@@ -1,10 +1,8 @@
-
-
 # Context
 
 This document describes manual test procedure for https://github.com/input-output-hk/cardano-wallet/issues/258. 
 
-The change here introduces new endpoint `POST /api/v1/wallets/{wid}/accounts/{accix}/addresses` which allows batch import of unused addresses into the wallet's account. This functionality is targeted to exchanges and the possible use case has been described in the Wallet's API documentation https://input-output-hk.github.io/cardano-wallet/#section/Common-Use-Cases/Importing-(Unused)-Addresses-From-a-Previous-Node-(or-Version).
+The change here introduces new endpoint `POST /api/v1/wallets/{wid}/addresses` which allows batch import of unused addresses into the wallet's account. This functionality is targeted to exchanges and the possible use case has been described in the Wallet's API documentation https://input-output-hk.github.io/cardano-wallet/#section/Common-Use-Cases/Importing-(Unused)-Addresses-From-a-Previous-Node-(or-Version).
 
 There have been automated integration tests added for testing new endpoint however there are still areas that need to be tested manually as they cannot be easily instrumented using integration tests. These are:
  - doing batch import of addresses while wallet is being restored

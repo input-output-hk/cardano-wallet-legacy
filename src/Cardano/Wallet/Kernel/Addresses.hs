@@ -187,8 +187,8 @@ newHdAddress nm esk spendingPassword accId hdAddressId =
 
 
 data ImportAddressError
-    = ImportAddressKeystoreNotFound HdAccountId
-    -- ^ When trying to create the 'Address', the parent 'Account' was not there.
+    = ImportAddressKeystoreNotFound HdRootId
+    -- ^ When trying to import the 'Address', the parent root was not there.
     deriving Eq
 
 instance Arbitrary ImportAddressError where
@@ -198,8 +198,8 @@ instance Arbitrary ImportAddressError where
 
 instance Buildable ImportAddressError where
     build = \case
-        ImportAddressKeystoreNotFound uAccount ->
-            bprint ("ImportAddressError" % F.build) uAccount
+        ImportAddressKeystoreNotFound rootId ->
+            bprint ("ImportAddressError" % F.build) rootId
 
 instance Show ImportAddressError where
     show = formatToString build
@@ -212,24 +212,22 @@ instance Show ImportAddressError where
 -- no guarantee that addresses would be generated in the same order on a new
 -- node (they better not actually!).
 importAddresses
-    :: HdAccountId
-    -- ^ An abstract notion of an 'Account' identifier
+    :: HdRootId
     -> [Address]
     -> PassiveWallet
     -> IO (Either ImportAddressError [Either Address ()])
-importAddresses accId addrs pw = runExceptT $ do
-    let rootId = accId ^. hdAccountIdParent
+importAddresses rootId addrs pw = runExceptT $ do
     esk <- lookupSecretKey rootId
     lift $ forM addrs (flip importOneAddress [(rootId, esk)])
   where
     lookupSecretKey
         :: HdRootId
         -> ExceptT ImportAddressError IO EncryptedSecretKey
-    lookupSecretKey rootId = do
+    lookupSecretKey k = do
         let nm = makeNetworkMagic (pw ^. walletProtocolMagic)
         let keystore = pw ^. walletKeystore
-        lift (Keystore.lookup nm rootId keystore) >>= \case
-            Nothing  -> throwError (ImportAddressKeystoreNotFound accId)
+        lift (Keystore.lookup nm k keystore) >>= \case
+            Nothing  -> throwError (ImportAddressKeystoreNotFound rootId)
             Just esk -> return esk
 
     importOneAddress

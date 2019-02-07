@@ -19,7 +19,7 @@ type API = Tag "Addresses" 'NoTagDescription :>
       :<|> "addresses" :> Capture "address" Text
                        :> Summary "Returns interesting information about an address, if available and valid."
                        :> Get '[ValidJSON] (APIResponse WalletAddress)
-      :<|> "wallets" :> CaptureWalletId :> "accounts" :> CaptureAccountId :> "addresses"
+      :<|> "wallets" :> CaptureWalletId :> "addresses"
         :> Summary "Batch import existing addresses"
         :> ReqBody '[ValidJSON] [WalAddress]
         :> Post '[ValidJSON] (APIResponse (BatchImportResult WalAddress))
