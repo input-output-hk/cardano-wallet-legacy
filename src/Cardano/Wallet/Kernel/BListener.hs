@@ -51,7 +51,7 @@ import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
 import           Cardano.Wallet.Kernel.Prefiltering (PrefilteredBlock,
                      prefilterBlock)
 import           Cardano.Wallet.Kernel.Read (foreignPendingByAccount,
-                     getHdRndWallets, getHdSeqWallets, getWalletSnapshot)
+                     getHdRndWallets, getEosPools, getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Restore
 import qualified Cardano.Wallet.Kernel.Submission as Submission
 import           Cardano.Wallet.Kernel.Util.NonEmptyMap (NonEmptyMap)
@@ -81,7 +81,7 @@ prefilterBlocks pw bs = do
     db <- getWalletSnapshot pw
     let foreigns = fmap Pending.txIns . foreignPendingByAccount $ db
     hdRnds <- getHdRndWallets_ db
-    hdSeqs <- getHdSeqWallets db
+    hdSeqs <- getEosPools db
 
     listToMaybe' <$>
         ((<>) <$> prefilter foreigns hdRnds <*> prefilter foreigns hdSeqs)

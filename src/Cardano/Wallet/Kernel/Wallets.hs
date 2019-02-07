@@ -6,7 +6,7 @@ module Cardano.Wallet.Kernel.Wallets (
     , mkRestoreHdRndWallet
     , mkRestoreEosWallet
     , mkCreateEosWallet
-    , mkAddressPool
+    , mkAccountAddressPool
     , updateHdWallet
     , updatePassword
     , deleteHdWallet
@@ -41,8 +41,7 @@ import           Pos.Crypto (EncryptedSecretKey, PassPhrase,
 import           Cardano.Mnemonic (Mnemonic)
 import qualified Cardano.Mnemonic as Mnemonic
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
-import           Cardano.Wallet.Kernel.AddressPool (AddressPool,
-                     emptyAddressPool)
+import           Cardano.Wallet.Kernel.AddressPool (AddressPool)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (CreateHdWallet (..),
                      DeleteHdRoot (..), RestoreHdWallet (..),
@@ -55,8 +54,6 @@ import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel,
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
-import           Cardano.Wallet.Kernel.Ed25519Bip44 (ChangeChain (..),
-                     deriveAddressPublicKey)
 import           Cardano.Wallet.Kernel.Internal (PassiveWallet, walletKeystore,
                      walletProtocolMagic, wallets)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
@@ -356,24 +353,15 @@ createWalletHdRnd pw hasSpendingPassword defaultCardanoAddress name assuranceLev
 
 -- | Construct an address pool for the account implied by the rootId, pub key
 -- and account index. From the account we derive the address pub keys.
---
--- NOTE: We use the passed in function to construct the address because
--- this operation requires heavy context.
-mkAddressPool
+mkAccountAddressPool
     :: HD.HdRootId
     -> AddressPoolGap
     -> (PublicKey -> Address)
     -> (PublicKey, HD.HdAccountIx)
     -> (HD.HdAccountId, AddressPool Address)
-mkAddressPool rootId gap pkToAddr (pk,ix)
+mkAccountAddressPool rootId gap mkAddress (pk,ix)
     = ( HD.HdAccountId rootId ix
-      , emptyAddressPool gap newAddress)
-    where
-        newAddress :: Word32 -> Address
-        newAddress addrIx
-            = maybe (error "mkAddresSPool: Maximum number of addresses reached.")
-                    pkToAddr
-                    (deriveAddressPublicKey pk ExternalChain addrIx)
+      , HD.mkAddressPool mkAddress pk gap)
 
 -- | Construct an Acidstate action for creating a new HdRnd wallet.
 -- For new HdRnd wallets we are given a default account and address, which is

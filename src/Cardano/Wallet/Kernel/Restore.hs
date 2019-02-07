@@ -66,7 +66,7 @@ import           Cardano.Wallet.Kernel.Types (RawResolvedBlock (..),
                      rawResolvedBlockInputs, rawResolvedContext, rawTimestamp)
 import           Cardano.Wallet.Kernel.Util.Core (utxoBalance)
 import           Cardano.Wallet.Kernel.Wallets (createWalletHdRnd,
-                     createWalletEos, mkAddressPool, mkCreateEosWallet,
+                     createWalletEos, mkAccountAddressPool, mkCreateEosWallet,
                      mkCreateHdRndWallet, mkRestoreEosWallet,
                      mkRestoreHdRndWallet)
 
@@ -152,12 +152,12 @@ restoreEosWallet pw accounts gap assurance name
         = makePubKeyAddressBoot . makeNetworkMagic $ pw ^. walletProtocolMagic
 
     -- Construct the prefiltering context for this wallet, we need the rootId
-    -- to get build the AccountId's for each account pub key 
+    -- to get build the AccountId's for each account pub key
     prefContext
         :: HD.HdRootId
         -> Map HD.HdAccountId (AddressPool Address)
     prefContext rootId
-        = M.fromList $ mkAddressPool rootId gap pkToAddr <$> accounts
+        = M.fromList $ mkAccountAddressPool rootId gap pkToAddr <$> accounts
 
     createWallet = createWalletEos pw assurance name
 

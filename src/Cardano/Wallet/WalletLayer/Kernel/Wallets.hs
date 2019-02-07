@@ -20,8 +20,6 @@ import           Universum
 import           Control.Monad.Except (throwError)
 import           Data.Coerce (coerce)
 import           Data.Default (def)
-import           Data.List (nub)
-import           Formatting (build, sformat)
 
 import           Pos.Chain.Txp (Utxo)
 import           Pos.Core (mkCoin)
@@ -31,7 +29,6 @@ import           Pos.Crypto.Signing
 import qualified Cardano.Mnemonic as Mnemonic
 import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
-import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (dbHdWallets)
 import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
@@ -49,7 +46,7 @@ import           Cardano.Wallet.Kernel.Restore (blundToResolvedBlock,
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
 import           Cardano.Wallet.WalletLayer (CreateWallet (..),
                      CreateWalletError (..), DeleteWalletError (..),
-                     GetAddressPoolGapError (..), GetEosWalletError (..),
+                     GetEosWalletError (..),
                      GetUtxosError (..), GetWalletError (..),
                      UpdateWalletError (..), UpdateWalletPasswordError (..))
 import           Cardano.Wallet.WalletLayer.Kernel.Conv
@@ -265,25 +262,7 @@ getEosWallet _wallet wId db = runExceptT $ do
         Kernel.lookupHdRootId db rootId
     fmap (toEosWallet db hdRoot) $
         withExceptT GetEosWalletErrorAddressPoolGap $ exceptT $
-            addressPoolGapByRootId rootId db
-
-addressPoolGapByRootId
-    :: HD.HdRootId
-    -> Kernel.DB
-    -> Either GetAddressPoolGapError AddressPoolGap
-addressPoolGapByRootId rootId db = do
-    let accounts = IxSet.toList $ Kernel.accountsByRootId db rootId
-        bases = flip map accounts $ \hdAccount -> case hdAccount ^. HD.hdAccountBase of
-                    -- It is EOS-wallet, so all accounts must have EO-branch.
-                    HD.HdAccountBaseFO _       -> Left ()
-                    HD.HdAccountBaseEO _ _ gap -> Right gap
-        (errors, gaps) = partitionEithers bases
-    if | null bases            -> Left $ GetEosWalletErrorNoAccounts anId
-       | not . null $ errors   -> Left $ GetEosWalletErrorWrongAccounts anId
-       | length (nub gaps) > 1 -> Left $ GetEosWalletErrorGapsDiffer anId
-       | otherwise             -> let [gap] = gaps in Right gap
-  where
-    anId = sformat build rootId
+            snd <$> Kernel.addressPoolGapByRootId rootId db
 
 -- | Gets all the wallets known to this edge node.
 --
@@ -308,9 +287,10 @@ getEosWallets
     -> Kernel.DB
     -> m (Either GetEosWalletError (IxSet V1.EosWallet))
 getEosWallets _wallet db = do
-    let result = traverse (\root -> either Left (Right . toEosWallet db root) $
-                    addressPoolGapByRootId (root ^. HD.hdRootId) db)
-                    allRoots
+    let result
+            = traverse (\root -> either Left (Right . toEosWallet db root . snd)
+                          $ Kernel.addressPoolGapByRootId (root ^. HD.hdRootId) db)
+                       allRoots
     return $ case result of
         Left e           -> Left $ GetEosWalletErrorAddressPoolGap e
         Right eosWallets -> Right $ IxSet.fromList eosWallets

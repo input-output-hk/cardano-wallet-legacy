@@ -5,8 +5,8 @@ module Cardano.Wallet.WalletLayer
     , CreateWallet(..)
     -- ** Errors
     , CreateWalletError(..)
+    , GetAddressPoolGapError (..)
     , GetWalletError(..)
-    , GetAddressPoolGapError(..)
     , GetEosWalletError(..)
     , UpdateWalletError(..)
     , UpdateWalletPasswordError(..)
@@ -64,6 +64,7 @@ import           Cardano.Wallet.Kernel.DB.TxMeta.Types
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (IxSet)
 import qualified Cardano.Wallet.Kernel.Transactions as Kernel
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
+import           Cardano.Wallet.Kernel.Read (GetAddressPoolGapError (..))
 import           Cardano.Wallet.WalletLayer.ExecutionTimeLimit
                      (TimeExecutionLimit)
 import           Cardano.Wallet.WalletLayer.Kernel.Conv (InvalidRedemptionCode)
@@ -114,20 +115,6 @@ instance Buildable GetWalletError where
         bprint ("GetWalletErrorNotFound " % build) walletId
     build (GetWalletWalletIdDecodingFailed txt) =
         bprint ("GetWalletWalletIdDecodingFailed " % build) txt
-
-data GetAddressPoolGapError =
-      GetEosWalletErrorNoAccounts Text
-    | GetEosWalletErrorWrongAccounts Text
-    | GetEosWalletErrorGapsDiffer Text
-    deriving Eq
-
-instance Buildable GetAddressPoolGapError where
-    build (GetEosWalletErrorNoAccounts txt) =
-        bprint ("GetEosWalletErrorNoAccounts " % build) txt
-    build (GetEosWalletErrorWrongAccounts txt) =
-        bprint ("FO-accounts found in EOS-wallet " % build) txt
-    build (GetEosWalletErrorGapsDiffer txt) =
-        bprint ("Address pool gaps differ, for EOS-wallet " % build) txt
 
 data GetEosWalletError =
       GetEosWalletError Kernel.UnknownHdRoot
