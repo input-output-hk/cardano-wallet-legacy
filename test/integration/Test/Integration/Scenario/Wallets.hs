@@ -808,6 +808,8 @@ spec = do
             ]
 
     scenario "WALLETS_UTXO_04 - UTxO statistics reflect wallet's activity" $ do
+        pendingWith "disabled until we figure out why it is randomly failing.  See #220"
+
         fixture <- setup $ defaultSetup
             & initialCoins .~ [14, 42, 1337]
 
