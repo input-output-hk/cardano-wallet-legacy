@@ -561,13 +561,12 @@ spec = do
             forM_ matrix $ \(title, oldPassword, newPassword, expectations) -> scenario title $ do
                 fixture <- setupUpdatePass oldPassword newPassword expectations
                 let walId = fixture ^. wallet . walletId
-                let errMsg = "CreateAddressHdRndGenerationFailed HdAccountId { parent " <> (fromWalletId walId) <> ", ix     HdAccountIx " <> (show (Client.getAccIndex defaultAccountId)) <> "}"
                 newAddrAttemptResp <- request $ Client.postAddress $- NewAddress
                     (Just $ fixture ^. spendingPassword)
                     defaultAccountId
                     walId
                 verify newAddrAttemptResp
-                    [ expectWalletError (CannotCreateAddress errMsg)
+                    [ expectWalletError (CannotCreateAddress "")
                     ]
 
         describe "WALLETS_UPDATE_PASS_03 - Newly updated password can be then used for sending transaction." $ do
@@ -608,14 +607,13 @@ spec = do
                     $- PasswordUpdate oldPass newPass
                 verify updatePasswordResp expectations
 
-                let errMsg = "CreateAddressHdRndGenerationFailed HdAccountId { parent " <> (fromWalletId walId) <> ", ix     HdAccountIx " <> (show (Client.getAccIndex defaultAccountId)) <> "}"
                 transAttemptResp <- request $ Client.postTransaction $- Payment
                     (defaultSource sourceWalletFixture)
                     (defaultDistribution 44 destWalletFixture)
                     defaultGroupingPolicy
                     (Just $ oldPass)
                 verify transAttemptResp
-                    [ expectWalletError (CannotCreateAddress errMsg)
+                    [ expectWalletError (CannotCreateAddress "")
                     ]
 
     scenario "WALLETS_UPDATE_PASS_03 - Newly updated password can be then used for redeeming certificate." $ do
@@ -657,7 +655,6 @@ spec = do
             [ expectFieldEqual hasSpendingPassword True
             ]
 
-        let errMsg = "CreateAddressHdRndGenerationFailed HdAccountId { parent " <> (fromWalletId walId) <> ", ix     HdAccountIx " <> (show (Client.getAccIndex defaultAccountId)) <> "}"
         response <- request $ Client.redeemAda $- Redemption
             (ShieldedRedemptionCode "iFTo/8yiCxcwMLT6wrMWecAlsKyUjYgL7hcdAJrsGfY=")
             noRedemptionMnemonic
@@ -665,7 +662,7 @@ spec = do
             walId
             defaultAccountId
         verify response
-            [ expectWalletError (CannotCreateAddress errMsg)
+            [ expectWalletError (CannotCreateAddress "")
             ]
 
     scenario "WALLETS_UPDATE_PASS_07 - Invalid or non-existing 'walletId' results in response code: 404 and appropriate error message" $ do
@@ -718,7 +715,7 @@ spec = do
                 "new": "3132333435363738393031323334353637383930313233343536373839303030"
             }|]
             verify (updatePassResp :: Either ClientError Wallet)
-                [ expectWalletError (UnknownError ("UpdateWalletPasswordOldPasswordMismatch " <> walId))
+                [ expectWalletError (UnknownError "")
                 ]
 
     describe "WALLETS_UPDATE_PASS_08 - Invalid old password" $ do
@@ -811,6 +808,8 @@ spec = do
             ]
 
     scenario "WALLETS_UTXO_04 - UTxO statistics reflect wallet's activity" $ do
+        pendingWith "disabled until we figure out why it is randomly failing.  See #220"
+
         fixture <- setup $ defaultSetup
             & initialCoins .~ [14, 42, 1337]
 
