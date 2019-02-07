@@ -4,6 +4,7 @@ module Cardano.Wallet.WalletLayer.Kernel.Wallets (
       createWallet
     , createEosWallet
     , updateWallet
+    , updateEosWallet
     , updateWalletPassword
     , deleteWallet
     , deleteEosWallet
@@ -31,6 +32,7 @@ import           Pos.Util.Wlog (Severity (..))
 
 import qualified Cardano.Mnemonic as Mnemonic
 import qualified Cardano.Wallet.API.V1.Types as V1
+import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (dbHdWallets)
@@ -52,7 +54,8 @@ import           Cardano.Wallet.WalletLayer (CreateWallet (..),
                      CreateWalletError (..), DeleteWalletError (..),
                      GetAddressPoolGapError (..), GetEosWalletError (..),
                      GetUtxosError (..), GetWalletError (..),
-                     UpdateWalletError (..), UpdateWalletPasswordError (..))
+                     UpdateEosWalletError (..), UpdateWalletError (..),
+                     UpdateWalletPasswordError (..))
 import           Cardano.Wallet.WalletLayer.Kernel.Conv
 
 createWallet :: MonadIO m
@@ -191,6 +194,34 @@ updateWallet wallet wId (V1.WalletUpdate v1Level v1Name) = runExceptT $ do
                withExceptT UpdateWalletError $ ExceptT $ liftIO $
                  Kernel.updateHdWallet wallet rootId newLevel newName
     updateSyncState wallet rootId v1wal
+  where
+    newLevel = fromAssuranceLevel v1Level
+    newName  = HD.WalletName v1Name
+
+updateEosWallet
+    :: MonadIO m
+    => Kernel.PassiveWallet
+    -> V1.WalletId
+    -> V1.UpdateEosWallet
+    -> m (Either UpdateEosWalletError V1.EosWallet)
+updateEosWallet wallet wId (V1.UpdateEosWallet v1Level v1Name newGap) = runExceptT $ do
+    rootId <- withExceptT UpdateEosWalletWalletIdDecodingFailed $ fromRootId wId
+    (db, newHdRoot) <- withExceptT UpdateEosWalletError $ ExceptT $ liftIO $
+        Kernel.updateHdWallet wallet rootId newLevel newName
+    -- 'HdRoot' doesn't contain address pool gap, only corresponding 'HdAccount's contain it.
+    -- So we have to update all these accounts.
+    accounts <- fmap (IxSet.toList) $ withExceptT UpdateEosWalletError $ exceptT $
+        return $ Kernel.accountsByRootId db rootId
+    if null accounts
+        then exceptT $ Left $ UpdateEosWalletErrorNoAccounts wId
+        else do
+            result <- forM accounts $ \hdAcc -> do
+                let accId = hdAcc ^. HD.hdAccountBase . HD.hdAccountBaseId
+                res <- liftIO $ Kernel.updateAccountGap accId newGap wallet
+                return $ either (Left . UpdateEosWalletAccountError) Right res
+            exceptT $ case lefts result of
+                []    -> Right $ toEosWallet db newHdRoot newGap
+                (e:_) -> Left e
   where
     newLevel = fromAssuranceLevel v1Level
     newName  = HD.WalletName v1Name

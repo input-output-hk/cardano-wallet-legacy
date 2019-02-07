@@ -29,6 +29,7 @@ module Cardano.Wallet.Kernel.DB.AcidState (
   , UpdateHdWallet(..)
   , UpdateHdRootPassword(..)
   , UpdateHdAccountName(..)
+  , UpdateHdAccountGap(..)
   , ResetAllHdWalletAccounts(..)
     -- *** DELETE
   , DeleteHdRoot(..)
@@ -65,6 +66,7 @@ import           Pos.Chain.Txp (TxAux, TxId, Utxo)
 import           Pos.Chain.Update (SoftwareVersion)
 import           Pos.Core.Chrono (OldestFirst (..))
 
+import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet
@@ -715,6 +717,12 @@ updateHdAccountName :: HdAccountId
 updateHdAccountName accId name = do
     runUpdate' . zoom dbHdWallets $ HD.updateHdAccountName accId name
 
+updateHdAccountGap :: HdAccountId
+                   -> AddressPoolGap
+                   -> Update DB (Either UpdateGapError (DB, HdAccount))
+updateHdAccountGap accId gap = do
+    runUpdate' . zoom dbHdWallets $ HD.updateHdAccountGap accId gap
+
 deleteHdRoot :: HdRootId -> Update DB (Either UnknownHdRoot ())
 deleteHdRoot rootId = runUpdateDiscardSnapshot . zoom dbHdWallets $
     HD.deleteHdRoot rootId
@@ -816,6 +824,7 @@ makeAcidic ''DB [
     , 'updateHdWallet
     , 'updateHdRootPassword
     , 'updateHdAccountName
+    , 'updateHdAccountGap
     , 'deleteHdRoot
     , 'deleteHdAccount
     , 'resetAllHdWalletAccounts

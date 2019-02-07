@@ -147,8 +147,11 @@ updateEosWallets
     -> WalletId
     -> UpdateEosWallet
     -> Handler (APIResponse EosWallet)
-updateEosWallets _ _ _ = do
-    throwM $ err501 { errBody = "Not Implemented" }
+updateEosWallets pwl wid walletUpdateRequest = do
+    res <- liftIO $ WalletLayer.updateEosWallet pwl wid walletUpdateRequest
+    case res of
+         Left e  -> throwM e
+         Right w -> return $ single w
 
 deleteEosWallets
     :: PassiveWalletLayer IO

@@ -77,6 +77,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , UnknownHdRoot(..)
   , UnknownHdAccount(..)
   , UnknownHdAddress(..)
+  , UpdateGapError(..)
   , embedUnknownHdRoot
   , embedUnknownHdAccount
     -- * Zoom to parts of the HD wallet
@@ -657,6 +658,25 @@ instance Arbitrary UnknownHdAddress where
                       , UnknownHdCardanoAddress <$> arbitrary
                       ]
 
+-- | Specific error that may occur during update address pool gap
+-- in 'HdAccountBase': if we try to update a gap in the account with
+-- 'HdAccountBase' with FO-branch.
+data UpdateGapError =
+    -- | Unknown root ID
+    UpdateGapErrorUnknownHdAccountRoot HdRootId
+    -- | Unknown account (implies the root is known)
+  | UpdateGapErrorUnknownHdAccount HdAccountId
+    -- | Try to update address pool gap in the account with FO-branch.
+  | UpdateGapErrorFOAccount HdAccountId
+  deriving Eq
+
+instance Arbitrary UpdateGapError where
+    arbitrary = oneof
+        [ UpdateGapErrorUnknownHdAccountRoot <$> arbitrary
+        , UpdateGapErrorUnknownHdAccount <$> arbitrary
+        , UpdateGapErrorFOAccount <$> arbitrary
+        ]
+
 embedUnknownHdRoot :: UnknownHdRoot -> UnknownHdAccount
 embedUnknownHdRoot = go
   where
@@ -671,6 +691,7 @@ embedUnknownHdAccount = go
 deriveSafeCopy 1 'base ''UnknownHdRoot
 deriveSafeCopy 1 'base ''UnknownHdAddress
 deriveSafeCopy 1 'base ''UnknownHdAccount
+deriveSafeCopy 1 'base ''UpdateGapError
 
 {-------------------------------------------------------------------------------
   IxSet instantiations
@@ -1064,6 +1085,14 @@ instance Buildable UnknownHdAccount where
       bprint ("UnknownHdAccountRoot " % build) rootId
     build (UnknownHdAccount accountId) =
       bprint ("UnknownHdAccount accountId " % build) accountId
+
+instance Buildable UpdateGapError where
+    build (UpdateGapErrorUnknownHdAccountRoot rootId) =
+      bprint ("UpdateGapErrorUnknownHdAccountRoot " % build) rootId
+    build (UpdateGapErrorUnknownHdAccount accountId) =
+      bprint ("UpdateGapErrorUnknownHdAccount accountId " % build) accountId
+    build (UpdateGapErrorFOAccount accountId) =
+      bprint ("UpdateGapErrorFOAccount accountId " % build) accountId
 
 instance Buildable UnknownHdAddress where
     build (UnknownHdAddressRoot rootId) =

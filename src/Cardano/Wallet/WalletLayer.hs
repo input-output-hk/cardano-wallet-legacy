@@ -9,6 +9,7 @@ module Cardano.Wallet.WalletLayer
     , GetAddressPoolGapError(..)
     , GetEosWalletError(..)
     , UpdateWalletError(..)
+    , UpdateEosWalletError(..)
     , UpdateWalletPasswordError(..)
     , DeleteWalletError(..)
     , GetUtxosError(..)
@@ -53,8 +54,9 @@ import           Cardano.Wallet.API.V1.Types (Account, AccountBalance,
                      NewAccount, NewAddress, NewEosWallet, NewWallet,
                      PasswordUpdate, Payment, Redemption, SignedTransaction,
                      SpendingPassword, Transaction, UnsignedTransaction,
-                     WalAddress, Wallet, WalletAddress, WalletId, WalletImport,
-                     WalletTimestamp, WalletTxId, WalletUpdate)
+                     UpdateEosWallet, WalAddress, Wallet, WalletAddress,
+                     WalletId, WalletImport, WalletTimestamp, WalletTxId,
+                     WalletUpdate)
 import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import qualified Cardano.Wallet.Kernel.Addresses as Kernel
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
@@ -148,6 +150,35 @@ instance Buildable GetEosWalletError where
         bprint ("GetEosWalletWalletIdDecodingFailed " % build) txt
     build (GetEosWalletErrorAddressPoolGap gapError) =
         bprint ("GetEosWalletErrorAddressPoolGap " % build) gapError
+
+data UpdateEosWalletError =
+      UpdateEosWalletError Kernel.UnknownHdRoot
+    | UpdateEosWalletAccountError Kernel.UpdateGapError
+    | UpdateEosWalletErrorNotFound WalletId
+    -- ^ Error thrown by the legacy wallet layer, isomorphic to the one above,
+    -- which is new-data-layer specific.
+    | UpdateEosWalletWalletIdDecodingFailed Text
+    | UpdateEosWalletErrorNoAccounts WalletId
+    -- ^ Trying to update EOS-wallet which doesn't have any accounts.
+    deriving Eq
+
+-- | Unsound show instance needed for the 'Exception' instance.
+instance Show UpdateEosWalletError where
+    show = formatToString build
+
+instance Exception UpdateEosWalletError
+
+instance Buildable UpdateEosWalletError where
+    build (UpdateEosWalletError kernelError) =
+        bprint ("UpdateEosWalletError " % build) kernelError
+    build (UpdateEosWalletAccountError kernelAccError) =
+        bprint ("UpdateEosWalletAccountError " % build) kernelAccError
+    build (UpdateEosWalletErrorNotFound walletId) =
+        bprint ("UpdateEosWalletErrorNotFound " % build) walletId
+    build (UpdateEosWalletWalletIdDecodingFailed txt) =
+        bprint ("UpdateEosWalletWalletIdDecodingFailed " % build) txt
+    build (UpdateEosWalletErrorNoAccounts walletId) =
+        bprint ("UpdateEosWalletErrorNoAccounts " % build) walletId
 
 data UpdateWalletError =
       UpdateWalletError Kernel.UnknownHdRoot
@@ -457,6 +488,9 @@ data PassiveWalletLayer m = PassiveWalletLayer
     , updateWallet         :: WalletId
                            -> WalletUpdate
                            -> m (Either UpdateWalletError Wallet)
+    , updateEosWallet      :: WalletId
+                           -> UpdateEosWallet
+                           -> m (Either UpdateEosWalletError EosWallet)
     , updateWalletPassword :: WalletId
                            -> PasswordUpdate
                            -> m (Either UpdateWalletPasswordError Wallet)
