@@ -123,6 +123,7 @@ import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import           Data.Typeable (typeOf, typeRepTyCon)
 import           Formatting (build, sformat)
 import           Language.Haskell.TH.Quote (QuasiQuoter)
 import           Test.Hspec.Core.Spec (SpecM, it, xit)
@@ -641,7 +642,10 @@ expectWalletError
     -> m ()
 expectWalletError e' = \case
     Right a -> wantedErrorButSuccess a
+    Left (ClientWalletError e) -> constructorOf e `shouldBe` constructorOf e'
     Left e  -> e `shouldBe` (ClientWalletError e')
+  where
+    constructorOf = typeRepTyCon . typeOf
 
 -- | Verifies that the response is errored from a failed JSON validation
 -- matching part of the given message.
