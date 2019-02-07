@@ -23,7 +23,7 @@ spec = do
             [ expectAddressInIndexOf
             ]
 
-    scenario "used addresses previously created can be imported" $ do
+    scenario "ADDRESSES_IMPORT_01 - Unused addresses previously created on a wallet's account, can be imported" $ do
         fixture <- setup defaultSetup
         addr <- successfulRequest $ Client.postAddress $- NewAddress
             Nothing
@@ -47,7 +47,7 @@ spec = do
             , \_ -> expectAddressInIndexOf (Right addr)
             ]
 
-    scenario "can't import addresses that aren't ours" $ do
+    scenario "ADDRESSES_IMPORT_02 - Can't import addresses that aren't ours" $ do
         (ourFixture, theirFixture) <- (,) <$> setup defaultSetup <*> setup defaultSetup
         addrs <- sequence $
             [ mkAddress (ourFixture   ^. backupPhrase) 14
@@ -62,7 +62,6 @@ spec = do
         index <- fmap (fmap accAddresses) $ request $ Client.getAccount
             $- ourFixture ^. wallet . walletId
             $- defaultAccountId
-
         verify response
             [ expectFieldEqual totalSuccess 1
             , expectFieldEqual failures (drop 1 addrs)
@@ -71,9 +70,9 @@ spec = do
             [ expectListSizeEqual 2 -- NOTE 2 because there's also a default address
             ]
 
-    scenario "can't import addresses that are already present (used or unused)" $ do
+    scenario "ADDRESSES_IMPORT_03 - Can't import addresses that are already present (used or unused)" $ do
         -- NOTE
-        -- The fixture looks a bit complexe here but in the end, we should end
+        -- The fixture looks a bit complex here but in the end, we should end
         -- up with two addresses:
         --
         -- - 1 unused, default address of the account
@@ -97,4 +96,23 @@ spec = do
         verify response
             [ expectFieldEqual totalSuccess 0
             , expectFieldEqual failures (map (view address) addrs)
+            ]
+
+    scenario "ADDRESSES_IMPORT_04 - Can't import addresses to different account in the wallet" $ do
+        fixture <- setup $ defaultSetup
+        addrs <- sequence $ [mkAddress (fixture ^. backupPhrase) 1]
+
+        accountResp <- successfulRequest $ Client.postAccount
+            $- (fixture ^. wallet . walletId)
+            $- NewAccount
+                noSpendingPassword
+                "New Account"
+
+        response <- request $ Client.importAddresses
+            $- fixture ^. wallet . walletId
+            $- Client.accIndex accountResp
+            $- addrs
+        verify response
+            [ expectFieldEqual totalSuccess 0
+            , expectFieldEqual failures addrs
             ]
