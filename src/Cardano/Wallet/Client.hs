@@ -78,7 +78,6 @@ data WalletClient m
          :: Text -> Resp m WalletAddress
     , importAddresses
         :: WalletId
-        -> AccountIndex
         -> [WalAddress]
         -> Resp m (BatchImportResult WalAddress)
     -- wallets endpoints
@@ -246,7 +245,7 @@ natMapClient phi f wc = WalletClient
     , getAddress =
         f . phi . getAddress wc
     , importAddresses =
-        \x y -> f . phi . importAddresses wc x y
+        \x -> f . phi . importAddresses wc x
     , postWallet =
         f . phi . postWallet wc
     , getWalletIndexFilterSorts =

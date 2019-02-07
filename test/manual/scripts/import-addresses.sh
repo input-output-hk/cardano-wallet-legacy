@@ -15,8 +15,6 @@
 #
 # Options:
 #   -h --help
-#   -a --account=INT         An optional parent account index [default: 2147483648]
-#   -n --number=INT          number of addresses to generate [default: 10]
 #   -p --port=INT            Port the server is listening to [default: 8090]
 #   -c --client=FILEPATH     TLS client certificate expected by the server [default: ../../../state-staging/tls/client/client.pem]
 #
@@ -26,7 +24,7 @@
 
 PATH=.:$PATH; source docopts.sh --auto "$@"
 
-curl -kX POST https://localhost:${ARGS[--port]}/api/v1/wallets/${ARGS[<wallet_id>]}/accounts/${ARGS[--account]}/addresses \
+curl -kX POST https://localhost:${ARGS[--port]}/api/v1/wallets/${ARGS[<wallet_id>]}/addresses \
   -H "Accept: application/json; charset=utf-8" \
   -H "Content-Type: application/json; charset=utf-8" \
   --cert ${ARGS[--client]} \

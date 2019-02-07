@@ -25,10 +25,8 @@
 │  └─•
 └─ wallets/
    ├─ <capture>/
-   │  └─ accounts/
-   │     └─ <capture>/
-   │        └─ addresses/
-   │           └─•
+   │  └─ addresses/
+   │     └─•
    ┆
    ├─•
    ┆
