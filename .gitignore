@@ -27,6 +27,7 @@ cabal.project.local~
 ### Cardano ###
 
 test_keystore.*
+state-staging
 state-integration
 secret.key
 secret.key.lock
