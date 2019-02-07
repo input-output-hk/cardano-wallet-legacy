@@ -20,22 +20,23 @@ module Test.Integration.Framework.DSL
     , verify
 
     -- * Requests (Only API types)
-    , NewAddress(..)
-    , NewWallet (..)
+    , AddressPoolGap
+    , AssuranceLevel(..)
+    , DestinationChoice(..)
+    , EosWallet(..)
+    , FilterOperations(..)
     , NewAccount (..)
+    , NewAddress(..)
     , NewEosWallet (..)
+    , NewWallet (..)
     , PasswordUpdate (..)
     , Payment (..)
     , RawPassword (..)
     , Redemption (..)
-    , WalletUpdate(..)
     , ShieldedRedemptionCode (..)
-    , FilterOperations(..)
     , SortOperations(..)
     , WalletOperation(..)
-    , AssuranceLevel(..)
-    , DestinationChoice(..)
-    , AddressPoolGap
+    , WalletUpdate(..)
     , defaultAccountId
     , defaultAssuranceLevel
     , defaultDistribution
