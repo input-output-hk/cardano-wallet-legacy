@@ -774,9 +774,10 @@ mkPassword (RawPassword txt)
 mkAddress
     :: (MonadIO m, MonadFail m)
     => BackupPhrase
+    -> AccountIndex
     -> Word32
     -> m WalAddress
-mkAddress (BackupPhrase mnemonic) ix = do
+mkAddress (BackupPhrase mnemonic) (accId) ix = do
     let (_, esk) = safeDeterministicKeyGen
             (mnemonicToSeed mnemonic)
             mempty
@@ -787,7 +788,7 @@ mkAddress (BackupPhrase mnemonic) ix = do
             (ShouldCheckPassphrase False)
             mempty
             esk
-            (getAccIndex minBound)
+            (getAccIndex accId)
             ix
 
     case maddr of
@@ -878,7 +879,7 @@ setupDestination
 setupDestination = \case
     RandomDestination -> do
         bp <- liftIO (generate arbitrary)
-        unWalAddress <$> mkAddress bp 1
+        unWalAddress <$> mkAddress bp defaultAccountId 1
     LockedDestination ->
         fail "Asset-locked destination aren't yet implemented. This\
             \ requires slightly more work than it seems and will be\

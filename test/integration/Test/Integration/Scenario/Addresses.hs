@@ -50,10 +50,10 @@ spec = do
     scenario "ADDRESSES_IMPORT_02 - Can't import addresses that aren't ours" $ do
         (ourFixture, theirFixture) <- (,) <$> setup defaultSetup <*> setup defaultSetup
         addrs <- sequence $
-            [ mkAddress (ourFixture   ^. backupPhrase) 14
-            , mkAddress (theirFixture ^. backupPhrase) 1
-            , mkAddress (theirFixture ^. backupPhrase) 2
-            , mkAddress (theirFixture ^. backupPhrase) 3
+            [ mkAddress (ourFixture   ^. backupPhrase) defaultAccountId 14
+            , mkAddress (theirFixture ^. backupPhrase) defaultAccountId 1
+            , mkAddress (theirFixture ^. backupPhrase) defaultAccountId 2
+            , mkAddress (theirFixture ^. backupPhrase) defaultAccountId 3
             ]
 
         response <- request $ Client.importAddresses
@@ -98,19 +98,21 @@ spec = do
             , expectFieldEqual failures (map (view address) addrs)
             ]
 
-    scenario "ADDRESSES_IMPORT_04 - Can import addresses to different account in the wallet" $ do
+    scenario "ADDRESSES_IMPORT_04 - Can import addresses from different account into default account of the wallet" $ do
         fixture <- setup $ defaultSetup
-        addrs <- sequence $ [mkAddress (fixture ^. backupPhrase) 1]
+
 
         accountResp <- successfulRequest $ Client.postAccount
             $- (fixture ^. wallet . walletId)
             $- NewAccount
                 noSpendingPassword
                 "New Account"
+        print accountResp
+        addrs <- sequence $ [mkAddress (fixture ^. backupPhrase) (Client.accIndex accountResp) 1]
 
         response <- request $ Client.importAddresses
             $- fixture ^. wallet . walletId
-            $- Client.accIndex accountResp
+            $- defaultAccountId
             $- addrs
         verify response
             [ expectFieldEqual totalSuccess 1
