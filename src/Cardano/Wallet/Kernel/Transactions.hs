@@ -53,7 +53,7 @@ import           Cardano.Wallet.Kernel.DB.AcidState (DB, NewForeignError,
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
-                     (DerivationSchemeVersion (..), derivationSchemeVersion)
+                     (DerivationScheme (..), derivationScheme)
 import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import           Cardano.Wallet.Kernel.DB.Read as Getters
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types
@@ -650,11 +650,11 @@ mkSigner nm spendingPassword (Just esk) snapshot addr =
                                        . to HD.getHdAccountIx
                 internalAddress = hdAddr ^. HD.hdAddressAddress
                                           . fromDb
-                res = case derivationSchemeVersion internalAddress of
+                res = case derivationScheme internalAddress of
                     -- If there is some payload we expect this payload to be addressIx and accountIx
                     -- used for random address scheme so we continue with using
                     -- random HD address derivation scheme: simple bip32 with ed25519 v0
-                    DerivationSchemeRnd -> Core.deriveLvl2KeyPair nm
+                    RandomDerivationScheme -> Core.deriveLvl2KeyPair nm
                                     (Core.IsBootstrapEraAddr True)
                                     (ShouldCheckPassphrase False)
                                     spendingPassword
@@ -663,7 +663,7 @@ mkSigner nm spendingPassword (Just esk) snapshot addr =
                                     addressIndex
                     -- If there is no payload we assume it is sequential address scheme (which doesn't have payload)
                     -- Sequential HD address derivation scheme: bip44 with ed25519 v1
-                    DerivationSchemeSeq -> first (Core.makePubKeyAddressBoot nm) <$>
+                    SequentialDerivationScheme -> first (Core.makePubKeyAddressBoot nm) <$>
                         deriveAddressKeyPair
                             spendingPassword
                             esk

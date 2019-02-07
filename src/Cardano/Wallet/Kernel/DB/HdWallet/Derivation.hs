@@ -1,8 +1,8 @@
 module Cardano.Wallet.Kernel.DB.HdWallet.Derivation (
       deriveIndex
     , HardeningMode(..)
-    , DerivationSchemeVersion (..)
-    , derivationSchemeVersion
+    , DerivationScheme (..)
+    , derivationScheme
     ) where
 
 import           Universum
@@ -35,21 +35,20 @@ deriveIndex pickRange mkA hardeningMode =
     in mkA <$> pickRange range
 
 -- Which derivation scheme is being used
-data DerivationSchemeVersion
+data DerivationScheme
     -- Derivation scheme random is following bip32 scheme, ed25519v0 curve and addresses contain: account index and address index
-    = DerivationSchemeRnd
+    = RandomDerivationScheme
     -- Derivation scheme sequential is bip44 scheme, ed25519v1 curve and addresses contain no address payload. Root key derivation from mnemonic keys also differs from root key derivation in random scheme
-    | DerivationSchemeSeq
-    deriving (Show)
+    | SequentialDerivationScheme
+    deriving (Show, Eq, Ord)
 
-derivationSchemeVersion :: Core.Address -> DerivationSchemeVersion
-derivationSchemeVersion addr =
+derivationScheme :: Core.Address -> DerivationScheme
+derivationScheme addr =
     if isJust mPayload
-        then DerivationSchemeRnd
-        else DerivationSchemeSeq
+        then RandomDerivationScheme
+        else SequentialDerivationScheme
   where
     mPayload = Core.aaPkDerivationPath $ attrData $ Core.addrAttributes addr
 
-instance Arbitrary DerivationSchemeVersion where
-    arbitrary = elements [DerivationSchemeRnd, DerivationSchemeSeq]
-
+instance Arbitrary DerivationScheme where
+    arbitrary = elements [RandomDerivationScheme, SequentialDerivationScheme]

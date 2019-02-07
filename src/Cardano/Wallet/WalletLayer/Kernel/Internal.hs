@@ -9,7 +9,8 @@ import           Control.Concurrent.MVar (modifyMVar_)
 import           Data.Acid.Advanced (update')
 import           System.IO.Error (isDoesNotExistError)
 
-import           Cardano.Wallet.API.V1.Types (Wallet, WalletImport (..))
+import           Cardano.Wallet.API.V1.Types (Wallet, WalletImport (..),
+                     derivationScheme)
 import           Cardano.Wallet.Kernel.DB.AcidState (ClearDB (..))
 import           Cardano.Wallet.Kernel.DB.TxMeta
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
@@ -57,7 +58,7 @@ importWallet pw WalletImport{..} = liftIO $ do
              case mbEsk of
                  Nothing  -> return (Left $ ImportWalletNoWalletFoundInBackup wiFilePath)
                  Just esk -> do
-                     res <- liftIO $ createWallet pw (ImportWalletFromESK esk wiSpendingPassword)
+                     res <- liftIO $ createWallet pw (ImportWalletFromESK esk wiSpendingPassword $ derivationScheme wiDerivationScheme)
                      return $ case res of
                           Left e               -> Left (ImportWalletCreationFailed e)
                           Right importedWallet -> Right importedWallet

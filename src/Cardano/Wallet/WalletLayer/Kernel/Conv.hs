@@ -174,6 +174,7 @@ toWallet db hdRoot = V1.Wallet {
     , walCreatedAt                  = V1.WalletTimestamp createdAt
     , walAssuranceLevel             = v1AssuranceLevel
     , walSyncState                  = V1.Synced
+    , walDerivationSchemeVersion    = V1.DerivationSchemeVersion $ hdRoot ^. HD.hdDerivationScheme
     }
   where
     (hasSpendingPassword, lastUpdate) =
