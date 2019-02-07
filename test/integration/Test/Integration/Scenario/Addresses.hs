@@ -98,7 +98,7 @@ spec = do
             , expectFieldEqual failures (map (view address) addrs)
             ]
 
-    scenario "ADDRESSES_IMPORT_04 - Can't import addresses to different account in the wallet" $ do
+    scenario "ADDRESSES_IMPORT_04 - Can import addresses to different account in the wallet" $ do
         fixture <- setup $ defaultSetup
         addrs <- sequence $ [mkAddress (fixture ^. backupPhrase) 1]
 
@@ -113,6 +113,5 @@ spec = do
             $- Client.accIndex accountResp
             $- addrs
         verify response
-            [ expectFieldEqual totalSuccess 0
-            , expectFieldEqual failures addrs
+            [ expectFieldEqual totalSuccess 1
             ]
