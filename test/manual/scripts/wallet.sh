@@ -4,6 +4,8 @@
 #	wallet (create | restore) [options] MNEMONICS...
 #	wallet delete <wallet_id> [options]
 #	wallet get [<wallet_id>] [options]
+#	wallet create-account <wallet_id>
+#	wallet get-accounts <wallet_id>
 #	wallet get-addresses <wallet_id>
 #
 # The script allows for basic interaction with wallet.
@@ -26,6 +28,8 @@
 #   ./wallet.sh get
 #   ./wallet.sh get Ae2tdPwUPEZKJycNa3AD1mBWThdXpJoyvdEksYBaJUUMoMN4XAfJ3h18Lib
 #   ./wallet.sh delete Ae2tdPwUPEZKJycNa3AD1mBWThdXpJoyvdEksYBaJUUMoMN4XAfJ3h18Lib
+#   ./wallet.sh create-account Ae2tdPwUPEZKyifkHShCKCbzzPbi7DBV7XuyTPEd13KRES4v8Ut3PmKebLy
+#   ./wallet.sh get-accounts Ae2tdPwUPEZKyifkHShCKCbzzPbi7DBV7XuyTPEd13KRES4v8Ut3PmKebLy
 #   ./wallet.sh get-addresses Ae2tdPwUPEZKyifkHShCKCbzzPbi7DBV7XuyTPEd13KRES4v8Ut3PmKebLy
 #
 
@@ -96,12 +100,37 @@ if [ "${ARGS[get]}" == "true" ]; then
 
 fi
 
+
+
+# create-account
+if [ "${ARGS[create-account]}" == "true" ]; then
+
+	curl -kX POST https://localhost:${ARGS[--port]}/api/v1/wallets/${ARGS[<wallet_id>]}/accounts \
+  		-H "Accept: application/json; charset=utf-8" \
+  		-H "Content-Type: application/json; charset=utf-8" \
+  		--cert ${ARGS[--client]} \
+  		-d "{
+	   		\"name\": \"${ARGS[--name]}\"
+		    }"  |  jq
+
+fi
+
+# get-accounts
+if [ "${ARGS[get-accounts]}" == "true" ]; then
+
+	curl -kX GET https://localhost:${ARGS[--port]}/api/v1/wallets/${ARGS[<wallet_id>]}/accounts \
+  		-H "Accept: application/json; charset=utf-8" \
+  		-H "Content-Type: application/json; charset=utf-8" \
+  		--cert ${ARGS[--client]} | jq
+
+fi
+
 # get-addresses
 if [ "${ARGS[get-addresses]}" == "true" ]; then
 
 	curl -kX GET https://localhost:${ARGS[--port]}/api/v1/wallets/${ARGS[<wallet_id>]}/accounts/${ARGS[--account]}/addresses \
   		-H "Accept: application/json; charset=utf-8" \
   		-H "Content-Type: application/json; charset=utf-8" \
-  		--cert ${ARGS[--client]}
+  		--cert ${ARGS[--client]} | jq
 
 fi
