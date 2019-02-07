@@ -81,7 +81,6 @@ library
     , filepath
     , foldl
     , formatting
-    , formatting
     , generics-sop
     , http-api-data
     , http-client
@@ -588,7 +587,9 @@ test-suite integration
     , containers
     , cryptonite
     , directory
+    , data-default
     , filepath
+    , formatting
     , generic-lens
     , hspec
     , hspec-core
@@ -617,6 +618,7 @@ test-suite integration
       Test.Integration.Framework.Scenario
       Test.Integration.Scenario.Accounts
       Test.Integration.Scenario.Addresses
+      Test.Integration.Scenario.EosWallets
       Test.Integration.Scenario.Transactions
       Test.Integration.Scenario.Wallets
       Test.Integration.Scenario.Node
