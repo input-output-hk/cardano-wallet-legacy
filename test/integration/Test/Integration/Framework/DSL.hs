@@ -253,7 +253,7 @@ setup args = do
         then liftIO $ generate arbitrary
         else mkBackupPhrase (args ^. mnemonicWords)
     let walPwd@(WalletPassPhrase pwd) = mkPassword (args ^. rawPassword)
-    wal <- setupWallet args phrase
+    wal <- setupWallet args phrase walPwd
     addrs  <- forM (RandomDestination :| []) setupDestination
     let accs = genExternallyOwnedAccounts (phrase, args ^. rawMnemonicPassword) pwd
     return $ Fixture wal addrs phrase walPwd accs
