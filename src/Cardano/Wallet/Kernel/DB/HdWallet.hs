@@ -138,6 +138,7 @@ import           Cardano.Wallet.Kernel.NodeStateAdaptor (SecurityParameter (..))
 import qualified Cardano.Wallet.Kernel.Util.StrictList as SL
 import           Cardano.Wallet.Kernel.Util.StrictNonEmpty (StrictNonEmpty (..))
 import qualified Cardano.Wallet.Kernel.Util.StrictNonEmpty as SNE
+import           Cardano.Wallet.Util (buildTrunc)
 import           UTxO.Util (liftNewestFirst, modifyAndGetOld)
 
 {-------------------------------------------------------------------------------
@@ -1033,33 +1034,21 @@ instance Buildable HdAccountIncomplete where
 
 instance Buildable HdAddress where
     build HdAddress{..} = bprint
-      ( "HdAddress "
-      % "{ id      " % build
-      % ", address " % build
-      % "}"
-      )
-      _hdAddressId
-      (_fromDb _hdAddressAddress)
+        (buildTrunc build % "@" % build)
+        (_fromDb _hdAddressAddress)
+        _hdAddressId
 
 instance Buildable HdAccountId where
     build HdAccountId{..} = bprint
-      ( "HdAccountId "
-      % "{ parent " % build
-      % ", ix     " % build
-      % "}"
-      )
-      _hdAccountIdParent
-      _hdAccountIdIx
+        (buildTrunc build % "/" % build)
+        _hdAccountIdParent
+        (getHdAccountIx _hdAccountIdIx)
 
 instance Buildable HdAddressId where
     build HdAddressId{..} = bprint
-      ( "HdAddressId "
-      % " parent " % build
-      % " ix     " % build
-      % "}"
-      )
-      _hdAddressIdParent
-      _hdAddressIdIx
+        (build % "/" % build)
+        _hdAddressIdParent
+        (getHdAddressIx _hdAddressIdIx)
 
 instance Buildable HdAccountIx where
     build (HdAccountIx ix) = bprint ("HdAccountIx " % build) ix

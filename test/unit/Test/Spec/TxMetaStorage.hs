@@ -18,7 +18,8 @@ import           Formatting.Buildable (build)
 import           Pos.Chain.Txp (TxId)
 import qualified Pos.Core as Core
 
-import           Formatting (bprint)
+import           Formatting (bprint, (%))
+import qualified Formatting as F
 import           Serokell.Util.Text (listJsonIndent, pairF)
 import           Test.Hspec (expectationFailure, shouldContain, shouldThrow)
 import           Test.Hspec.QuickCheck (prop)
@@ -77,7 +78,9 @@ instance Arbitrary Input where
     arbitrary = Input <$> arbitrary
 
 instance Buildable Input where
-    build (Input b) = bprint quadF b
+    build (Input (a, b, c, d)) =
+        bprint ("(" % F.build % ", " % F.build % ", " % F.build % ", " % F.build % ")")
+        a b c d
 
 instance Buildable (Int, Input) where
     build b = bprint pairF b

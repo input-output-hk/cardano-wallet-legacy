@@ -19,13 +19,13 @@ module Cardano.Wallet.Kernel.DB.BlockMeta (
 
 import           Universum
 
+import           Cardano.Wallet.Util (buildIndent, buildMap, buildTrunc)
 import           Control.Lens (at, non)
 import           Control.Lens.TH (makeLenses, makeWrapped)
 import qualified Data.Map.Strict as Map
 import           Data.SafeCopy (base, deriveSafeCopy)
 import           Formatting (bprint, build, (%))
 import qualified Formatting.Buildable
-import           Serokell.Util (mapJson)
 
 import qualified Pos.Chain.Txp as Txp
 import qualified Pos.Core as Core
@@ -42,6 +42,8 @@ data AddressMeta = AddressMeta {
       -- | Whether or not an Address has been 'used'
       _addressMetaIsUsed   :: Bool
     } deriving Eq
+makeLenses ''AddressMeta
+deriveSafeCopy 1 'base ''AddressMeta
 
 instance Semigroup AddressMeta where
     (AddressMeta used) <> (AddressMeta used') = AddressMeta (used || used')
@@ -50,8 +52,11 @@ instance Monoid AddressMeta where
   mempty  = AddressMeta False
   mappend = (<>)
 
-makeLenses ''AddressMeta
-deriveSafeCopy 1 'base ''AddressMeta
+instance Buildable AddressMeta where
+    build AddressMeta{..} = bprint
+        ("AddressMeta isUsed: " % build)
+        _addressMetaIsUsed
+
 
 {-------------------------------------------------------------------------------
   Block metadata
@@ -66,6 +71,15 @@ data BlockMeta = BlockMeta {
     } deriving Eq
 makeLenses ''BlockMeta
 deriveSafeCopy 1 'base ''BlockMeta
+
+instance Buildable BlockMeta where
+    build BlockMeta{..} = bprint
+        ( "BlockMeta"
+        % "\n  slotId:      \n" % buildIndent 4 (buildMap build "=>" build)
+        % "\n  addressMeta: \n" % buildIndent 4 (buildMap (buildTrunc build) "=>" build)
+        )
+        (_fromDb _blockMetaSlotId)
+        (_blockMetaAddressMeta)
 
 -- In the typical case, we have 'BlockMeta' for the chain so far, then derive
 -- local blockmeta for the new block that just arrived and want to combine this
@@ -97,31 +111,6 @@ addressMeta addr = blockMetaAddressMeta . at (InDb addr) . non mempty
 -- this data is potentially incomplete.
 newtype LocalBlockMeta = LocalBlockMeta { localBlockMeta :: BlockMeta }
         deriving stock Eq
-        deriving newtype (Semigroup, Monoid)
+        deriving newtype (Semigroup, Monoid, Buildable)
 makeWrapped ''LocalBlockMeta
 deriveSafeCopy 1 'base ''LocalBlockMeta
-
-
-{-------------------------------------------------------------------------------
-  Pretty-printing
--------------------------------------------------------------------------------}
-
-instance Buildable AddressMeta where
-    build AddressMeta{..} = bprint
-        ( "AddressMeta"
-        % "{ isUsed:   " % build
-        % "}"
-        )
-        _addressMetaIsUsed
-
-instance Buildable BlockMeta where
-    build BlockMeta{..} = bprint
-        ( "BlockMeta"
-        % "{ slotId:      " % mapJson
-        % ", addressMeta: " % mapJson
-        % "}"
-        )
-        (_fromDb _blockMetaSlotId)
-        _blockMetaAddressMeta
-
-deriving instance Buildable LocalBlockMeta
