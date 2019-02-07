@@ -67,7 +67,7 @@ spec = do
             (defaultSource fixtureSource)
             (defaultDistribution 1 fixtureDest)
             defaultGroupingPolicy
-            (Just $ fixtureDest ^. spendingPassword)
+            (Just $ fixtureSource ^. spendingPassword)
         verify resp1
             [ expectSuccess
             ]
@@ -76,7 +76,7 @@ spec = do
             (defaultSource fixtureSource)
             (defaultDistribution 1 fixtureDest)
             defaultGroupingPolicy
-            (Just $ fixtureDest ^. spendingPassword)
+            (Just $ fixtureSource ^. spendingPassword)
         verify resp2
             [ expectWalletError (UtxoNotEnoughFragmented (Client.ErrUtxoNotEnoughFragmented 1 Client.msgUtxoNotEnoughFragmented))
             ]
@@ -88,7 +88,7 @@ spec = do
             (defaultSource fixtureSource)
             (defaultDistribution 1 fixtureDest)
             defaultGroupingPolicy
-            (Just $ fixtureDest ^. spendingPassword)
+            (Just $ fixtureSource ^. spendingPassword)
         verify resp3
             [ expectTxStatusEventually [InNewestBlocks, Persisted]
             ]
