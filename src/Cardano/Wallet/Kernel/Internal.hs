@@ -34,6 +34,9 @@ module Cardano.Wallet.Kernel.Internal (
   , cancelRestoration
   , restartRestoration
   , stopAllRestorations
+  , mkLogger
+  , (<.>)
+
     -- ** Lenses
   , wrpCurrentSlot
   , wrpTargetSlot
@@ -50,6 +53,7 @@ import           Control.Lens (to)
 import           Control.Lens.TH
 import           Data.Acid (AcidState)
 import qualified Data.Map.Strict as Map
+import           Formatting (build, sformat)
 
 import           Pos.Core (BlockCount, FlatSlotId)
 import           Pos.Crypto (ProtocolMagic)
@@ -207,6 +211,25 @@ stopAllRestorations pw = do
     Strict.modifyMVar_ (pw ^. walletRestorationTask . to _wrt) $ \mp -> do
         for_ mp cancelRestoration
         return Map.empty
+
+
+{-------------------------------------------------------------------------------
+  Helper Functions
+-------------------------------------------------------------------------------}
+
+newtype Tag = Tag Text
+
+instance IsString Tag where
+    fromString = Tag . toText
+
+mkLogger :: MonadIO m => PassiveWallet -> Tag -> Severity -> Text -> m ()
+mkLogger pw (Tag tag) sev msg = liftIO $
+    (pw ^. walletLogMessage) sev $ "[" <> tag <> "] " <> msg
+
+infixr 5 <.>
+(<.>) :: Buildable a => Text -> a -> Text
+base <.> a = mconcat [base, " ", sformat build a]
+
 
 {-------------------------------------------------------------------------------
   Active wallet
