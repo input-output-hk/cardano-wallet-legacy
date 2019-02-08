@@ -822,6 +822,18 @@ spec = do
             [ expectWalletUTxO [14, 42, 1337]
             ]
 
+    scenario "WALLETS_UTXO_05 - UTxO statistics reflect wallet's activity" $ do
+        void $ print "WALLETS_UTXO_05: 1"
+        fixture <- setup $ defaultSetup
+            & initialCoins .~ [13, 43, 66, 101, 1339]
+        void $ print "WALLETS_UTXO_05: 2"
+        response <- request $ Client.getUtxoStatistics
+            $- (fixture ^. wallet . walletId)
+        void $ print "WALLETS_UTXO_05: 3"
+        verify response
+            [ expectWalletUTxO [13, 43, 66, 101, 1339]
+            ]
+
 
     -- Below are scenarios that are somewhat 'symmetric' for both 'create' and 'restore' operations.
     forM_ [CreateWallet, RestoreWallet] $ \operation -> describe (show operation) $ do
