@@ -824,10 +824,17 @@ withNextFaucet actionWithFaucet = do
     let acquireFaucet = do
             let (key:rest) = ctx ^. faucets
             put (ctx & faucets .~ rest)
-            successfulRequest $ Client.importWallet $- WalletImport Nothing key
+            wal <- successfulRequest $ Client.importWallet $- WalletImport Nothing key
+            void $ print "acquireFaucet"
+            void $ print wal
+            pure wal
 
     let releaseFaucet faucet = do
-            successfulRequest (Client.deleteWallet $- walId faucet)
+            wal <- successfulRequest (Client.deleteWallet $- walId faucet)
+            void $ print "releaseFaucet"
+            void $ print wal
+            pure wal
+
 
     bracket acquireFaucet releaseFaucet actionWithFaucet
 
