@@ -15,7 +15,7 @@
 -- language extension here.
 {-# LANGUAGE NoPatternSynonyms          #-}
 
--- Needed for the `Buildable`, `SubscriptionStatus` and `NodeId` orphans.
+-- Needed for the `Buildable`, `SubscriptionStatus` and `NodeId` orphans and single deriveJSON instance.
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Cardano.Wallet.API.V1.Types (
@@ -475,14 +475,12 @@ instance ToSchema DerivationSchemeVersion where
                 , "Root key derivation from mnemonic keys also differs from root key derivation in random scheme"
                 ]
 
-instance ToJSON DerivationSchemeVersion where
-    toJSON (DerivationSchemeVersion RandomDerivationScheme)       = String "random"
-    toJSON (DerivationSchemeVersion SequentialDerivationScheme) = String "sequential"
+-- Drops the @DerivationScheme@ suffix.
+deriveJSON defaultOptions { A.constructorTagModifier = reverse . drop 16 . reverse . map C.toLower
+                          } ''DerivationScheme
 
-instance FromJSON DerivationSchemeVersion where
-    parseJSON (String "random")       = pure (DerivationSchemeVersion RandomDerivationScheme)
-    parseJSON (String "sequential") = pure (DerivationSchemeVersion SequentialDerivationScheme)
-    parseJSON x = typeMismatch "Not a valid DerivationSchemeVersion" x
+deriveJSON defaultOptions { A.unwrapUnaryRecords = True
+                          } ''DerivationSchemeVersion
 
 deriveSafeBuildable ''DerivationSchemeVersion
 instance BuildableSafeGen DerivationSchemeVersion where
