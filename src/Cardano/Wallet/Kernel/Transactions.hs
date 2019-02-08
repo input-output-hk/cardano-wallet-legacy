@@ -86,6 +86,7 @@ import           Pos.Crypto (EncryptedSecretKey, PassPhrase, ProtocolMagic,
                      redeemToPublic)
 import           UTxO.Util (shuffleNE)
 
+import           Control.Concurrent (threadDelay)
 
 {-------------------------------------------------------------------------------
   Generating payments and estimating fees
@@ -255,11 +256,23 @@ newUnsignedTransaction ActiveWallet{..} options accountId payees = runExceptT $ 
     availableUtxo <- withExceptT NewTransactionUnknownAccount $ exceptT $
                        currentAvailableUtxo snapshot accountId
 
-    let a1 = "####### newUnsignedTransaction (availableUtxo):" ++ (show availableUtxo)
-    let a2 = "####### newUnsignedTransaction (payees):" ++ (show payees)
+    theUtxo <- withExceptT NewTransactionUnknownAccount $ exceptT $
+                     currentUtxo snapshot accountId
+
+    let a1 = "### newUnsignedTransaction (theUtxo):" ++ (show theUtxo)
+    let a2 = "### newUnsignedTransaction (availableUtxo):" ++ (show availableUtxo)
+    let a3 = "### newUnsignedTransaction (payees):" ++ (show payees)
 
     void $ print a1
     void $ print a2
+    void $ print a3
+
+    liftIO $ threadDelay 1000000
+
+    availableUtxo1 <- withExceptT NewTransactionUnknownAccount $ exceptT $
+                       currentAvailableUtxo snapshot accountId
+    let a4 = "### newUnsignedTransaction (availableUtxo after delay):" ++ (show availableUtxo1)
+    void $ print a4
 
 
     withExceptT NewTransactionNotEnoughUtxoFragmentation $ exceptT $
