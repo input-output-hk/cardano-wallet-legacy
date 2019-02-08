@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase   #-}
+
 -- | React to BListener events
 module Cardano.Wallet.Kernel.BListener (
     -- * Respond to block chain events
@@ -25,15 +26,17 @@ import qualified Formatting.Buildable
 
 import           Pos.Chain.Block (HeaderHash)
 import           Pos.Chain.Genesis (Config (..))
-import           Pos.Chain.Txp (TxId)
+import           Pos.Chain.Txp (TxId, TxIn)
 import           Pos.Core.Chrono (OldestFirst (..))
+import           Pos.Crypto (EncryptedSecretKey)
 import           Pos.DB.Block (getBlund)
 import           Pos.Util.Log (Severity (..))
 
-import           Cardano.Wallet.Kernel.DB.AcidState (ApplyBlock (..),
+import           Cardano.Wallet.Kernel.DB.AcidState (ApplyBlock (..), DB,
                      ObservableRollbackUseInTestsOnly (..), SwitchToFork (..),
                      SwitchToForkInternalError (..))
 import           Cardano.Wallet.Kernel.DB.BlockContext
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import           Cardano.Wallet.Kernel.DB.Resolved (ResolvedBlock, rbContext,
@@ -61,24 +64,48 @@ import           Cardano.Wallet.WalletLayer.Kernel.Wallets
 
 type PrefilterResult = ((BlockContext, PrefilteredBlock), [TxMeta])
 
--- | Prefilter the block for each account. Returns 'Nothing' if the prefiltering
--- is irrelevant for this node, i.e. there are no user wallets stored, so we
--- can avoid doing work (i.e. writing into the acid-state DB log) by skipping
--- such block application.
+-- | Prefilter a list of resolved blocks for all accounts in all wallets.
+-- Since different types wallets have different prefiltering mechanisms, we need
+-- to do prefiltering seperately for each type of wallet and then combine the results.
+--
+-- Returns 'Nothing' if the prefiltering is irrelevant for this node, i.e.
+-- there are no user wallets stored, so we can avoid doing work
+-- (e.g. writing into the acid-state DB log) by skipping such block application).
 prefilterBlocks :: PassiveWallet
                 -> [ResolvedBlock]
-                -> IO (Maybe [PrefilterResult])
+                -> IO (Maybe (NonEmpty PrefilterResult))
+prefilterBlocks _ [] = return Nothing
 prefilterBlocks pw bs = do
-    res <- getWalletCredentials pw
-    isForeign <- fmap Pending.txIns . foreignPendingByAccount <$> getWalletSnapshot pw
-    case res of
-         [] -> return Nothing
-         xs -> fmap Just $ flip evalStateT xs $ forM bs $ \rb -> do
-            pb <- state (prefilterBlock isForeign rb)
-            metas <- state (resolvedToTxMetas rb) >>= \case
-                Left e  -> throwM e
-                Right x -> return x
-            return ((rb ^. rbContext, pb), metas)
+    db <- getWalletSnapshot pw
+    let foreigns = fmap Pending.txIns . foreignPendingByAccount $ db
+    hdRnds <- getHdRndWallets db
+
+    nonEmpty <$> prefilterBlocks_ bs foreigns hdRnds
+    where
+        -- Get the data required for prefiltering of HdRnd wallets
+        getHdRndWallets
+            :: DB
+            -> IO (Map HdRootId EncryptedSecretKey)
+        getHdRndWallets db = getWalletCredentials db
+                    (pw ^. walletKeystore)
+                    (pw ^. walletProtocolMagic)
+                    (pw ^. walletLogMessage)
+
+-- Prefilter blocks for any class of wallets for which prefiltering is
+-- defined (any type constrained by IsOurs)
+prefilterBlocks_
+    :: IsOurs s
+    => [ResolvedBlock]
+    -> Map HdAccountId (Set TxIn)
+    -> s
+    -> IO [PrefilterResult]
+prefilterBlocks_ bs fs ws = do
+    flip evalStateT ws $ forM bs $ \rb -> do
+        pb <- state (prefilterBlock fs rb)
+        metas <- state (resolvedToTxMetas rb) >>= \case
+           Left e  -> throwM e
+           Right x -> return x
+        return ((rb ^. rbContext, pb), metas)
 
 data BackfillFailed
     = SuccessorChanged BlockContext (Maybe BlockContext)
@@ -211,7 +238,7 @@ applyBlock pw@PassiveWallet{..} b = do
               -- The block is not relevant as there are no user wallets stored
               -- in the DB, so don't bother writing into the acid-state transaction log.
               Nothing -> return $ Right ()
-              Just [((ctxt, blocksByAccount), metas)] -> do
+              Just (((ctxt, blocksByAccount), metas) :| _) -> do
                   -- apply block to all Accounts in all Wallets
                   mConfirmed <- update' _wallets $ ApplyBlock k ctxt accts blocksByAccount
                   case mConfirmed of
@@ -220,9 +247,6 @@ applyBlock pw@PassiveWallet{..} b = do
                           modifyMVar_ _walletSubmission (return . Submission.remPending confirmed)
                           mapM_ (putTxMeta _walletMeta) metas
                           return $ Right ()
-              Just _ -> error $ "applyOneBlock: the impossible happened, "
-                             <> "prefilterBlocks returned "
-                             <> "a different number of elements than the input ones."
 
       -- Determine if a failure in 'ApplyBlock' was due to the account being ahead, behind,
       -- or incomparable with the provided block.
@@ -315,7 +339,7 @@ switchToFork pw@PassiveWallet{..} oldest bs = do
          -- in this node.
          Nothing -> return ()
          Just xs -> do
-             let (blockssByAccount, metas) = unzip xs
+             let (blockssByAccount, metas) = unzip (NE.toList xs)
 
              changes <- trySwitchingToFork k blockssByAccount
 

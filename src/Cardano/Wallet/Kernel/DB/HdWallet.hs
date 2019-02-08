@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE RankNTypes                 #-}
+
 -- TODO: Not sure about the best way to avoid the orphan instances here
 {-# OPTIONS_GHC -fno-warn-orphans -Wno-redundant-constraints #-}
 
@@ -533,6 +534,7 @@ hdAccountRestorationState a = case a ^. hdAccountState of
 -------------------------------------------------------------------------------}
 
 class IsOurs s where
+    -- For the given state, check whether an address is "ours"
     isOurs :: Core.Address -> s -> (Maybe HdAddress, s)
 
 {-------------------------------------------------------------------------------
@@ -542,8 +544,8 @@ class IsOurs s where
 -- | NOTE: We could modify the given state here to actually store decrypted
 -- addresses in a `Map` to trade a decryption against a map lookup for already
 -- decrypted addresses.
-instance IsOurs [(HdRootId, Core.EncryptedSecretKey)] where
-    isOurs addr s = (,s) $ foldl' (<|>) Nothing $ flip map s $ \(rootId, esk) -> do
+instance IsOurs (Map HdRootId Core.EncryptedSecretKey) where
+    isOurs addr s = (,s) $ foldl' (<|>) Nothing $ flip Map.mapWithKey s $ \rootId esk -> do
         (accountIx, addressIx) <- decryptHdLvl2DerivationPath (eskToHdPassphrase esk) addr
         let accId = HdAccountId rootId accountIx
         let addrId = HdAddressId accId addressIx

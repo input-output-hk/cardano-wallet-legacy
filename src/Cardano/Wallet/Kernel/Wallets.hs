@@ -353,7 +353,7 @@ defaultHdAddressWith :: EncryptedSecretKey
                      -> Address
                      -> Maybe HdAddress
 defaultHdAddressWith esk rootId addr =
-    fst $ HD.isOurs addr [(rootId, esk)]
+    fst $ HD.isOurs addr (Map.singleton rootId esk)
 
 defaultHdAccountId :: HD.HdRootId -> HdAccountId
 defaultHdAccountId rootId = HdAccountId rootId (HdAccountIx firstHardened)
