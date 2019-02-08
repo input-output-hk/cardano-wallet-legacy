@@ -6,7 +6,7 @@ import           Universum
 
 import           Cardano.Wallet.API.V1.Types (Account (accAddresses),
                      WalletAddress (..))
-import           Cardano.Wallet.Client.Http (ClientError, BatchImportResult)
+import           Cardano.Wallet.Client.Http (BatchImportResult, ClientError)
 import qualified Cardano.Wallet.Client.Http as Client
 import           Test.Integration.Framework.DSL
 
