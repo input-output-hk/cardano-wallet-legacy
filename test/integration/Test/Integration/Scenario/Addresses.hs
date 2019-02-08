@@ -6,6 +6,7 @@ import           Universum
 
 import           Cardano.Wallet.API.V1.Types (Account (accAddresses),
                      WalletAddress (..))
+import           Cardano.Wallet.Client.Http (ClientError, BatchImportResult)
 import qualified Cardano.Wallet.Client.Http as Client
 import           Test.Integration.Framework.DSL
 
@@ -92,7 +93,6 @@ spec = do
         response <- request $ Client.importAddresses
             $- fixture ^. wallet . walletId
             $- map (view address) addrs
-
         verify response
             [ expectFieldEqual totalSuccess 0
             , expectFieldEqual failures (map (view address) addrs)
@@ -101,19 +101,37 @@ spec = do
     scenario "ADDRESSES_IMPORT_04 - Can import addresses from different account into default account of the wallet" $ do
         fixture <- setup $ defaultSetup
 
-
         accountResp <- successfulRequest $ Client.postAccount
             $- (fixture ^. wallet . walletId)
             $- NewAccount
                 noSpendingPassword
                 "New Account"
-        print accountResp
+
         addrs <- sequence $ [mkAddress (fixture ^. backupPhrase) (Client.accIndex accountResp) 1]
 
         response <- request $ Client.importAddresses
             $- fixture ^. wallet . walletId
-            $- defaultAccountId
             $- addrs
         verify response
             [ expectFieldEqual totalSuccess 1
+            ]
+
+    scenario "ADDRESSES_IMPORT_05 - Returns error when wallet id is invalid" $ do
+        response <- unsafeRequest ("POST", "api/v1/wallets/aaa/addresses") $ Just $ [json|[
+            "ff45d33f04aeccae04d840c3f2dc60815bfd131a7fbd87f6823f0d8e"
+        ]|]
+        verify (response :: Either ClientError (BatchImportResult Text))
+            [ expectJSONError "Not a valid Cardano Address"
+            ]
+
+    scenario "ADDRESSES_IMPORT_06 - Returns error address is invalid" $ do
+        fixture <- setup $ defaultSetup
+
+        let endpoint = "api/v1/wallets/" <> fromWalletId (fixture ^. wallet . walletId) <> ("/addresses" :: Text)
+        response <- unsafeRequest ("POST", endpoint) $ Just $ [json|[
+          "dasd",
+          "1"
+          ]|]
+        verify (response :: Either ClientError (BatchImportResult Text))
+            [ expectJSONError "Not a valid Cardano Address"
             ]

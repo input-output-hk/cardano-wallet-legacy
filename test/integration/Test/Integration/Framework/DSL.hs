@@ -87,6 +87,7 @@ module Test.Integration.Framework.DSL
     , backupPhrase
     , externallyOwnedAccounts
     , failures
+    , fromWalletId
     , initialCoins
     , mnemonicWords
     , rawAddressPoolGap
@@ -682,6 +683,9 @@ expectWalletUTxO coins = \case
 --
 -- INTERNALS
 --
+
+fromWalletId :: Client.WalletId -> Text
+fromWalletId (Client.WalletId a) = a
 
 wantedSuccessButError
     :: (MonadFail m, Show e)
