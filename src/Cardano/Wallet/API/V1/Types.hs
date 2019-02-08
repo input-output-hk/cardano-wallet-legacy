@@ -919,7 +919,7 @@ data Wallet = Wallet {
     , walCreatedAt                  :: !WalletTimestamp
     , walAssuranceLevel             :: !AssuranceLevel
     , walSyncState                  :: !SyncState
-    , walDerivationSchemeVersion    :: !DerivationSchemeVersion
+    , walDerivationScheme           :: !DerivationSchemeVersion
     } deriving (Eq, Ord, Show, Generic)
 
 deriveJSON Aeson.defaultOptions ''Wallet

@@ -153,7 +153,7 @@ createWallet wallet newWalletRequest = liftIO $ do
         , walCreatedAt                  = V1.WalletTimestamp createdAt
         , walAssuranceLevel             = v1AssuranceLevel
         , walSyncState                  = V1.Synced
-        , walDerivationSchemeVersion    = V1.DerivationSchemeVersion scheme
+        , walDerivationScheme           = V1.DerivationSchemeVersion scheme
         }
       where
         (hasSpendingPassword, lastUpdate) =
