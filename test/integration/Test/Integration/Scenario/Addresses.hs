@@ -121,7 +121,7 @@ spec = do
             "DdzFFzCqrhssoca9zmsbhqHxJRjrDyzR1wh4Rs9ffbFTiYkcnDsYU416MYe2A29BFigVPBQgnkQH64et6pAqSjAqPPFbHcG1zR7G6kGr"
         ]|]
         verify (response :: Either ClientError (BatchImportResult Text))
-            [ expectWalletError (UnknownError "ImportAddressError")
+            [ expectWalletError (WalletNotFound)
             ]
 
     scenario "ADDRESSES_IMPORT_05 - Returns error when wallet id is valid but missing" $ do
@@ -135,7 +135,7 @@ spec = do
             $- fixture ^. wallet . walletId
             $- addrs
         verify response
-            [ expectWalletError (UnknownError "ImportAddressError")
+            [ expectWalletError (WalletNotFound)
             ]
 
     scenario "ADDRESSES_IMPORT_06 - Returns error when address is invalid" $ do
