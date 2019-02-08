@@ -148,6 +148,7 @@ import qualified Data.ByteArray as ByteArray
 import qualified Data.ByteString as BS
 import qualified Data.Char as C
 import           Data.Default (Default (def))
+import qualified Data.List.NonEmpty as NE
 import           Data.Semigroup (Semigroup)
 import           Data.Swagger hiding (Example, example)
 import           Data.Text (Text, dropEnd, toLower)
@@ -1181,13 +1182,13 @@ instance BuildableSafeGen AccountPublicKeyWithIx where
         accpubkeywithixPublicKey
         accpubkeywithixIndex
 
-instance Buildable [AccountPublicKeyWithIx] where
-    build = bprint listJson
+instance Buildable (NonEmpty AccountPublicKeyWithIx) where
+    build = bprint listJson . NE.toList
 
 -- | A type modelling the request for a new 'EosWallet',
 -- on the mobile client or hardware wallet.
 data NewEosWallet = NewEosWallet
-    { neweoswalAccounts       :: ![AccountPublicKeyWithIx]
+    { neweoswalAccounts       :: !(NonEmpty AccountPublicKeyWithIx)
     , neweoswalAddressPoolGap :: !(Maybe AddressPoolGap)
     , neweoswalAssuranceLevel :: !AssuranceLevel
     , neweoswalName           :: !WalletName

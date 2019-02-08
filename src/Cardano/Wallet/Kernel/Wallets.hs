@@ -18,6 +18,7 @@ module Cardano.Wallet.Kernel.Wallets (
 import qualified Prelude
 import           Universum
 
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import           Formatting (bprint, build, formatToString, (%))
 import qualified Formatting as F
@@ -228,7 +229,7 @@ createHdWallet pw mnemonic spendingPassword assuranceLevel walletName = do
 -- for each account at will and discovered using the address pool discovery algorithm
 -- described in BIP-44. Public keys are managed and provided from an external sources.
 createEosHdWallet :: PassiveWallet
-                  -> [(PublicKey, HdAccountIx)]
+                  -> NonEmpty (PublicKey, HdAccountIx)
                   -- ^ External wallets' accounts
                   -> AddressPoolGap
                   -- ^ Address pool gap for this wallet.
@@ -242,7 +243,7 @@ createEosHdWallet :: PassiveWallet
                   -> IO (Either CreateWalletError HdRoot)
 createEosHdWallet pw accounts gap assuranceLevel walletName = do
     root <- initHdRoot' <$> HD.genHdRootId <*> getCurrentTimestamp
-    let bases = Map.unionsWith (<>) (toAccountBase (root ^. hdRootId) <$> accounts)
+    let bases = Map.unionsWith (<>) (NE.toList (toAccountBase (root ^. hdRootId) <$> accounts))
     res <- update' (pw ^. wallets) $ CreateHdWallet root bases
     return $ case res of
         Left e@(HD.CreateHdRootExists _) ->
