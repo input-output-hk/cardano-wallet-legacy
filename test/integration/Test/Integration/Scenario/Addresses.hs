@@ -118,13 +118,27 @@ spec = do
 
     scenario "ADDRESSES_IMPORT_05 - Returns error when wallet id is invalid" $ do
         response <- unsafeRequest ("POST", "api/v1/wallets/aaa/addresses") $ Just $ [json|[
-            "ff45d33f04aeccae04d840c3f2dc60815bfd131a7fbd87f6823f0d8e"
+            "DdzFFzCqrhssoca9zmsbhqHxJRjrDyzR1wh4Rs9ffbFTiYkcnDsYU416MYe2A29BFigVPBQgnkQH64et6pAqSjAqPPFbHcG1zR7G6kGr"
         ]|]
         verify (response :: Either ClientError (BatchImportResult Text))
-            [ expectJSONError "Not a valid Cardano Address"
+            [ expectWalletError (UnknownError "ImportAddressError")
             ]
 
-    scenario "ADDRESSES_IMPORT_06 - Returns error address is invalid" $ do
+    scenario "ADDRESSES_IMPORT_05 - Returns error when wallet id is valid but missing" $ do
+        fixture <- setup $ defaultSetup
+        successfulRequest $ Client.deleteWallet
+            $- (fixture ^. wallet . walletId)
+
+        addrs <- sequence $ [mkAddress (fixture ^. backupPhrase) defaultAccountId 1]
+
+        response <- request $ Client.importAddresses
+            $- fixture ^. wallet . walletId
+            $- addrs
+        verify response
+            [ expectWalletError (UnknownError "ImportAddressError")
+            ]
+
+    scenario "ADDRESSES_IMPORT_06 - Returns error when address is invalid" $ do
         fixture <- setup $ defaultSetup
 
         let endpoint = "api/v1/wallets/" <> fromWalletId (fixture ^. wallet . walletId) <> ("/addresses" :: Text)
@@ -134,4 +148,13 @@ spec = do
           ]|]
         verify (response :: Either ClientError (BatchImportResult Text))
             [ expectJSONError "Not a valid Cardano Address"
+            ]
+
+    scenario "ADDRESSES_IMPORT_06 - Returns error when body is invalid" $ do
+        fixture <- setup $ defaultSetup
+
+        let endpoint = "api/v1/wallets/" <> fromWalletId (fixture ^. wallet . walletId) <> ("/addresses" :: Text)
+        response <- unsafeRequest ("POST", endpoint) $ Nothing
+        verify (response :: Either ClientError (BatchImportResult Text))
+            [ expectJSONError "Error in $: not enough input"
             ]
