@@ -3,7 +3,7 @@ module Cardano.Wallet.Kernel.Read (
     -- * Read-only access to the DB
     DB -- opaque
     -- ** Helper
-  , getWalletCredentials
+  , getFOWallets
     -- ** The only effectful getter you will ever need
   , getWalletSnapshot
     -- ** Pure getters acting on a DB snapshot
@@ -60,3 +60,14 @@ getWalletCredentials snapshot ks pm logger = do
 
     errMissing :: [HdRootId] -> Text
     errMissing = sformat ("Root key missing for " % listJson)
+
+-- | Prefiltering Context for HdRnd wallets
+getFOWallets
+    :: PassiveWallet
+    -> DB
+    -> IO (Map HdRootId EncryptedSecretKey)
+getFOWallets pw db
+    = getWalletCredentials db
+        (pw ^. walletKeystore)
+        (pw ^. walletProtocolMagic)
+        (pw ^. walletLogMessage)
