@@ -327,6 +327,10 @@ newTransactionError e = case e of
     (Kernel.NewTransactionNotEnoughUtxoFragmentation (Kernel.NumberOfMissingUtxos missingUtxo)) ->
         V1.UtxoNotEnoughFragmented (V1.ErrUtxoNotEnoughFragmented missingUtxo V1.msgUtxoNotEnoughFragmented)
 
+    (Kernel.NewTransactionZeroAmountCoin (Kernel.NumberOfZeroAmountOutputs zeroOutputs)) ->
+        V1.ZeroAmountCoin (V1.ErrZeroAmountCoin zeroOutputs V1.msgZeroAmountCoin)
+
+
 redeemAdaError :: RedeemAdaError -> V1.WalletError
 redeemAdaError e = case e of
     (RedeemAdaError e') -> case e' of

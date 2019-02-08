@@ -2,6 +2,7 @@
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE DuplicateRecordFields      #-}
 {-# LANGUAGE ExplicitNamespaces         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures             #-}
@@ -129,6 +130,8 @@ module Cardano.Wallet.API.V1.Types (
   , ErrNotEnoughMoney(..)
   , ErrUtxoNotEnoughFragmented(..)
   , msgUtxoNotEnoughFragmented
+  , ErrZeroAmountCoin(..)
+  , msgZeroAmountCoin
   , toServantError
   , toHttpErrorStatus
   , module Cardano.Wallet.Types.UtxoStatistics
@@ -2437,6 +2440,22 @@ instance Buildable ErrUtxoNotEnoughFragmented where
         bprint ("Missing "%build%" utxo(s) to accommodate all outputs of the transaction") missingUtxos
 
 
+data ErrZeroAmountCoin = ErrZeroAmountCoin {
+      theZeroOutputs :: !Int
+    , theHelp        :: !Text
+    } deriving (Eq, Generic, Show)
+
+
+msgZeroAmountCoin :: Text
+msgZeroAmountCoin = "Each payee must receive positive amount in the transaction - zero amount is not allowed"
+
+deriveJSON Aeson.defaultOptions ''ErrZeroAmountCoin
+
+instance Buildable ErrZeroAmountCoin where
+    build (ErrZeroAmountCoin zeroOutputs _ ) =
+        bprint ("There are "%build%" zero output(s) in the transaction") zeroOutputs
+
+
 
 -- | Type representing any error which might be thrown by wallet.
 --
@@ -2505,6 +2524,8 @@ data WalletError =
     | UtxoNotEnoughFragmented !ErrUtxoNotEnoughFragmented
     -- ^ available Utxo is not enough fragmented, ie., there is more outputs of transaction than
     -- utxos
+    | ZeroAmountCoin !ErrZeroAmountCoin
+    -- ^ there is at least one zero amount output in the transaction
     | EosWalletDoesNotHaveAccounts Text
     -- ^ EOS-wallet doesn't have any accounts.
     | EosWalletHasWrongAccounts Text
@@ -2555,6 +2576,9 @@ instance Arbitrary WalletError where
         , RequestThrottled <$> arbitrary
         , UtxoNotEnoughFragmented <$> Gen.oneof
           [ ErrUtxoNotEnoughFragmented <$> Gen.choose (1, 10) <*> arbitrary
+          ]
+        , ZeroAmountCoin <$> Gen.oneof
+          [ ErrZeroAmountCoin <$> Gen.choose (1, 10) <*> arbitrary
           ]
         ]
       where
@@ -2614,6 +2638,8 @@ instance Buildable WalletError where
             bprint "You've made too many requests too soon, and this one was throttled."
         UtxoNotEnoughFragmented x ->
             bprint build x
+        ZeroAmountCoin x ->
+            bprint build x
         EosWalletDoesNotHaveAccounts _ ->
             bprint "EOS-wallet doesn't have any accounts."
         EosWalletHasWrongAccounts _ ->
@@ -2664,6 +2690,8 @@ instance ToServantError WalletError where
             err400 { errHTTPCode = 429 }
         UtxoNotEnoughFragmented{} ->
             err403
+        ZeroAmountCoin{} ->
+            err400
         EosWalletDoesNotHaveAccounts{} ->
             err500
         EosWalletHasWrongAccounts{} ->
@@ -2713,6 +2741,8 @@ instance HasDiagnostic WalletError where
         RequestThrottled{} ->
             "microsecondsUntilRetry"
         UtxoNotEnoughFragmented{} ->
+            "details"
+        ZeroAmountCoin{} ->
             "details"
         EosWalletDoesNotHaveAccounts{} ->
             noDiagnosticKey
