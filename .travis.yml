@@ -188,6 +188,14 @@ jobs:
     - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
     - travis_wait 42 stack --no-terminal test cardano-wallet:test:integration --fast
 
+  # USUAL TESTS (nightly -- only build)
+  - stage: tests
+    env: ACTION=coverage
+    if: type != cron
+    script:
+    - tar xzf $HOME/.local/stack-work.tar.gz # Cached extra-dependencies
+    - travis_wait 42 stack --no-terminal test cardano-wallet:test:nightly --fast --no-run-tests
+
   # FULL COVERAGE
   - stage: tests
     if: (type = cron) OR (commit_message =~ /ci@force coveralls/)
