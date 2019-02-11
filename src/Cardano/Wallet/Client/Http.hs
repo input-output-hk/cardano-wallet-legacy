@@ -118,6 +118,13 @@ mkHttpClient baseUrl manager = WalletClient
         = run . postEosWalletR
     , getEosWallet
         = run. getEosWalletR
+    , updateEosWallet
+        = \x -> run . updateEosWalletR x
+    , deleteEosWallet
+        = unNoContent . run . deleteEosWalletR
+    , getEosWalletIndexFilterSorts
+        = \mp mpp filters sorts -> run $
+            getEosWalletIndexFilterSortsR mp mpp filters sorts
     }
   where
 
@@ -144,9 +151,9 @@ mkHttpClient baseUrl manager = WalletClient
 
     postEosWalletR
         :<|> getEosWalletR
-        :<|> _
-        :<|> _
-        :<|> _
+        :<|> updateEosWalletR
+        :<|> deleteEosWalletR
+        :<|> getEosWalletIndexFilterSortsR
         = eosWalletsAPI
 
     postWalletR

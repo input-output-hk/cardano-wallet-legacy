@@ -165,6 +165,19 @@ data WalletClient m
     , getEosWallet
         :: WalletId
         -> Resp m EosWallet
+    , updateEosWallet
+        :: WalletId
+        -> UpdateEosWallet
+        -> Resp m EosWallet
+    , deleteEosWallet
+        :: WalletId
+        -> m (Either ClientError ())
+    , getEosWalletIndexFilterSorts
+         :: Maybe Page
+         -> Maybe PerPage
+         -> FilterOperations '[WalletId, Core.Coin] EosWallet
+         -> SortOperations EosWallet
+         -> Resp m [EosWallet]
     } deriving Generic
 
 
@@ -305,6 +318,12 @@ natMapClient phi f wc = WalletClient
         f . phi . postEosWallet wc
     , getEosWallet =
         f . phi . getEosWallet wc
+    , updateEosWallet =
+        \x -> f . phi . updateEosWallet wc x
+    , deleteEosWallet =
+        f . phi . deleteEosWallet wc
+    , getEosWalletIndexFilterSorts =
+        \x y p -> f . phi . getEosWalletIndexFilterSorts wc x y p
     }
 
 -- | Run the given natural transformation over the 'WalletClient'.
