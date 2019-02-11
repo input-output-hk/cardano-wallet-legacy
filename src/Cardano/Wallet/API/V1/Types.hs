@@ -155,10 +155,9 @@ import qualified Data.List.NonEmpty as NE
 import           Data.Semigroup (Semigroup)
 import           Data.Swagger hiding (Example, example)
 import           Data.Text (Text, dropEnd, toLower)
-import           Formatting (bprint, build, fconst, int, sformat, (%))
+import           Formatting (bprint, build, int, sformat, (%))
 import qualified Formatting.Buildable
 import           Generics.SOP.TH (deriveGeneric)
-import           Serokell.Util (listJson)
 import qualified Serokell.Util.Base16 as Base16
 import           Servant
 import           Test.QuickCheck
@@ -179,7 +178,8 @@ import           Cardano.Wallet.API.V1.Generic (jsendErrorGenericParseJSON,
 import           Cardano.Wallet.API.V1.Swagger.Example (Example, example)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Types.UtxoStatistics
-import           Cardano.Wallet.Util (mkJsonKey, showApiUtcTime)
+import           Cardano.Wallet.Util (buildIndent, buildList, mkJsonKey,
+                     showApiUtcTime)
 
 import           Cardano.Mnemonic (Mnemonic)
 import qualified Pos.Binary.Class as Bi
@@ -192,9 +192,8 @@ import qualified Pos.Crypto.Signing as Core
 import           Pos.Infra.Communication.Types.Protocol ()
 import           Pos.Infra.Diffusion.Subscription.Status
                      (SubscriptionStatus (..))
-import           Pos.Infra.Util.LogSafe (BuildableSafeGen (..), buildSafe,
-                     buildSafeList, buildSafeMaybe, deriveSafeBuildable,
-                     plainOrSecureF)
+import           Pos.Infra.Util.LogSafe (BuildableSafeGen (..),
+                     deriveSafeBuildable)
 import           Test.Pos.Core.Arbitrary ()
 
 -- | Declare generic schema, while documenting properties
@@ -255,11 +254,6 @@ mkSpendingPassword text =
                      ("Expected spending password to be of either length 0 or "%int%", not "%int)
                      Core.passphraseLength bl
 
-deriveSafeBuildable ''WalletPassPhrase
-instance BuildableSafeGen WalletPassPhrase where
-    buildSafeGen sl (WalletPassPhrase pp) =
-        bprint (plainOrSecureF sl build (fconst "<wallet passphrase>")) pp
-
 instance ToJSON WalletPassPhrase where
     toJSON (WalletPassPhrase pp) = String . Base16.encode . ByteArray.convert $ pp
 
@@ -283,8 +277,7 @@ newtype WalletCoin = WalletCoin { unWalletCoin :: Core.Coin }
 
 deriveSafeBuildable ''WalletCoin
 instance BuildableSafeGen WalletCoin where
-    buildSafeGen sl (WalletCoin c) =
-        bprint (plainOrSecureF sl build (fconst "<wallet coin>")) c
+    buildSafeGen _ (WalletCoin c) = bprint build c
 
 instance ToJSON WalletCoin where
     toJSON (WalletCoin c) = toJSON . Core.unsafeGetCoin $ c
@@ -309,11 +302,11 @@ newtype WalAddress = WalAddress { unWalAddress :: Core.Address }
 
 deriveSafeBuildable ''WalAddress
 instance BuildableSafeGen WalAddress where
-    buildSafeGen sl (WalAddress addr) =
-        bprint (plainOrSecureF sl build (fconst "<wallet address>")) addr
+    buildSafeGen _ (WalAddress addr) =
+        bprint ("address: " % build) addr
 
 instance Buildable [WalAddress] where
-    build = bprint listJson
+    build = bprint (buildList build)
 
 instance ToJSON WalAddress where
     toJSON (WalAddress c) = String $ sformat Core.addressF c
@@ -347,8 +340,8 @@ newtype WalletTimestamp = WalletTimestamp Core.Timestamp
 
 deriveSafeBuildable ''WalletTimestamp
 instance BuildableSafeGen WalletTimestamp where
-    buildSafeGen sl (WalletTimestamp ts) =
-        bprint (plainOrSecureF sl build (fconst "<wallet timestamp>")) ts
+    buildSafeGen _ (WalletTimestamp ts) =
+        bprint ("timestamp: " % build) ts
 
 -- | Represents according to 'apiTimeFormat' format.
 instance ToJSON WalletTimestamp where
@@ -420,8 +413,8 @@ instance ToSchema AssuranceLevel where
 
 deriveSafeBuildable ''AssuranceLevel
 instance BuildableSafeGen AssuranceLevel where
-    buildSafeGen _ NormalAssurance = "normal"
-    buildSafeGen _ StrictAssurance = "strict"
+    buildSafeGen _ NormalAssurance = "assurance level: normal"
+    buildSafeGen _ StrictAssurance = "assurance level: strict"
 
 -- | A Wallet ID.
 newtype WalletId = WalletId Text deriving (Show, Eq, Ord, Generic)
@@ -441,8 +434,8 @@ instance Arbitrary WalletId where
 
 deriveSafeBuildable ''WalletId
 instance BuildableSafeGen WalletId where
-    buildSafeGen sl (WalletId wid) =
-        bprint (plainOrSecureF sl build (fconst "<wallet id>")) wid
+    buildSafeGen _ (WalletId wid) =
+        bprint ("wallet id: " % build) wid
 
 instance FromHttpApiData WalletId where
     parseQueryParam = Right . WalletId
@@ -474,8 +467,8 @@ instance ToSchema WalletOperation where
 
 deriveSafeBuildable ''WalletOperation
 instance BuildableSafeGen WalletOperation where
-    buildSafeGen _ CreateWallet  = "create"
-    buildSafeGen _ RestoreWallet = "restore"
+    buildSafeGen _ CreateWallet  = "operation: create"
+    buildSafeGen _ RestoreWallet = "operation: restore"
 
 
 newtype BackupPhrase = BackupPhrase
@@ -483,10 +476,6 @@ newtype BackupPhrase = BackupPhrase
     }
     deriving stock (Eq, Show)
     deriving newtype (ToJSON, FromJSON, Arbitrary)
-
-deriveSafeBuildable ''BackupPhrase
-instance BuildableSafeGen BackupPhrase where
-    buildSafeGen _ _  = "<backup phrase>"
 
 instance ToSchema BackupPhrase where
     declareNamedSchema _ =
@@ -522,21 +511,17 @@ instance ToSchema NewWallet where
       & ("operation"        --^ "Create a new wallet or Restore an existing one.")
     )
 
-
 deriveSafeBuildable ''NewWallet
 instance BuildableSafeGen NewWallet where
-    buildSafeGen sl NewWallet{..} = bprint ("{"
-        %" backupPhrase="%buildSafe sl
-        %" spendingPassword="%(buildSafeMaybe mempty sl)
-        %" assuranceLevel="%buildSafe sl
-        %" name="%buildSafe sl
-        %" operation"%buildSafe sl
-        %" }")
-        newwalBackupPhrase
-        newwalSpendingPassword
-        newwalAssuranceLevel
-        newwalName
+    buildSafeGen _ NewWallet{..} = bprint
+        ( "New wallet"
+        % "\n  " % build
+        % "\n  name: " % build
+        % "\n  " % build
+        )
         newwalOperation
+        newwalName
+        newwalAssuranceLevel
 
 -- | Type for representation of serialized transaction in Base16-format.
 -- We use it for external wallets (to send/receive raw transaction during
@@ -558,9 +543,8 @@ instance ToSchema TransactionAsBase16 where
 
 deriveSafeBuildable ''TransactionAsBase16
 instance BuildableSafeGen TransactionAsBase16 where
-    buildSafeGen sl TransactionAsBase16Unsafe{..} = bprint ("{"
-        %" transactionAsBase16="%buildSafe sl
-        %" }")
+    buildSafeGen _ TransactionAsBase16Unsafe{..} = bprint
+        ("tx in hex-form: " % build)
         eoswalTransactionAsBase16
 
 -- | Type for representation of transaction signature in Base16-format.
@@ -583,9 +567,8 @@ instance ToSchema TransactionSignatureAsBase16 where
 
 deriveSafeBuildable ''TransactionSignatureAsBase16
 instance BuildableSafeGen TransactionSignatureAsBase16 where
-    buildSafeGen sl TransactionSignatureAsBase16Unsafe{..} = bprint ("{"
-        %" transactionSignatureAsBase16="%buildSafe sl
-        %" }")
+    buildSafeGen _ TransactionSignatureAsBase16Unsafe{..} = bprint
+        ("tx signature in hex-form: " % build)
         rawTransactionSignatureAsBase16
 
 -- | Makes tx signature as Base16-text.
@@ -594,7 +577,7 @@ mkTransactionSignatureAsBase16 (Core.Signature txSig) =
     TransactionSignatureAsBase16Unsafe . Base16.encode . CC.unXSignature $ txSig
 
 instance Buildable [PublicKey] where
-    build = bprint listJson
+    build = bprint (buildList build)
 
 
 data UpdateEosWallet = UpdateEosWallet
@@ -621,15 +604,15 @@ instance Arbitrary UpdateEosWallet where
 
 deriveSafeBuildable ''UpdateEosWallet
 instance BuildableSafeGen UpdateEosWallet where
-    buildSafeGen sl UpdateEosWallet{..} = bprint ("{"
-        %" assuranceLevel="%buildSafe sl
-        %" name="%buildSafe sl
-        %" addressPoolGap="%build
-        %" }")
-        ueowalAssuranceLevel
+    buildSafeGen _ UpdateEosWallet{..} = bprint
+        ( "Update for externally-owned sequential wallet"
+        % "\n  name: " % build
+        % "\n  " % build
+        % "\n  " % build
+        )
         ueowalName
+        ueowalAssuranceLevel
         ueowalAddressPoolGap
-
 
 -- | A type modelling the update of an existing wallet.
 data WalletUpdate = WalletUpdate {
@@ -652,10 +635,11 @@ instance Arbitrary WalletUpdate where
 
 deriveSafeBuildable ''WalletUpdate
 instance BuildableSafeGen WalletUpdate where
-    buildSafeGen sl WalletUpdate{..} = bprint ("{"
-        %" assuranceLevel="%buildSafe sl
-        %" name="%buildSafe sl
-        %" }")
+    buildSafeGen _ WalletUpdate{..} = bprint
+        ( "Update for wallet"
+        % "\n  " % build
+        % "\n  name: " % build
+        )
         uwalAssuranceLevel
         uwalName
 
@@ -674,10 +658,8 @@ instance Arbitrary EstimatedCompletionTime where
 
 deriveSafeBuildable ''EstimatedCompletionTime
 instance BuildableSafeGen EstimatedCompletionTime where
-    buildSafeGen _ (EstimatedCompletionTime (MeasuredIn w)) = bprint ("{"
-        %" quantity="%build
-        %" unit=milliseconds"
-        %" }")
+    buildSafeGen _ (EstimatedCompletionTime (MeasuredIn w)) = bprint
+        ("estimated completion time: " % build % " milliseconds")
         w
 
 instance ToJSON EstimatedCompletionTime where
@@ -722,10 +704,8 @@ instance Arbitrary SyncThroughput where
 
 deriveSafeBuildable ''SyncThroughput
 instance BuildableSafeGen SyncThroughput where
-    buildSafeGen _ (SyncThroughput (MeasuredIn (Core.BlockCount blocks))) = bprint ("{"
-        %" quantity="%build
-        %" unit=blocksPerSecond"
-        %" }")
+    buildSafeGen _ (SyncThroughput (MeasuredIn (Core.BlockCount blocks))) = bprint
+        ("sync throughput: " % build % " blocks per second")
         blocks
 
 instance ToJSON SyncThroughput where
@@ -774,11 +754,12 @@ instance ToSchema SyncProgress where
 deriveSafeBuildable ''SyncProgress
 -- Nothing secret to redact for a SyncProgress.
 instance BuildableSafeGen SyncProgress where
-    buildSafeGen sl SyncProgress {..} = bprint ("{"
-        %" estimatedCompletionTime="%buildSafe sl
-        %" throughput="%buildSafe sl
-        %" percentage="%buildSafe sl
-        %" }")
+    buildSafeGen _ SyncProgress {..} = bprint
+        ( "Sync progress"
+        % "\n  " % build
+        % "\n  " % build
+        % "\n  percentage: " % build
+        )
         spEstimatedCompletionTime
         spThroughput
         spPercentage
@@ -891,17 +872,18 @@ instance Arbitrary Wallet where
 
 deriveSafeBuildable ''Wallet
 instance BuildableSafeGen Wallet where
-  buildSafeGen sl Wallet{..} = bprint ("{"
-    %" id="%buildSafe sl
-    %" name="%buildSafe sl
-    %" balance="%buildSafe sl
-    %" }")
+  buildSafeGen _ Wallet{..} = bprint
+    ( "Wallet"
+    % "\n  " % build
+    % "\n  name: " % build
+    % "\n  balance: " % build
+    )
     walId
     walName
     walBalance
 
 instance Buildable [Wallet] where
-    build = bprint listJson
+    build = bprint (buildList build)
 
 instance ToSchema PublicKey where
     declareNamedSchema _ =
@@ -941,19 +923,20 @@ instance Arbitrary EosWallet where
 
 deriveSafeBuildable ''EosWallet
 instance BuildableSafeGen EosWallet where
-  buildSafeGen sl EosWallet{..} = bprint ("{"
-    %" id="%buildSafe sl
-    %" name="%buildSafe sl
-    %" addressPoolGap="%build
-    %" balance="%buildSafe sl
-    %" }")
+  buildSafeGen _ EosWallet{..} = bprint
+    ( "Externally-owned sequential wallet"
+    % "\n  " % build
+    % "\n  name: " % build
+    % "\n  balance: " % build
+    % "\n  " % build
+    )
     eoswalId
     eoswalName
-    eoswalAddressPoolGap
     eoswalBalance
+    eoswalAddressPoolGap
 
 instance Buildable [EosWallet] where
-    build = bprint listJson
+    build = bprint (buildList build)
 
 --------------------------------------------------------------------------------
 -- Addresses
@@ -974,7 +957,7 @@ instance Arbitrary AddressValidity where
 deriveSafeBuildable ''AddressValidity
 instance BuildableSafeGen AddressValidity where
     buildSafeGen _ AddressValidity{..} =
-        bprint ("{ valid="%build%" }") isValid
+        bprint ("address is valid: " % build) isValid
 
 -- | An address is either recognised as "ours" or not. An address that is not
 --   recognised may still be ours e.g. an address generated by another wallet instance
@@ -1017,9 +1000,18 @@ instance Hashable WAddressMeta
 instance NFData WAddressMeta
 
 instance Buildable WAddressMeta where
-    build WAddressMeta{..} =
-        bprint (build%"@"%build%"@"%build%" ("%build%")")
-        _wamWalletId _wamAccountIndex _wamAddressIndex _wamAddress
+    build WAddressMeta{..} = bprint
+        ( "Address meta info:"
+        % "\n  " % build
+        % "\n  account ix: " % build
+        % "\n  address ix: " % build
+        % "\n  " % build
+        )
+        _wamWalletId
+        _wamAccountIndex
+        _wamAddressIndex
+        _wamAddress
+
 --------------------------------------------------------------------------------
 -- Accounts
 --------------------------------------------------------------------------------
@@ -1137,8 +1129,8 @@ instance Arbitrary AccountIndex where
 deriveSafeBuildable ''AccountIndex
 -- Nothing secret to redact for a AccountIndex.
 instance BuildableSafeGen AccountIndex where
-    buildSafeGen _ =
-        bprint build . getAccIndex
+    buildSafeGen _ (AccountIndex ix) =
+        bprint ("account ix: " % build) ix
 
 instance ToParamSchema AccountIndex where
     toParamSchema _ = mempty
@@ -1178,15 +1170,13 @@ instance ToSchema AccountPublicKeyWithIx where
 
 deriveSafeBuildable ''AccountPublicKeyWithIx
 instance BuildableSafeGen AccountPublicKeyWithIx where
-    buildSafeGen _ AccountPublicKeyWithIx{..} = bprint ("{"
-        %" publicKey="%build
-        %" index="%build
-        %" }")
+    buildSafeGen _ AccountPublicKeyWithIx{..} = bprint
+        ("account public key: " % build % ", " % build)
         accpubkeywithixPublicKey
         accpubkeywithixIndex
 
 instance Buildable (NonEmpty AccountPublicKeyWithIx) where
-    build = bprint listJson . NE.toList
+    build = bprint (buildList build) . NE.toList
 
 -- | A type modelling the request for a new 'EosWallet',
 -- on the mobile client or hardware wallet.
@@ -1215,16 +1205,17 @@ instance ToSchema NewEosWallet where
 
 deriveSafeBuildable ''NewEosWallet
 instance BuildableSafeGen NewEosWallet where
-    buildSafeGen sl NewEosWallet{..} = bprint ("{"
-        %" accounts="%build
-        %" addressPoolGap="%build
-        %" assuranceLevel="%buildSafe sl
-        %" name="%buildSafe sl
-        %" }")
-        neweoswalAccounts
+    buildSafeGen _ NewEosWallet{..} = bprint
+        ( "Request for new EOS-wallet"
+        % "\n  name: " % build
+        % "\n  " % build
+        % "\n  " % build
+        % "\n  accounts:\n" % buildIndent 2 (buildList build)
+        )
+        neweoswalName
         neweoswalAddressPoolGap
         neweoswalAssuranceLevel
-        neweoswalName
+        neweoswalAccounts
 
 -- | A wallet 'Account'.
 data Account = Account
@@ -1303,22 +1294,23 @@ instance Arbitrary AccountBalance where
 
 deriveSafeBuildable ''Account
 instance BuildableSafeGen Account where
-    buildSafeGen sl Account{..} = bprint ("{"
-        %" index="%buildSafe sl
-        %" name="%buildSafe sl
-        %" addresses="%buildSafe sl
-        %" amount="%buildSafe sl
-        %" walletId="%buildSafe sl
-        %" }")
+    buildSafeGen _ Account{..} = bprint
+        ( "Account"
+        % "\n  " % build
+        % "\n  name: " % build
+        % "\n  amount: " % build
+        % "\n  " % build
+        % "\n  addresses:\n" % buildIndent 2 (buildList build)
+        )
         accIndex
         accName
-        accAddresses
         accAmount
         accWalletId
+        accAddresses
 
 instance Buildable AccountAddresses where
     build =
-        bprint listJson . acaAddresses
+        bprint (buildList build) . acaAddresses
 
 instance Buildable AccountBalance where
     build =
@@ -1326,7 +1318,7 @@ instance Buildable AccountBalance where
 
 instance Buildable [Account] where
     build =
-        bprint listJson
+        bprint (buildList build)
 
 -- | Account Update
 data AccountUpdate = AccountUpdate {
@@ -1346,8 +1338,8 @@ instance Arbitrary AccountUpdate where
 
 deriveSafeBuildable ''AccountUpdate
 instance BuildableSafeGen AccountUpdate where
-    buildSafeGen sl AccountUpdate{..} =
-        bprint ("{ name="%buildSafe sl%" }") uaccName
+    buildSafeGen _ AccountUpdate{..} =
+        bprint ("Account update, new name: " % build) uaccName
 
 
 -- | New Account
@@ -1371,25 +1363,18 @@ instance ToSchema NewAccount where
 
 deriveSafeBuildable ''NewAccount
 instance BuildableSafeGen NewAccount where
-    buildSafeGen sl NewAccount{..} = bprint ("{"
-        %" spendingPassword="%(buildSafeMaybe mempty sl)
-        %" name="%buildSafe sl
-        %" }")
-        naccSpendingPassword
-        naccName
+    buildSafeGen _ NewAccount{..} =
+        bprint ("New account with name " % build) naccName
 
 deriveSafeBuildable ''WalletAddress
 instance BuildableSafeGen WalletAddress where
-    buildSafeGen sl WalletAddress{..} = bprint ("{"
-        %" id="%buildSafe sl
-        %" used="%build
-        %" }")
+    buildSafeGen _ WalletAddress{..} = bprint
+        (build % ", is it used: " % build)
         addrId
         addrUsed
 
 instance Buildable [WalletAddress] where
-    build = bprint listJson
-
+    build = bprint (buildList build)
 
 -- | Create a new Address
 data NewAddress = NewAddress
@@ -1415,14 +1400,13 @@ instance Arbitrary NewAddress where
 
 deriveSafeBuildable ''NewAddress
 instance BuildableSafeGen NewAddress where
-    buildSafeGen sl NewAddress{..} = bprint("{"
-        %" spendingPassword="%(buildSafeMaybe mempty sl)
-        %" accountIndex="%buildSafe sl
-        %" walletId="%buildSafe sl
-        %" }")
-        newaddrSpendingPassword
-        newaddrAccountIndex
+    buildSafeGen _ NewAddress{..} = bprint
+        ( "Request for new address"
+        % "\n  " % build
+        % "\n  " % build
+        )
         newaddrWalletId
+        newaddrAccountIndex
 
 
 type AddressIndex = Word32
@@ -1466,9 +1450,9 @@ instance Arbitrary AddressLevel where
 
 deriveSafeBuildable ''AddressLevel
 instance BuildableSafeGen AddressLevel where
-    buildSafeGen sl = \case
-        AddressLevelNormal lvl   -> bprint (buildSafe sl) lvl
-        AddressLevelHardened lvl -> bprint (buildSafe sl%"'") lvl
+    buildSafeGen _ = \case
+        AddressLevelNormal lvl   -> bprint build lvl
+        AddressLevelHardened lvl -> bprint (build % "'") lvl
 
 instance ToJSON AddressLevel where
     toJSON = toJSON . addressLevelToWord32
@@ -1497,13 +1481,7 @@ instance Arbitrary PasswordUpdate where
 
 deriveSafeBuildable ''PasswordUpdate
 instance BuildableSafeGen PasswordUpdate where
-    buildSafeGen sl PasswordUpdate{..} = bprint("{"
-        %" old="%buildSafe sl
-        %" new="%buildSafe sl
-        %" }")
-        pwdOld
-        pwdNew
-
+    buildSafeGen _ _ = bprint "Password update"
 
 -- | 'EstimatedFees' represents the fees which would be generated
 -- for a 'Payment' in case the latter would actually be performed.
@@ -1524,10 +1502,8 @@ instance Arbitrary EstimatedFees where
 
 deriveSafeBuildable ''EstimatedFees
 instance BuildableSafeGen EstimatedFees where
-    buildSafeGen sl EstimatedFees{..} = bprint("{"
-        %" estimatedAmount="%buildSafe sl
-        %" }")
-        feeEstimatedAmount
+    buildSafeGen _ EstimatedFees{..} = bprint
+        ("Estimated fees: " % build) feeEstimatedAmount
 
 
 -- | Maps an 'Address' to some 'Coin's, and it's
@@ -1552,10 +1528,11 @@ instance Arbitrary PaymentDistribution where
 
 deriveSafeBuildable ''PaymentDistribution
 instance BuildableSafeGen PaymentDistribution where
-    buildSafeGen sl PaymentDistribution{..} = bprint ("{"
-        %" address="%buildSafe sl
-        %" amount="%buildSafe sl
-        %" }")
+    buildSafeGen _ PaymentDistribution{..} = bprint
+        ( "payment distribution"
+        % "\n  " % build
+        % "\n  amount: " % build
+        )
         pdAddress
         pdAmount
 
@@ -1582,10 +1559,8 @@ instance Arbitrary PaymentSource where
 
 deriveSafeBuildable ''PaymentSource
 instance BuildableSafeGen PaymentSource where
-    buildSafeGen sl PaymentSource{..} = bprint ("{"
-        %" walletId="%buildSafe sl
-        %" accountIndex="%buildSafe sl
-        %" }")
+    buildSafeGen _ PaymentSource{..} = bprint
+        ( "source - " % build % ", " % build)
         psWalletId
         psAccountIndex
 
@@ -1603,8 +1578,8 @@ newtype WalletInputSelectionPolicy = WalletInputSelectionPolicy Core.InputSelect
 
 deriveSafeBuildable ''WalletInputSelectionPolicy
 instance BuildableSafeGen WalletInputSelectionPolicy where
-    buildSafeGen sl (WalletInputSelectionPolicy policy) =
-        bprint (plainOrSecureF sl build (fconst "<wallet input selection policy>")) policy
+    buildSafeGen _ (WalletInputSelectionPolicy policy) =
+        bprint ("input selection policy: " % build) policy
 
 instance ToJSON WalletInputSelectionPolicy where
     toJSON (WalletInputSelectionPolicy Core.OptimizeForSecurity)       = String "OptimizeForSecurity"
@@ -1644,16 +1619,15 @@ instance ToSchema Payment where
 
 deriveSafeBuildable ''Payment
 instance BuildableSafeGen Payment where
-    buildSafeGen sl (Payment{..}) = bprint ("{"
-        %" source="%buildSafe sl
-        %" destinations="%buildSafeList sl
-        %" groupingPolicty="%build
-        %" spendingPassword="%(buildSafeMaybe mempty sl)
-        %" }")
+    buildSafeGen _ (Payment{..}) = bprint
+        ( "Payment"
+        % "\n  " % build
+        % "\n  destinations:\n" % buildIndent 2 (buildList build)
+        % "\n  " % build
+        )
         pmtSource
-        (toList pmtDestinations)
+        pmtDestinations
         pmtGroupingPolicy
-        pmtSpendingPassword
 
 ----------------------------------------------------------------------------
 -- TxId
@@ -1664,8 +1638,8 @@ newtype WalletTxId = WalletTxId Txp.TxId
 
 deriveSafeBuildable ''WalletTxId
 instance BuildableSafeGen WalletTxId where
-    buildSafeGen sl (WalletTxId txId) =
-        bprint (plainOrSecureF sl build (fconst "<wallet tx id>")) txId
+    buildSafeGen _ (WalletTxId txId) =
+        bprint ("tx id: " % build) txId
 
 instance Arbitrary WalletTxId where
   arbitrary = WalletTxId <$> arbitrary
@@ -1722,8 +1696,8 @@ instance ToSchema TransactionType where
 
 deriveSafeBuildable ''TransactionType
 instance BuildableSafeGen TransactionType where
-    buildSafeGen _ LocalTransaction   = "local"
-    buildSafeGen _ ForeignTransaction = "foreign"
+    buildSafeGen _ LocalTransaction   = "type: local"
+    buildSafeGen _ ForeignTransaction = "type: foreign"
 
 
 -- | The 'Transaction' @direction@
@@ -1818,8 +1792,8 @@ instance Arbitrary TransactionStatus where
 
 deriveSafeBuildable ''TransactionDirection
 instance BuildableSafeGen TransactionDirection where
-    buildSafeGen _ IncomingTransaction = "incoming"
-    buildSafeGen _ OutgoingTransaction = "outgoing"
+    buildSafeGen _ IncomingTransaction = "direction: incoming"
+    buildSafeGen _ OutgoingTransaction = "direction: outgoing"
 
 -- | A 'Wallet''s 'Transaction'.
 data Transaction = Transaction
@@ -1867,25 +1841,26 @@ instance Arbitrary Transaction where
 
 deriveSafeBuildable ''Transaction
 instance BuildableSafeGen Transaction where
-    buildSafeGen sl Transaction{..} = bprint ("{"
-        %" id="%buildSafe sl
-        %" confirmations="%build
-        %" amount="%buildSafe sl
-        %" inputs="%buildSafeList sl
-        %" outputs="%buildSafeList sl
-        %" type="%buildSafe sl
-        %" direction"%buildSafe sl
-        %" }")
+    buildSafeGen _ Transaction{..} = bprint
+        ( "Transaction"
+        % "\n  " % build
+        % "\n  confirmations: " % build
+        % "\n  " % build
+        % "\n  " % build
+        % "\n  amount: " % build
+        % "\n  inputs:\n" % buildIndent 2 (buildList build)
+        % "\n  outputs:\n" % buildIndent 2 (buildList build)
+        )
         txId
         txConfirmations
+        txType
+        txDirection
         txAmount
         (toList txInputs)
         (toList txOutputs)
-        txType
-        txDirection
 
 instance Buildable [Transaction] where
-    build = bprint listJson
+    build = bprint (buildList build)
 
 -- | Technically we have serialized 'Tx' here, from the core.
 mkTransactionAsBase16 :: Txp.Tx -> TransactionAsBase16
@@ -1896,7 +1871,7 @@ rawTransactionAsBase16 :: TransactionAsBase16 -> Text
 rawTransactionAsBase16 (TransactionAsBase16Unsafe txtTx) = txtTx
 
 instance Buildable [AddressLevel] where
-    build = bprint listJson
+    build = bprint (buildList build)
 
 -- | Source address and corresponding derivation path, for external wallet.
 data AddressAndPath = AddressAndPath
@@ -1921,15 +1896,13 @@ instance Arbitrary AddressAndPath where
 
 deriveSafeBuildable ''AddressAndPath
 instance BuildableSafeGen AddressAndPath where
-    buildSafeGen sl AddressAndPath{..} = bprint ("{"
-        %" srcAddress="%buildSafe sl
-        %" derivationPath="%buildSafe sl
-        %" }")
+    buildSafeGen _ AddressAndPath{..} = bprint
+        ("source " % build % "\nderivation path: " % build)
         aapSrcAddress
         aapDerivationPath
 
 instance Buildable [AddressAndPath] where
-    build = bprint listJson
+    build = bprint (buildList build)
 
 -- | A 'Wallet''s 'UnsignedTransaction'.
 data UnsignedTransaction = UnsignedTransaction
@@ -1954,10 +1927,11 @@ instance Arbitrary UnsignedTransaction where
 
 deriveSafeBuildable ''UnsignedTransaction
 instance BuildableSafeGen UnsignedTransaction where
-    buildSafeGen sl UnsignedTransaction{..} = bprint ("{"
-        %" hex="%buildSafe sl
-        %" srcAddresses="%buildSafe sl
-        %" }")
+    buildSafeGen _ UnsignedTransaction{..} = bprint
+        ( "Unsigned tx"
+        % "\n  " % build
+        % "\n  sources:\n" % buildIndent 2 (buildList build)
+        )
         rtxHex
         rtxSrcAddresses
 
@@ -1990,17 +1964,18 @@ instance Arbitrary AddressWithProof where
 
 deriveSafeBuildable ''AddressWithProof
 instance BuildableSafeGen AddressWithProof where
-    buildSafeGen sl AddressWithProof{..} = bprint ("{"
-        %" srcAddress="%buildSafe sl
-        %" txSignature="%buildSafe sl
-        %" derivedPK="%build -- sl
-        %" }")
+    buildSafeGen _ AddressWithProof{..} = bprint
+        ( "address with proof"
+        % "\n  source " % build
+        % "\n  " % build
+        % "\n  derived public key: "%build
+        )
         awpSrcAddress
         awpTxSignature
         awpDerivedPK
 
 instance Buildable [AddressWithProof] where
-    build = bprint listJson
+    build = bprint (buildList build)
 
 -- | A 'Wallet''s 'SignedTransaction'. It is assumed
 -- that this transaction was signed on the client-side
@@ -2026,10 +2001,11 @@ instance Arbitrary SignedTransaction where
 
 deriveSafeBuildable ''SignedTransaction
 instance BuildableSafeGen SignedTransaction where
-    buildSafeGen sl SignedTransaction{..} = bprint ("{"
-        %" transaction="%buildSafe sl
-        %" addrsWithProofs="%buildSafe sl
-        %" }")
+    buildSafeGen _ SignedTransaction{..} = bprint
+        ( "Signed tx"
+        % "\n  " % build
+        % "\n proofs:\n" % buildIndent 2 (buildList build)
+        )
         stxTransaction
         stxAddrsWithProofs
 
@@ -2038,8 +2014,8 @@ newtype WalletSoftwareVersion = WalletSoftwareVersion SoftwareVersion
 
 deriveSafeBuildable ''WalletSoftwareVersion
 instance BuildableSafeGen WalletSoftwareVersion where
-    buildSafeGen sl (WalletSoftwareVersion v) =
-        bprint (plainOrSecureF sl build (fconst "<wallet software version>")) v
+    buildSafeGen _ (WalletSoftwareVersion v) =
+        bprint ("Wallet software version: " % build) v
 
 -- | NOTE: There are 'ToJSON' and 'FromJSON' instances for 'V1 SoftwareVersion' type,
 -- because we had it in internal API. Unfortunately, these instances are defined in
@@ -2094,11 +2070,12 @@ instance Arbitrary WalletSoftwareUpdate where
 
 deriveSafeBuildable ''WalletSoftwareUpdate
 instance BuildableSafeGen WalletSoftwareUpdate where
-    buildSafeGen _ WalletSoftwareUpdate{..} = bprint("{"
-        %" softwareVersion="%build
-        %" blockchainVersion="%build
-        %" scriptVersion="%build
-        %" }")
+    buildSafeGen _ WalletSoftwareUpdate{..} = bprint
+        ( "Wallet software update"
+        % "\n  software version: " % build
+        % "\n  blockchain version: " % build
+        % "\n  script version: " % build
+        )
         updSoftwareVersion
         updBlockchainVersion
         updScriptVersion
@@ -2125,11 +2102,8 @@ instance Arbitrary WalletImport where
 
 deriveSafeBuildable ''WalletImport
 instance BuildableSafeGen WalletImport where
-    buildSafeGen sl WalletImport{..} = bprint("{"
-        %" spendingPassword="%build
-        %" filePath="%build
-        %" }")
-        (maybe "null" (buildSafeGen sl) wiSpendingPassword)
+    buildSafeGen _ WalletImport{..} = bprint
+        ("Import wallet from file: " % build)
         wiFilePath
 
 -- | A redemption mnemonic.
@@ -2160,11 +2134,6 @@ instance ToSchema ShieldedRedemptionCode where
             $ NamedSchema (Just "ShieldedRedemptionCode") $ mempty
             & type_ .~ SwaggerString
 
-deriveSafeBuildable ''ShieldedRedemptionCode
-instance BuildableSafeGen ShieldedRedemptionCode where
-    buildSafeGen _ _ =
-        bprint "<shielded redemption code>"
-
 -- | The request body for redeeming some Ada.
 data Redemption = Redemption
     { redemptionRedemptionCode   :: ShieldedRedemptionCode
@@ -2184,13 +2153,13 @@ data Redemption = Redemption
 
 deriveSafeBuildable ''Redemption
 instance BuildableSafeGen Redemption where
-    buildSafeGen sl r = bprint ("{"
-        %" redemptionCode="%buildSafe sl
-        %" mnemonic=<mnemonic>"
-        %" spendingPassword="%buildSafe sl
-        %" }")
-        (redemptionRedemptionCode r)
-        (redemptionSpendingPassword r)
+    buildSafeGen _ r = bprint
+        ( "Redemption"
+        % "\n  " % build
+        % "\n  " % build
+        )
+        (redemptionWalletId r)
+        (redemptionAccountIndex r)
 
 deriveJSON Aeson.defaultOptions ''Redemption
 

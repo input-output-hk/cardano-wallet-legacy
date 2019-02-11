@@ -60,7 +60,7 @@ instance Arbitrary AddressPoolGap where
 
 instance Buildable AddressPoolGap where
     build (AddressPoolGap gap) =
-        bprint ("Address pool gap "%int) gap
+        bprint ("address pool gap: " % int) gap
 
 instance ToSchema AddressPoolGap where
     declareNamedSchema _ = do
