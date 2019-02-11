@@ -139,6 +139,28 @@
             (hsPkgs.universum)
           ];
         };
+        "decoupled-wallet" = {
+          depends = [
+            (hsPkgs.base)
+            (hsPkgs.async)
+            (hsPkgs.binary)
+            (hsPkgs.bytestring)
+            (hsPkgs.cardano-sl-binary)
+            (hsPkgs.cardano-sl-chain)
+            (hsPkgs.cardano-sl-core)
+            (hsPkgs.cardano-sl-infra)
+            (hsPkgs.cardano-sl-networking)
+            (hsPkgs.cardano-sl-util)
+            (hsPkgs.contravariant)
+            (hsPkgs.formatting)
+            (hsPkgs.network-transport)
+            (hsPkgs.network-transport-tcp)
+            (hsPkgs.serokell-util)
+            (hsPkgs.random)
+            (hsPkgs.universum)
+            (hsPkgs.unordered-containers)
+          ];
+        };
       };
       tests = {
         "unit" = {
