@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiWayIf #-}
+
 module Cardano.Wallet.WalletLayer.Kernel.Wallets (
       createWallet
     , createEosWallet
@@ -50,10 +51,9 @@ import           Cardano.Wallet.Kernel.Restore (blundToResolvedBlock,
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
 import           Cardano.Wallet.WalletLayer (CreateWallet (..),
                      CreateWalletError (..), DeleteWalletError (..),
-                     GetEosWalletError (..),
-                     GetUtxosError (..), GetWalletError (..),
-                     UpdateEosWalletError (..), UpdateWalletError (..),
-                     UpdateWalletPasswordError (..))
+                     GetEosWalletError (..), GetUtxosError (..),
+                     GetWalletError (..), UpdateEosWalletError (..),
+                     UpdateWalletError (..), UpdateWalletPasswordError (..))
 import           Cardano.Wallet.WalletLayer.Kernel.Conv
 
 createWallet :: MonadIO m

@@ -20,10 +20,10 @@ module Cardano.Wallet.Kernel.Read (
 import           Universum hiding (State)
 
 import           Data.Acid.Advanced (query')
-import qualified Data.Map.Strict as Map
 import           Data.List (nub)
-import qualified Formatting.Buildable
+import qualified Data.Map.Strict as Map
 import           Formatting (bprint, build, sformat, (%))
+import qualified Formatting.Buildable
 import           Serokell.Util (listJson)
 
 import           Pos.Core (Address)
@@ -34,13 +34,13 @@ import           Pos.Util.Wlog (Severity (..))
 import           Cardano.Wallet.Kernel.AddressPool (AddressPool)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (DB, Snapshot (..),
-                    dbHdWallets)
+                     dbHdWallets)
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
-import           Cardano.Wallet.Kernel.DB.HdWallet (HdAccountId, HdAddress,
-                    HdRoot, HdAccountBase (..), getHdAddressIx,
-                    hdAccountBase, hdAddressAddress, hdAddressId,
-                    hdAddressIdIx, hdRootId, hdWalletsRoots,
-                    mkAddressPoolExisting)
+import           Cardano.Wallet.Kernel.DB.HdWallet (HdAccountBase (..),
+                     HdAccountId, HdAddress, HdRoot, getHdAddressIx,
+                     hdAccountBase, hdAddressAddress, hdAddressId,
+                     hdAddressIdIx, hdRootId, hdWalletsRoots,
+                     mkAddressPoolExisting)
 import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import           Cardano.Wallet.Kernel.DB.Read as Getters
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (Indexed (..))
@@ -125,8 +125,8 @@ getEosPools db mkAddress
         -> [(HdAccountId, AddressPool Address)]
     toAccountAddressPools _root accs
         = case accs of
-            Nothing -> [] -- not an Eos root
-            (Just (Left err)) -> error (sformat build err)
+            Nothing                    -> [] -- not an Eos root
+            (Just (Left err))          -> error (sformat build err)
             (Just (Right (accs_,gap))) -> map (mkPool gap) accs_
 
     mkPool
@@ -136,7 +136,7 @@ getEosPools db mkAddress
     mkPool gap (accId,pk)
         = case mkAddressPoolExisting mkAddress pk gap (getAddrs accId) of
             Left invalidPoolErr -> error (sformat build invalidPoolErr)
-            Right pool -> (accId, pool)
+            Right pool          -> (accId, pool)
 
     getAddrs :: HdAccountId -> [(Address, Word32)]
     getAddrs accId

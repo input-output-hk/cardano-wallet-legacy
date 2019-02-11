@@ -125,8 +125,8 @@ import qualified Pos.Crypto as Core
 
 import           Cardano.Wallet.API.V1.Types (WalAddress (..))
 import           Cardano.Wallet.Kernel.AddressPool (AddressPool,
-                     ErrAddressPoolInvalid(..),
-                     emptyAddressPool, initAddressPool, lookupAddressPool)
+                     ErrAddressPoolInvalid (..), emptyAddressPool,
+                     initAddressPool, lookupAddressPool)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)

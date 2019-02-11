@@ -29,8 +29,7 @@ import           Cardano.Wallet.Kernel.DB.InDb
 import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending
 import           Cardano.Wallet.Kernel.DB.TxMeta (TxMeta, putTxMeta)
 import           Cardano.Wallet.Kernel.Internal
-import           Cardano.Wallet.Kernel.Read (getFOWallets,
-                     getWalletSnapshot)
+import           Cardano.Wallet.Kernel.Read (getFOWallets, getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Submission (Cancelled, addPending)
 import           Cardano.Wallet.Kernel.Util.Core
 

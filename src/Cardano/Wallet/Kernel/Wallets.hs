@@ -32,9 +32,8 @@ import           Pos.Chain.Txp (Utxo)
 import           Pos.Core (Address, Timestamp, makePubKeyAddressBoot)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, PassPhrase, ProtocolMagic,
-                     PublicKey,
-                     changeEncPassphrase, checkPassMatches, emptyPassphrase,
-                     firstHardened, safeDeterministicKeyGen)
+                     PublicKey, changeEncPassphrase, checkPassMatches,
+                     emptyPassphrase, firstHardened, safeDeterministicKeyGen)
 
 import           Cardano.Mnemonic (Mnemonic)
 import qualified Cardano.Mnemonic as Mnemonic
