@@ -77,6 +77,12 @@ data ErrAddressPoolInvalid
     | ErrNotEnoughAddresses
     deriving (Eq, Show)
 
+instance Buildable ErrAddressPoolInvalid where
+    build ErrIndexesAreNotSequential =
+        bprint "ErrIndexesAreNotSequential"
+    build ErrNotEnoughAddresses =
+        bprint "ErrNotEnoughAddresses"
+
 instance Exception ErrAddressPoolInvalid
 
 instance Arbitrary ErrAddressPoolInvalid where

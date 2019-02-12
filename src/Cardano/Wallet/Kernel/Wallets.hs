@@ -1,6 +1,7 @@
 module Cardano.Wallet.Kernel.Wallets (
       createHdWallet
     , createEosHdWallet
+    , mkEosAddress
     , updateHdWallet
     , updatePassword
     , deleteHdWallet
@@ -10,6 +11,7 @@ module Cardano.Wallet.Kernel.Wallets (
     , defaultHdAddress
       -- * Errors
     , CreateWalletError(..)
+    , GetAddressPoolGapError (..)
     , UpdateWalletPasswordError(..)
     -- * Internal & testing use only
     , createWalletHdRnd
@@ -27,11 +29,11 @@ import qualified Formatting.Buildable
 import           Data.Acid.Advanced (update')
 
 import           Pos.Chain.Txp (Utxo)
-import           Pos.Core (Address, Timestamp)
+import           Pos.Core (Address, Timestamp, makePubKeyAddressBoot)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
-import           Pos.Crypto (EncryptedSecretKey, PassPhrase, PublicKey,
-                     changeEncPassphrase, checkPassMatches, emptyPassphrase,
-                     firstHardened, safeDeterministicKeyGen)
+import           Pos.Crypto (EncryptedSecretKey, PassPhrase, ProtocolMagic,
+                     PublicKey, changeEncPassphrase, checkPassMatches,
+                     emptyPassphrase, firstHardened, safeDeterministicKeyGen)
 
 import           Cardano.Mnemonic (Mnemonic)
 import qualified Cardano.Mnemonic as Mnemonic
@@ -52,6 +54,7 @@ import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
 import           Cardano.Wallet.Kernel.Internal (PassiveWallet, walletKeystore,
                      walletProtocolMagic, wallets)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
+import           Cardano.Wallet.Kernel.Read (GetAddressPoolGapError (..))
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import           Cardano.Wallet.Kernel.Util.Core (getCurrentTimestamp)
 
@@ -271,7 +274,12 @@ createEosHdWallet pw accounts gap assuranceLevel walletName = do
         in
             flip Map.singleton (mempty, mempty) . mkBase
 
-
+mkEosAddress
+    :: ProtocolMagic
+    -> PublicKey
+    -> Address
+mkEosAddress pm
+    = makePubKeyAddressBoot (makeNetworkMagic pm)
 
 -- | Creates an HD wallet where new accounts and addresses are generated
 -- via random index derivation.
@@ -353,7 +361,7 @@ defaultHdAddressWith :: EncryptedSecretKey
                      -> Address
                      -> Maybe HdAddress
 defaultHdAddressWith esk rootId addr =
-    fst $ HD.isOurs addr [(rootId, esk)]
+    fst $ HD.isOurs addr (Map.singleton rootId esk)
 
 defaultHdAccountId :: HD.HdRootId -> HdAccountId
 defaultHdAccountId rootId = HdAccountId rootId (HdAccountIx firstHardened)
