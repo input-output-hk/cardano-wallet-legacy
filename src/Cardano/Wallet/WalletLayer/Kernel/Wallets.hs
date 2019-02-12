@@ -312,11 +312,16 @@ getWallets :: MonadIO m
            -> Kernel.DB
            -> m (IxSet V1.Wallet)
 getWallets wallet db =
-    fmap IxSet.fromList $ forM (IxSet.toList allRoots) $ \root -> do
+    fmap IxSet.fromList $ forM foRoots $ \root -> do
         let rootId = root ^. HD.hdRootId
         updateSyncState wallet rootId (toWallet db root)
   where
-    allRoots = db ^. dbHdWallets . HD.hdWalletsRoots
+    -- From 'acid-state' point of view there's no difference between
+    -- FO-wallet and EO-wallet, because it's just an `HdRoot`. So we
+    -- have to prefilter 'HdRoot's which are correspond to FO-wallets only.
+    foRoots = flip filter allRoots $ \root ->
+        isLeft $ Kernel.addressPoolGapByRootId (root ^. HD.hdRootId) db
+    allRoots = IxSet.toList $ db ^. dbHdWallets . HD.hdWalletsRoots
 
 getEosWallets
     :: MonadIO m
@@ -326,11 +331,16 @@ getEosWallets
 getEosWallets _wallet db = do
     let result = traverse (\root -> either Left (Right . toEosWallet db root) $
                     addressPoolGapByRootId (root ^. HD.hdRootId) db)
-                    allRoots
+                    eosRoots
     return $ case result of
         Left e           -> Left $ GetEosWalletErrorAddressPoolGap e
         Right eosWallets -> Right $ IxSet.fromList eosWallets
   where
+    -- From 'acid-state' point of view there's no difference between
+    -- FO-wallet and EO-wallet, because it's just an `HdRoot`. So we
+    -- have to prefilter 'HdRoot's which are correspond to EO-wallets only.
+    eosRoots = flip filter allRoots $ \root ->
+        isRight $ Kernel.addressPoolGapByRootId (root ^. HD.hdRootId) db
     allRoots = IxSet.toList $ db ^. dbHdWallets . HD.hdWalletsRoots
 
 -- | Gets Utxos per account of a wallet.
