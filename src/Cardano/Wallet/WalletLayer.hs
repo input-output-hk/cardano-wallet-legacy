@@ -147,6 +147,7 @@ data UpdateEosWalletError =
     | UpdateEosWalletWalletIdDecodingFailed Text
     | UpdateEosWalletErrorNoAccounts WalletId
     -- ^ Trying to update EOS-wallet which doesn't have any accounts.
+    | UpdateEosWalletErrorAddressPoolGap GetAddressPoolGapError
     deriving Eq
 
 -- | Unsound show instance needed for the 'Exception' instance.
@@ -166,6 +167,8 @@ instance Buildable UpdateEosWalletError where
         bprint ("UpdateEosWalletWalletIdDecodingFailed " % build) txt
     build (UpdateEosWalletErrorNoAccounts walletId) =
         bprint ("UpdateEosWalletErrorNoAccounts " % build) walletId
+    build (UpdateEosWalletErrorAddressPoolGap gapError) =
+        bprint ("UpdateEosWalletErrorAddressPoolGap " % build) gapError
 
 data UpdateWalletError =
       UpdateWalletError Kernel.UnknownHdRoot
