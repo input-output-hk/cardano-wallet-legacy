@@ -12,7 +12,7 @@ import           Cardano.Wallet.Client.Http (ClientError, Wallet)
 import qualified Cardano.Wallet.Client.Http as Client
 import           Test.Hspec (describe)
 import           Test.Integration.Framework.DSL
-
+import           Cardano.Wallet.API.V1.Types
 
 spec :: Scenarios Context
 spec = do
@@ -23,8 +23,8 @@ spec = do
             noAddressPoolGap
             defaultAssuranceLevel
             defaultWalletName
-        response <- request $ Client.getEosWallet $- eowallet ^. walletId
 
+        response <- request $ Client.getEosWallet $- eowallet ^. walletId
         verify response
             [ expectFieldEqual walletId (eowallet ^. walletId)
             , expectFieldEqual assuranceLevel defaultAssuranceLevel
@@ -86,11 +86,15 @@ spec = do
         let matrix =
                 [ ( "normal"
                   , [json| "normal" |]
-                  , [ expectSuccess ]
+                  , [ expectSuccess
+                    , expectFieldEqual assuranceLevel NormalAssurance
+                    ]
                   )
                 , ( "strict"
                   , [json| "strict" |]
-                  , [ expectSuccess ]
+                  , [ expectSuccess
+                    , expectFieldEqual assuranceLevel StrictAssurance
+                    ]
                   )
                 , ( "empty string"
                   , [json| "" |]
@@ -135,3 +139,172 @@ spec = do
         verify (response :: Either ClientError EosWallet)
             [ expectJSONError "Error in $: When parsing the record newEosWallet of type Cardano.Wallet.API.V1.Types.NewEosWallet the key name was not present."
             ]
+
+
+    scenario "EOSWALLETS_CREATE_06 - create wallet reponse returns wallet details" $ do
+        fixture  <- setup defaultSetup
+        eowallet <- request $ Client.postEosWallet $- NewEosWallet
+            (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
+            noAddressPoolGap
+            defaultAssuranceLevel
+            defaultWalletName
+        verify eowallet
+            [ expectFieldEqual assuranceLevel defaultAssuranceLevel
+            , expectFieldEqual walletName defaultWalletName
+            , expectFieldEqual addressPoolGap defaultAddressPoolGap
+            , expectFieldEqual amount 0
+            ]
+
+
+    scenario "EOSWALLETS_DELETE_01 - deleted wallet is not available" $ do
+        fixture  <- setup defaultSetup
+        eowallet <- successfulRequest $ Client.postEosWallet $- NewEosWallet
+            (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
+            noAddressPoolGap
+            defaultAssuranceLevel
+            defaultWalletName
+
+        successfulRequest $ Client.deleteEosWallet $- eowallet ^. walletId
+
+        response <- request $ Client.getEosWallet $- eowallet ^. walletId
+        verify response
+            [ expectWalletError (WalletNotFound)
+            ]
+
+    scenario "EOSWALLETS_DELETE_02 - cannot delete FO wallet with EOS endpoint" $ do
+        fixture  <- setup defaultSetup
+
+        delResp <- request $ Client.deleteEosWallet $- fixture ^. wallet . walletId
+        verify delResp
+            [ expectWalletError (WalletNotFound)
+            ]
+
+        getFo <- request $ Client.getWallet $- fixture ^. wallet . walletId
+        verify getFo
+            [ expectSuccess
+            ]
+
+    scenario "EOSWALLETS_DELETE_02 - cannot delete EOS wallet with FO endpoint" $ do
+        fixture  <- setup defaultSetup
+        eowallet <- successfulRequest $ Client.postEosWallet $- NewEosWallet
+            (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
+            noAddressPoolGap
+            defaultAssuranceLevel
+            defaultWalletName
+
+        delResp <- request  $ Client.deleteWallet $- eowallet ^. walletId
+        verify delResp
+            [ expectWalletError (WalletNotFound)
+            ]
+
+        getEos <- request $ Client.getEosWallet $- eowallet ^. walletId
+        verify getEos
+            [ expectSuccess
+            ]
+
+
+    scenario "EOSWALLETS_DETAILS_01 - cannot get FO wallet with EOS endpoint" $ do
+        fixture  <- setup defaultSetup
+
+        getFoWithEos <- request $ Client.getEosWallet $- fixture ^. wallet . walletId
+        verify getFoWithEos
+            [ expectWalletError (WalletNotFound)
+            -- expectWalletError (UnknownError "ErrorCall")
+            ]
+
+    scenario "EOSWALLETS_DETAILS_01 - cannot get EOS wallet with FO endpoint" $ do
+        fixture  <- setup defaultSetup
+        eowallet <- successfulRequest $ Client.postEosWallet $- NewEosWallet
+            (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
+            noAddressPoolGap
+            defaultAssuranceLevel
+            defaultWalletName
+
+        getEosWithFo <- request $ Client.getWallet $- eowallet ^. walletId
+        verify getEosWithFo
+            [ expectWalletError (WalletNotFound)
+            ]
+
+    scenario "EOSWALLETS_LIST_01 - cannot get EOS wallets with FO endpoint" $ do
+        fixture  <- setup defaultSetup
+        _ <- successfulRequest $ Client.postEosWallet $- NewEosWallet
+            (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
+            noAddressPoolGap
+            defaultAssuranceLevel
+            defaultWalletName
+
+        getFO <- request $ Client.getWallets
+        verify getFO
+            [ expectSuccess
+            , expectListSizeEqual 1
+            , expectListItemFieldEqual 0 walletId (fixture ^. wallet . walletId)
+            ]
+
+    scenario "EOSWALLETS_LIST_01 - cannot get FO wallets with EOS endpoint" $ do
+        fixture  <- setup defaultSetup
+        eowallet <- successfulRequest $ Client.postEosWallet $- NewEosWallet
+            (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
+            noAddressPoolGap
+            defaultAssuranceLevel
+            defaultWalletName
+
+        getFO <- request $ Client.getEosWalletIndexFilterSorts
+            $- Nothing
+            $- Nothing
+            $- NoFilters
+            $- NoSorts
+        verify getFO
+            [ expectSuccess
+            , expectListSizeEqual 1
+            , expectListItemFieldEqual 0 walletId (eowallet ^. walletId)
+            ]
+
+    scenario "EOSWALLETS_UPDATE_01 - cannot update FO wallets with EOS endpoint" $ do
+        fixture  <- setup $ defaultSetup
+            & walletName .~ "Before update FO"
+            & assuranceLevel .~ NormalAssurance
+
+        let endpoint = "api/v1/wallets/externally-owned/" <> fromWalletId (fixture ^. wallet . walletId)
+        updResp <- unsafeRequest ("PUT", endpoint) $ Just $ [json|{
+                "assuranceLevel": "strict",
+                "addressPoolGap": 12,
+                "name": "My EosWallet2"
+                }|]
+        verify (updResp :: Either ClientError EosWallet)
+            [ expectWalletError (UnknownError "UpdateEosWalletError")
+            ]
+
+        response <- request $ Client.getWallet $- fixture ^. wallet . walletId
+        verify response
+            [ expectFieldEqual walletId (fixture ^. wallet . walletId)
+            , expectFieldEqual assuranceLevel NormalAssurance
+            , expectFieldEqual walletName "Before update"
+            ]
+
+    scenario "EOSWALLETS_UPDATE_01 - cannot update EOS wallets with FO endpoint" $ do
+        fixture  <- setup defaultSetup
+        eowallet <- successfulRequest $ Client.postEosWallet $- NewEosWallet
+            (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
+            noAddressPoolGap
+            NormalAssurance
+            "Before update EOS"
+
+        let endpoint = "api/v1/wallets/" <> fromWalletId (eowallet ^. walletId)
+        updResp <- unsafeRequest ("PUT", endpoint) $ Just $ [json|{
+                "assuranceLevel": "strict",
+                "name": "My EosWallet"
+                }|]
+        verify (updResp :: Either ClientError EosWallet)
+            [ expectError
+            ]
+
+        response <- request $ Client.getEosWallet $- eowallet ^. walletId
+        verify response
+            [ expectFieldEqual walletId (eowallet ^. walletId)
+            , expectFieldEqual assuranceLevel NormalAssurance
+            , expectFieldEqual walletName "Before update EOS"
+            , expectFieldEqual addressPoolGap defaultAddressPoolGap
+            ]
+    where
+        fromWalletId :: Client.WalletId -> Text
+        fromWalletId (Client.WalletId a) = a
