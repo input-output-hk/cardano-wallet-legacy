@@ -278,7 +278,7 @@ spec = do
         verify response
             [ expectFieldEqual walletId (fixture ^. wallet . walletId)
             , expectFieldEqual assuranceLevel NormalAssurance
-            , expectFieldEqual walletName "Before update"
+            , expectFieldEqual walletName "Before update FO"
             ]
 
     scenario "EOSWALLETS_UPDATE_01 - cannot update EOS wallets with FO endpoint" $ do
