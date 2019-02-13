@@ -85,6 +85,7 @@ module Test.Integration.Framework.DSL
     , amount
     , assuranceLevel
     , backupPhrase
+    , createdAt
     , externallyOwnedAccounts
     , failures
     , fromWalletId
@@ -389,6 +390,9 @@ assuranceLevel = typed
 
 backupPhrase :: HasType BackupPhrase s => Lens' s BackupPhrase
 backupPhrase = typed
+
+createdAt :: HasType WalletTimestamp s => Lens' s WalletTimestamp
+createdAt = typed
 
 externallyOwnedAccounts :: HasType [AccountPublicKeyWithIx] s => Lens' s [AccountPublicKeyWithIx]
 externallyOwnedAccounts = typed
