@@ -27,8 +27,8 @@ module Cardano.Wallet.Kernel (
 import           Universum hiding (State)
 
 import           Control.Concurrent.Async (async, cancel)
-import           Data.Acid (AcidState, createArchive, createCheckpoint,
-                     openLocalStateFrom)
+import           Data.Acid (AcidState, closeAcidState, openLocalStateFrom)
+import           Data.Acid.Local (createCheckpointAndClose)
 import           Data.Acid.Memory (openMemoryState)
 import qualified Data.Map.Strict as Map
 import           System.Directory (doesPathExist, removePathForcibly)
@@ -142,10 +142,9 @@ handlesClose dbMode (Handles acidDb meta) = do
     closeMetaDB meta
     case dbMode of
         UseInMemory ->
-            pure ()
-        UseFilePath DatabaseOptions{} -> do
-            createCheckpoint acidDb
-            createArchive acidDb
+            closeAcidState acidDb
+        UseFilePath DatabaseOptions{} ->
+            createCheckpointAndClose acidDb
 
 {-------------------------------------------------------------------------------
   Wallet Initialisers
