@@ -121,7 +121,8 @@ spec = do
             "DdzFFzCqrhssoca9zmsbhqHxJRjrDyzR1wh4Rs9ffbFTiYkcnDsYU416MYe2A29BFigVPBQgnkQH64et6pAqSjAqPPFbHcG1zR7G6kGr"
         ]|]
         verify (response :: Either ClientError (BatchImportResult Text))
-            [ expectWalletError (WalletNotFound)
+            [ expectError
+              -- TODO: add more expectations after #221 is resolved
             ]
 
     scenario "ADDRESSES_IMPORT_05 - Returns error when wallet id is valid but missing" $ do
