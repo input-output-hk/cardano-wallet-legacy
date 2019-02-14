@@ -10,7 +10,6 @@ module Cardano.Wallet.Kernel.Pending (
 import           Universum hiding (State)
 
 import qualified Data.List.NonEmpty as NE
-import qualified Data.Map.Strict as Map
 
 import           Control.Concurrent.MVar (modifyMVar_)
 
@@ -18,20 +17,21 @@ import           Data.Acid.Advanced (update')
 
 import           Pos.Chain.Txp (Tx (..), TxAux (..), TxOut (..))
 import           Pos.Core (Coin (..))
-import           Pos.Crypto (EncryptedSecretKey)
 
-import           Cardano.Wallet.Kernel.DB.AcidState (CancelPending (..),
-                     NewForeign (..), NewForeignError (..), NewPending (..),
-                     NewPendingError (..))
-import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
+import           Cardano.Wallet.Kernel.DB.AcidState (CancelPending (..), DB,
+                     IsNewTxError (..), NewForeign (..), NewForeignError (..),
+                     NewPending (..), NewPendingError (..))
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.InDb
+import           Cardano.Wallet.Kernel.DB.Read (lookupHdAccountId)
 import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending
 import           Cardano.Wallet.Kernel.DB.TxMeta (TxMeta, putTxMeta)
 import           Cardano.Wallet.Kernel.Internal
-import           Cardano.Wallet.Kernel.Read (getFOWallets, getWalletSnapshot)
+import           Cardano.Wallet.Kernel.Read (getEosPools, getFOWallets,
+                     getWalletSnapshot, mkEosAddress)
 import           Cardano.Wallet.Kernel.Submission (Cancelled, addPending)
 import           Cardano.Wallet.Kernel.Util.Core
+import           Cardano.Wallet.WalletLayer.Kernel.Conv (exceptT, withExceptT)
 
 {-------------------------------------------------------------------------------
   Submit pending transactions
@@ -73,54 +73,87 @@ newForeign w accountId tx meta = do
 
 -- | Submit a new transaction
 --
+-- 1) Discover all our addresses (for all wallets) in the tx outputs
+-- and persist them. The address discovery mechanism is dependent on
+-- the type of wallet, EO or FO. We can learn the wallet type by
+-- looking at the given Account.
+--
+-- 2) Create and persist transaction metadata, which depends on the transaction
+-- output coins in this wallet (the root is determined by the given account).
+--
+-- 3) Finally, the transaction is submitted to the submission layer.
+--
 -- Will fail if the HdAccountId does not exist or if some inputs of the
 -- new transaction are not available for spending.
---
--- If the transaction is successfully added to the wallet state, transaction metadata
--- is persisted and the submission layer is notified accordingly.
---
--- NOTE: we select "our" output addresses from the transaction and pass it along to the data layer
-newTx :: forall e. ActiveWallet
+newTx :: IsNewTxError e
+      => ActiveWallet
       -> HdAccountId
       -> TxAux
       -> PartialTxMeta
       -> ([HdAddress] -> IO (Either e ())) -- ^ the update to run, takes ourAddrs as arg
       -> IO (Either e TxMeta)
-newTx ActiveWallet{..} accountId tx partialMeta upd = do
-    snapshot <- getWalletSnapshot walletPassive
-    -- run the update
-    hdRnds <- getFOWallets walletPassive snapshot
+newTx ActiveWallet{..} accountId tx partialMeta upd = runExceptT $ do
+    db <- liftIO $ getWalletSnapshot walletPassive
 
-    let allOurAddresses = fst <$> allOurs hdRnds
-    res <- upd $ allOurAddresses
-    case res of
-        Left e   -> return (Left e)
-        Right () -> do
-            -- process transaction on success
-            -- myCredentials should be a list with a single element.
-            let thisHdRndRoot = Map.filterWithKey (\hdRoot _ -> accountId ^. hdAccountIdParent == hdRoot) hdRnds
-                ourOutputCoins = snd <$> allOurs thisHdRndRoot
-                gainedOutputCoins = sumCoinsUnsafe ourOutputCoins
-                allOutsOurs = length ourOutputCoins == length txOut
-                txMeta = partialMeta allOutsOurs gainedOutputCoins
-            putTxMeta (walletPassive ^. walletMeta) txMeta
-            submitTx
-            return (Right txMeta)
+    account <- withExceptT newTxUnknownAccountErr $ exceptT $
+                lookupHdAccountId db accountId
+
+    (allAddrs, coinsForRoot) <- ExceptT $ liftIO $
+                                  prefilterOurs db (account ^. hdAccountBase)
+    _ <- liftIO $ upd allAddrs
+
+    let txMeta = mkTxMeta coinsForRoot
+    liftIO $ putTxMeta (walletPassive ^. walletMeta) txMeta
+    liftIO $ submitTx
+    return txMeta
     where
+        rootId = accountId ^. hdAccountIdParent
+
         (txOut :: [TxOut]) = NE.toList $ (_txOutputs . taTx $ tx)
 
-        -- | NOTE: we recognise addresses in the transaction outputs that belong to _all_ wallets,
-        --  not only for the wallet to which this transaction is being submitted
+        -- Prepare tx metadata using tx output coins in this wallet
+        mkTxMeta :: [Coin] -> TxMeta
+        mkTxMeta coins
+            = let gainedOutputCoins = sumCoinsUnsafe coins
+                  allOutsOurs = length coins == length txOut
+              in partialMeta allOutsOurs gainedOutputCoins
+
+        -- Submit transaction to submission layer
+        submitTx :: IO ()
+        submitTx = modifyMVar_ (walletPassive ^. walletSubmission) $
+                    return . addPending accountId (Pending.singleton tx)
+
+        -- Prefilter tx outputs for the given prefilter context `s`
         allOurs
-            :: Map HdRootId EncryptedSecretKey
+            :: IsOurs s
+            => s
             -> [(HdAddress, Coin)]
         allOurs = evalState $ fmap catMaybes $ forM txOut $ \out -> do
             fmap (, txOutValue out) <$> state (isOurs $ txOutAddress out)
 
+        -- Filter the given addresses for this root and return the coin
+        coinForThisRoot :: [(HdAddress, Coin)] -> [Coin]
+        coinForThisRoot ours
+            = map snd $
+                flip filter ours $ \(a,_) ->
+                    rootId == a ^. hdAddressId . hdAddressIdParent . hdAccountIdParent
 
-        submitTx :: IO ()
-        submitTx = modifyMVar_ (walletPassive ^. walletSubmission) $
-                    return . addPending accountId (Pending.singleton tx)
+        -- Based on the wallet type of the AccountBase, prepare the appropriate
+        -- prefilter context to find all our output addresses in the tx.
+        -- Return our addresses alongside the coin for _this_ wallet.
+        prefilterOurs
+            :: MonadIO m
+            => DB
+            -> HdAccountBase
+            -> m (Either e ([HdAddress], [Coin]))
+        prefilterOurs db HdAccountBaseFO{} = do
+            foRoots <- liftIO $ getFOWallets walletPassive db
+            let ours = allOurs foRoots
+            return . Right $ (fst <$> ours, coinForThisRoot ours)
+        prefilterOurs db HdAccountBaseEO{} = do
+            eoAccounts <- liftIO $ getEosPools db (mkEosAddress $ walletPassive ^. walletProtocolMagic)
+            let ours = allOurs eoAccounts
+            return . Right $ (fst <$> ours, coinForThisRoot ours)
 
 -- | Cancel a pending transaction
 --

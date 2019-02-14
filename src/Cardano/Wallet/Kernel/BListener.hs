@@ -53,12 +53,12 @@ import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
 import           Cardano.Wallet.Kernel.Prefiltering (PrefilteredBlock)
 import qualified Cardano.Wallet.Kernel.Prefiltering as P
 import           Cardano.Wallet.Kernel.Read (foreignPendingByAccount,
-                     getEosPools, getFOWallets, getWalletSnapshot)
+                     getEosPools, getFOWallets, getWalletSnapshot,
+                     mkEosAddress)
 import           Cardano.Wallet.Kernel.Restore
 import qualified Cardano.Wallet.Kernel.Submission as Submission
 import           Cardano.Wallet.Kernel.Util.NonEmptyMap (NonEmptyMap)
 import qualified Cardano.Wallet.Kernel.Util.NonEmptyMap as NEM
-import           Cardano.Wallet.Kernel.Wallets (mkEosAddress)
 import           Cardano.Wallet.WalletLayer.Kernel.Wallets
                      (blundToResolvedBlock)
 

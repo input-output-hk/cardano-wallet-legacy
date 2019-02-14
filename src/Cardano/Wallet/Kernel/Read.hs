@@ -9,6 +9,7 @@ module Cardano.Wallet.Kernel.Read (
     -- ** Eos Helper
   , getEosPools
   , addressPoolGapByRootId
+  , mkEosAddress
     -- Errors
   , GetAddressPoolGapError (..)
     -- ** The only effectful getter you will ever need
@@ -26,7 +27,7 @@ import           Formatting (bprint, build, sformat, (%))
 import qualified Formatting.Buildable
 import           Serokell.Util (listJson)
 
-import           Pos.Core (Address)
+import           Pos.Core (Address, makePubKeyAddressBoot)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, ProtocolMagic, PublicKey)
 import           Pos.Util.Wlog (Severity (..))
@@ -194,6 +195,13 @@ addressPoolGapByRootId rootId db
         Nothing -> -- not an EO wallet
             Left $ GetEosWalletErrorWrongAccounts (sformat build rootId)
         Just res -> snd <$> res
+
+mkEosAddress
+    :: ProtocolMagic
+    -> PublicKey
+    -> Address
+mkEosAddress pm
+    = makePubKeyAddressBoot (makeNetworkMagic pm)
 
 data GetAddressPoolGapError =
       GetEosWalletErrorNoAccounts Text

@@ -45,6 +45,8 @@ module Cardano.Wallet.Kernel.DB.AcidState (
     -- * Errors
   , NewPendingError(..)
   , NewForeignError(..)
+  , IsNewTxError
+  , newTxUnknownAccountErr
   , SwitchToForkInternalError(..)
   ) where
 
@@ -125,6 +127,9 @@ defDB = DB initHdWallets noUpdates
   Custom errors
 -------------------------------------------------------------------------------}
 
+class IsNewTxError a where
+    newTxUnknownAccountErr :: UnknownHdAccount -> a
+
 -- | Errors thrown by 'newPending'
 data NewPendingError =
     -- | Unknown account
@@ -133,6 +138,9 @@ data NewPendingError =
     -- | Some inputs are not in the wallet utxo
   | NewPendingFailed Spec.NewPendingFailed
 
+instance IsNewTxError NewPendingError where
+    newTxUnknownAccountErr = NewPendingUnknown
+
 -- | Errors thrown by 'newForeign'
 data NewForeignError =
     -- | Unknown account
@@ -140,6 +148,9 @@ data NewForeignError =
 
     -- | Some inputs are not in the wallet utxo
   | NewForeignFailed Spec.NewForeignFailed
+
+instance IsNewTxError NewForeignError where
+    newTxUnknownAccountErr = NewForeignUnknown
 
 -- | Errors thrown by 'SwitchToFork'
 data SwitchToForkInternalError =
