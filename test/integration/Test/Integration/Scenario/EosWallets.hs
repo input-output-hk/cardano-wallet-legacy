@@ -200,20 +200,46 @@ spec = do
             }|]
             verify (response :: Either ClientError EosWallet) expectations
 
-    scenario "EOSWALLETS_CREATE_05 - one has to provide wallet's name" $ do
-        response <- unsafeRequest ("POST", "api/v1/wallets/externally-owned") $ Just $ [json|{
-            "accounts": [
-                        {
-                            "publicKey": "1OQQ6jrO8xzPyybgLEk5vuUcoCCH4fds3k5rqnxErglRb7EiGQKa74TP9jx0ATHCqUiD8uLO6pP8z31+c393lw==",
-                            "index": 2710723942
-                        }
-                        ],
-            "addressPoolGap": 70,
-            "assuranceLevel": "strict"
-            }|]
-        verify (response :: Either ClientError EosWallet)
-            [ expectJSONError "Error in $: When parsing the record newEosWallet of type Cardano.Wallet.API.V1.Types.NewEosWallet the key name was not present."
-            ]
+    describe "EOSWALLETS_CREATE_05 - one has to provide all required parameters" $ do
+        let matrix =
+                    [ ( "no accounts"
+                      , [json| {
+                          "addressPoolGap": 70,
+                          "assuranceLevel": "strict",
+                          "name": "Wallet EOS"
+                          } |]
+                      , [ expectJSONError "Error in $: When parsing the record newEosWallet of type Cardano.Wallet.API.V1.Types.NewEosWallet the key accounts was not present." ]
+                      )
+                    , ( "no assuranceLevel"
+                      , [json| {
+                          "accounts": [
+                                      {
+                                          "publicKey": "1OQQ6jrO8xzPyybgLEk5vuUcoCCH4fds3k5rqnxErglRb7EiGQKa74TP9jx0ATHCqUiD8uLO6pP8z31+c393lw==",
+                                          "index": 2710723942
+                                      }
+                                      ],
+                          "addressPoolGap": 70,
+                          "name": "Wallet EOS"
+                          } |]
+                      , [ expectJSONError "Error in $: When parsing the record newEosWallet of type Cardano.Wallet.API.V1.Types.NewEosWallet the key assuranceLevel was not present." ]
+                      )
+                    , ( "no name"
+                      , [json| {
+                          "accounts": [
+                                      {
+                                          "publicKey": "1OQQ6jrO8xzPyybgLEk5vuUcoCCH4fds3k5rqnxErglRb7EiGQKa74TP9jx0ATHCqUiD8uLO6pP8z31+c393lw==",
+                                          "index": 2710723942
+                                      }
+                                      ],
+                          "addressPoolGap": 70,
+                          "assuranceLevel": "strict"
+                          } |]
+                      , [ expectJSONError "Error in $: When parsing the record newEosWallet of type Cardano.Wallet.API.V1.Types.NewEosWallet the key name was not present." ]
+                      )
+                    ]
+        forM_ matrix $ \(title, payload, expectations) -> scenario title $ do
+            response <- unsafeRequest ("POST", "api/v1/wallets/externally-owned") $ Just $ [json|#{payload}|]
+            verify (response :: Either ClientError EosWallet) expectations
 
 
     scenario "EOSWALLETS_CREATE_06 - create wallet reponse returns wallet details" $ do
@@ -350,7 +376,7 @@ spec = do
             , expectListItemFieldEqual 0 walletId (fixture ^. wallet . walletId)
             ]
 
-    scenario "EOSWALLETS_LIST_01 - cannot get FO wallets with EOS endpoint" $ do
+    scenario "EOSWALLETS_LIST_01, EOSWALLETS_LIST_02 - cannot get FO wallets with EOS endpoint" $ do
         fixture  <- setup defaultSetup
         eowallet <- successfulRequest $ Client.postEosWallet $- NewEosWallet
             (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
@@ -441,6 +467,103 @@ spec = do
 
         response <- request $ Client.getEosWallet $- eowallet ^. walletId
         verify response expectations
+
+    describe "EOSWALLETS_UPDATE_03 - addressPoolGap cannot be outside [10..100]" $ do
+        forM_ ([-1, 0, 9, 101]) $ \poolGap -> scenario ("addressPoolGap = " ++ show (poolGap :: Int)) $ do
+            fixture  <- setup $ defaultSetup
+                & rawAddressPoolGap .~ 12
+            eowallet <- successfulRequest $ Client.postEosWallet $- NewEosWallet
+                (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
+                noAddressPoolGap
+                defaultAssuranceLevel
+                defaultWalletName
+
+            let endpoint = "api/v1/wallets/externally-owned/" <> fromWalletId (eowallet ^. walletId)
+            response <- unsafeRequest ("PUT", endpoint) $ Just $ [json|{
+                "assuranceLevel": "normal",
+                "addressPoolGap": #{poolGap},
+                "name": "My EosWallet"
+                }|]
+            verify (response :: Either ClientError EosWallet)
+                [ expectJSONError $ case poolGap of
+                                        -1 -> "Error in $.addressPoolGap: Word8 is either floating or will cause over or underflow: -1.0"
+                                        _  -> "Error in $.addressPoolGap: Address pool gap should be in range [10..100]"
+                ]
+
+
+    describe "EOSWALLETS_UPDATE_04 - one has to provide assuranceLevel to be either 'normal' or 'strict'" $ do
+        let matrix =
+                [ ( "normal"
+                  , [json| "normal" |]
+                  , [ expectSuccess
+                    , expectFieldEqual assuranceLevel NormalAssurance
+                    ]
+                  )
+                , ( "strict"
+                  , [json| "strict" |]
+                  , [ expectSuccess
+                    , expectFieldEqual assuranceLevel StrictAssurance
+                    ]
+                  )
+                , ( "empty string"
+                  , [json| "" |]
+                  , [ expectJSONError "Error in $.assuranceLevel: When parsing Cardano.Wallet.API.V1.Types.AssuranceLevel expected a String with the tag of a constructor but got ." ]
+                  )
+                , ( "555"
+                  , [json| 555 |]
+                  , [ expectJSONError "Error in $.assuranceLevel: When parsing Cardano.Wallet.API.V1.Types.AssuranceLevel expected String but got Number." ]
+                  )
+                , ( "亜哀愛źiemniak悪握圧扱安"
+                  , [json| "亜哀愛źiemniak悪握圧扱安" |]
+                  , [ expectJSONError "Error in $.assuranceLevel: When parsing Cardano.Wallet.API.V1.Types.AssuranceLevel expected a String with the tag of a constructor but got 亜哀愛źiemniak悪握圧扱安" ]
+                  )
+                ]
+
+        forM_ matrix $ \(title, assurLevel, expectations) -> scenario ("assuranceLevel = " ++ title) $ do
+            fixture  <- setup $ defaultSetup
+                & rawAddressPoolGap .~ 12
+            eowallet <- successfulRequest $ Client.postEosWallet $- NewEosWallet
+                (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
+                noAddressPoolGap
+                defaultAssuranceLevel
+                defaultWalletName
+
+            let endpoint = "api/v1/wallets/externally-owned/" <> fromWalletId (eowallet ^. walletId)
+            response <- unsafeRequest ("PUT", endpoint) $ Just $ [json|{
+                "assuranceLevel": #{assurLevel},
+                "addressPoolGap": 10,
+                "name": "My EosWallet"
+                }|]
+            verify (response :: Either ClientError EosWallet) expectations
+
+    describe "EOSWALLETS_UPDATE_05 - one has to provide all required parameters" $ do
+
+        let matrix =
+                    [ ( "no addressPoolGap"
+                      , [json| { "assuranceLevel": "normal", "name": "My EosWallet" } |]
+                      , [ expectJSONError "Error in $: When parsing the record updateEosWallet of type Cardano.Wallet.API.V1.Types.UpdateEosWallet the key addressPoolGap was not present." ]
+                      )
+                    , ( "no assuranceLevel"
+                      , [json| { "addressPoolGap": 10, "name": "My EosWallet" } |]
+                      , [ expectJSONError "Error in $: When parsing the record updateEosWallet of type Cardano.Wallet.API.V1.Types.UpdateEosWallet the key assuranceLevel was not present." ]
+                      )
+                    , ( "no name"
+                      , [json| { "addressPoolGap": 10, "assuranceLevel": "normal" } |]
+                      , [ expectJSONError "Error in $: When parsing the record updateEosWallet of type Cardano.Wallet.API.V1.Types.UpdateEosWallet the key name was not present." ]
+                      )
+                    ]
+        forM_ matrix $ \(title, payload, expectations) -> scenario title $ do
+            fixture  <- setup $ defaultSetup
+                & rawAddressPoolGap .~ 12
+            eowallet <- successfulRequest $ Client.postEosWallet $- NewEosWallet
+                (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
+                noAddressPoolGap
+                defaultAssuranceLevel
+                defaultWalletName
+
+            let endpoint = "api/v1/wallets/externally-owned/" <> fromWalletId (eowallet ^. walletId)
+            response <- unsafeRequest ("PUT", endpoint) $ Just $ [json| #{payload} |]
+            verify (response :: Either ClientError EosWallet) expectations
     where
         fromWalletId :: Client.WalletId -> Text
         fromWalletId (Client.WalletId a) = a
