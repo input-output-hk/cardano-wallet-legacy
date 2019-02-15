@@ -96,6 +96,7 @@ module Test.Integration.Framework.DSL
     , rawPassword
     , spendingPassword
     , spendingPasswordLastUpdate
+    , syncState
     , totalSuccess
     , walAddresses
     , wallet
@@ -431,6 +432,9 @@ rawMnemonicPassword = field @"_rawMnemonicPassword"
 
 spendingPassword :: HasType SpendingPassword s => Lens' s SpendingPassword
 spendingPassword = typed
+
+syncState :: HasType SyncState s => Lens' s SyncState
+syncState = typed
 
 totalSuccess :: Lens' (BatchImportResult a) Natural
 totalSuccess = field @"aimTotalSuccess"
