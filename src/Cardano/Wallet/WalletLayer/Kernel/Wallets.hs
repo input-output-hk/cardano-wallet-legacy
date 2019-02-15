@@ -33,7 +33,6 @@ import qualified Cardano.Mnemonic as Mnemonic
 import qualified Cardano.Wallet.API.V1.Types as V1
 import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
-import           Cardano.Wallet.Kernel.DB.AcidState (dbHdWallets)
 import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
@@ -44,7 +43,9 @@ import           Cardano.Wallet.Kernel.Internal (walletKeystore, walletMeta,
                      walletProtocolMagic, (<.>), _wriProgress)
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
-import           Cardano.Wallet.Kernel.Read (addressPoolGapByRootId)
+import           Cardano.Wallet.Kernel.Read (WalletOwnership (..),
+                     addressPoolGapByRootId, eosAccountsByRootId,
+                     getWalletOwnership, getWalletsByOwnership)
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import           Cardano.Wallet.Kernel.Restore (blundToResolvedBlock,
                      restoreWallet)
@@ -188,10 +189,15 @@ updateWallet :: MonadIO m
              -> m (Either UpdateWalletError V1.Wallet)
 updateWallet wallet wId (V1.WalletUpdate v1Level v1Name) = runExceptT $ do
     rootId <- withExceptT UpdateWalletWalletIdDecodingFailed $ fromRootId wId
-    v1wal <- fmap (uncurry toWallet) $
-               withExceptT UpdateWalletError $ ExceptT $ liftIO $
-                 Kernel.updateHdWallet wallet rootId newLevel newName
-    updateSyncState wallet rootId v1wal
+    db <- liftIO $ Kernel.getWalletSnapshot wallet
+    case getWalletOwnership rootId db of
+        WalletExternallyOwned ->
+            exceptT $ Left $ UpdateWalletError $ HD.UnknownHdRoot rootId
+        WalletFullyOwned -> do
+            v1wal <- fmap (uncurry toWallet) $
+                       withExceptT UpdateWalletError $ ExceptT $ liftIO $
+                         Kernel.updateHdWallet wallet rootId newLevel newName
+            updateSyncState wallet rootId v1wal
   where
     newLevel = fromAssuranceLevel v1Level
     newName  = HD.WalletName v1Name
@@ -204,17 +210,16 @@ updateEosWallet
     -> m (Either UpdateEosWalletError V1.EosWallet)
 updateEosWallet wallet wId (V1.UpdateEosWallet v1Level v1Name newGap) = runExceptT $ do
     rootId <- withExceptT UpdateEosWalletWalletIdDecodingFailed $ fromRootId wId
-    (db, newHdRoot) <- withExceptT UpdateEosWalletError $ ExceptT $ liftIO $
-        Kernel.updateHdWallet wallet rootId newLevel newName
-    -- 'HdRoot' doesn't contain address pool gap, only corresponding 'HdAccount's contain it.
-    -- So we have to update all these accounts.
-    accounts <- fmap (IxSet.toList) $ withExceptT UpdateEosWalletError $ exceptT $
-        return $ Kernel.accountsByRootId db rootId
-    if null accounts
-        then exceptT $ Left $ UpdateEosWalletErrorNoAccounts wId
-        else do
-            result <- forM accounts $ \hdAcc -> do
-                let accId = hdAcc ^. HD.hdAccountBase . HD.hdAccountBaseId
+    db' <- liftIO $ Kernel.getWalletSnapshot wallet
+    case eosAccountsByRootId rootId db' of
+        Nothing -> exceptT $ Left $ UpdateEosWalletError $ HD.UnknownHdRoot rootId
+        Just (Left e) -> exceptT $ Left $ UpdateEosWalletErrorAddressPoolGap e
+        Just (Right (accountsData, _)) -> do
+            (db, newHdRoot) <- withExceptT UpdateEosWalletError $ ExceptT $ liftIO $
+                Kernel.updateHdWallet wallet rootId newLevel newName
+            -- 'HdRoot' doesn't contain address pool gap, only corresponding
+            -- 'HdAccount's contain it. So we have to update all these accounts.
+            result <- forM accountsData $ \(accId, _) -> do
                 res <- liftIO $ Kernel.updateAccountGap accId newGap wallet
                 return $ either (Left . UpdateEosWalletAccountError) Right res
             exceptT $ case lefts result of
@@ -237,10 +242,19 @@ updateWalletPassword wallet
                        (V1.WalletPassPhrase newPwd)) = runExceptT $ do
     rootId <- withExceptT UpdateWalletPasswordWalletIdDecodingFailed $
                 fromRootId wId
-    v1wal <- fmap (uncurry toWallet) $
-              withExceptT UpdateWalletPasswordError $ ExceptT $ liftIO $
-                Kernel.updatePassword wallet rootId oldPwd newPwd
-    updateSyncState wallet rootId v1wal
+    db <- liftIO $ Kernel.getWalletSnapshot wallet
+    case getWalletOwnership rootId db of
+        WalletExternallyOwned ->
+            exceptT
+                $ Left
+                $ UpdateWalletPasswordError
+                $ Kernel.UpdateWalletPasswordUnknownHdRoot
+                $ HD.UnknownHdRoot rootId
+        WalletFullyOwned -> do
+            v1wal <- fmap (uncurry toWallet) $
+                withExceptT UpdateWalletPasswordError $ ExceptT $ liftIO $
+                    Kernel.updatePassword wallet rootId oldPwd newPwd
+            updateSyncState wallet rootId v1wal
 
 -- | Deletes a wallet, together with every account & addresses belonging to it.
 -- If this wallet was restoring, then the relevant async worker is correctly
@@ -251,11 +265,16 @@ deleteWallet :: MonadIO m
              -> m (Either DeleteWalletError ())
 deleteWallet wallet wId = runExceptT $ do
     rootId <- withExceptT DeleteWalletWalletIdDecodingFailed $ fromRootId wId
-    withExceptT DeleteWalletError $ ExceptT $ liftIO $ do
-        let nm = makeNetworkMagic (wallet ^. walletProtocolMagic)
-        Kernel.removeRestoration wallet rootId
-        Kernel.deleteTxMetas (wallet ^. walletMeta) rootId Nothing
-        Kernel.deleteHdWallet nm wallet rootId
+    db <- liftIO $ Kernel.getWalletSnapshot wallet
+    case getWalletOwnership rootId db of
+        WalletExternallyOwned ->
+            exceptT $ Left $ DeleteWalletError $ HD.UnknownHdRoot rootId
+        WalletFullyOwned ->
+            withExceptT DeleteWalletError $ ExceptT $ liftIO $ do
+                let nm = makeNetworkMagic (wallet ^. walletProtocolMagic)
+                Kernel.removeRestoration wallet rootId
+                Kernel.deleteTxMetas (wallet ^. walletMeta) rootId Nothing
+                Kernel.deleteHdWallet nm wallet rootId
 
 -- | Deletes external wallets. Please note that there's no actions in the
 -- 'Keystore', because it contains only root secret keys.
@@ -265,9 +284,14 @@ deleteEosWallet :: MonadIO m
                 -> m (Either DeleteWalletError ())
 deleteEosWallet wallet wId = runExceptT $ do
     rootId <- withExceptT DeleteWalletWalletIdDecodingFailed $ fromRootId wId
-    withExceptT DeleteWalletError $ ExceptT $ liftIO $ do
-        Kernel.deleteTxMetas (wallet ^. walletMeta) rootId Nothing
-        Kernel.deleteEosHdWallet wallet rootId
+    db <- liftIO $ Kernel.getWalletSnapshot wallet
+    case getWalletOwnership rootId db of
+        WalletFullyOwned ->
+            exceptT $ Left $ DeleteWalletError $ HD.UnknownHdRoot rootId
+        WalletExternallyOwned ->
+            withExceptT DeleteWalletError $ ExceptT $ liftIO $ do
+                Kernel.deleteTxMetas (wallet ^. walletMeta) rootId Nothing
+                Kernel.deleteEosHdWallet wallet rootId
 
 -- | Gets a specific wallet.
 getWallet :: MonadIO m
@@ -277,10 +301,12 @@ getWallet :: MonadIO m
           -> m (Either GetWalletError V1.Wallet)
 getWallet wallet wId db = runExceptT $ do
     rootId <- withExceptT GetWalletWalletIdDecodingFailed (fromRootId wId)
-    v1wal <- fmap (toWallet db) $
-                withExceptT GetWalletError $ exceptT $
-                    Kernel.lookupHdRootId db rootId
-    updateSyncState wallet rootId v1wal
+    hdRoot <- withExceptT GetWalletError $ exceptT $ Kernel.lookupHdRootId db rootId
+    case getWalletOwnership rootId db of
+        WalletExternallyOwned ->
+            exceptT $ Left $ GetWalletError $ HD.UnknownHdRoot rootId
+        WalletFullyOwned ->
+            updateSyncState wallet rootId $ toWallet db hdRoot
 
 -- | Gets a specific EOS-wallet.
 getEosWallet
@@ -294,9 +320,14 @@ getEosWallet _wallet wId db = runExceptT $ do
     rootId <- withExceptT GetEosWalletWalletIdDecodingFailed (fromRootId wId)
     hdRoot <- withExceptT GetEosWalletError $ exceptT $ Kernel.lookupHdRootId db rootId
     debug $ "successfully decoded HdRoot: " <.> hdRoot
-    gap <- withExceptT GetEosWalletErrorAddressPoolGap $ exceptT $ addressPoolGapByRootId rootId db
-    debug $ "successfully recovered gap from accounts: " <.> gap
-    return $ toEosWallet db hdRoot gap
+    case addressPoolGapByRootId rootId db of
+        Left _ ->
+            -- No gap. Although wallet exists in DB, it's not EOS-wallet,
+            -- so report about it as if this wallet doesn't exist.
+            exceptT $ Left $ GetEosWalletError $ HD.UnknownHdRoot rootId
+        Right gap -> do
+            debug $ "successfully recovered gap from accounts: " <.> gap
+            return $ toEosWallet db hdRoot gap
   where
     debug :: MonadIO m => Text -> m ()
     debug = Kernel.mkLogger _wallet "getEosWallet" Debug
@@ -316,12 +347,7 @@ getWallets wallet db =
         let rootId = root ^. HD.hdRootId
         updateSyncState wallet rootId (toWallet db root)
   where
-    -- From 'acid-state' point of view there's no difference between
-    -- FO-wallet and EO-wallet, because it's just an `HdRoot`. So we
-    -- have to prefilter 'HdRoot's which are correspond to FO-wallets only.
-    foRoots = flip filter allRoots $ \root ->
-        isLeft $ Kernel.addressPoolGapByRootId (root ^. HD.hdRootId) db
-    allRoots = IxSet.toList $ db ^. dbHdWallets . HD.hdWalletsRoots
+    foRoots = getWalletsByOwnership WalletFullyOwned db
 
 getEosWallets
     :: MonadIO m
@@ -336,12 +362,7 @@ getEosWallets _wallet db = do
         Left e           -> Left $ GetEosWalletErrorAddressPoolGap e
         Right eosWallets -> Right $ IxSet.fromList eosWallets
   where
-    -- From 'acid-state' point of view there's no difference between
-    -- FO-wallet and EO-wallet, because it's just an `HdRoot`. So we
-    -- have to prefilter 'HdRoot's which are correspond to EO-wallets only.
-    eosRoots = flip filter allRoots $ \root ->
-        isRight $ Kernel.addressPoolGapByRootId (root ^. HD.hdRootId) db
-    allRoots = IxSet.toList $ db ^. dbHdWallets . HD.hdWalletsRoots
+    eosRoots = getWalletsByOwnership WalletExternallyOwned db
 
 -- | Gets Utxos per account of a wallet.
 getWalletUtxos

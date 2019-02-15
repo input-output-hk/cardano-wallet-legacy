@@ -9,6 +9,10 @@ module Cardano.Wallet.Kernel.Read (
     -- ** Eos Helper
   , getEosPools
   , addressPoolGapByRootId
+  , getWalletOwnership
+  , getWalletsByOwnership
+  , eosAccountsByRootId
+  , WalletOwnership (..)
     -- Errors
   , GetAddressPoolGapError (..)
     -- ** The only effectful getter you will ever need
@@ -195,6 +199,25 @@ addressPoolGapByRootId rootId db
             Left $ GetEosWalletErrorWrongAccounts (sformat build rootId)
         Just res -> snd <$> res
 
+getWalletOwnership
+    :: HdRootId
+    -> DB
+    -> WalletOwnership
+getWalletOwnership rootId db =
+    case addressPoolGapByRootId rootId db of
+        Right _ -> WalletExternallyOwned
+        Left _  -> WalletFullyOwned
+
+getWalletsByOwnership
+    :: WalletOwnership
+    -> DB
+    -> [HdRoot]
+getWalletsByOwnership ownership db =
+    flip filter allRoots $ \root ->
+        getWalletOwnership (root ^. hdRootId) db == ownership
+  where
+    allRoots = IxSet.toList $ db ^. dbHdWallets . hdWalletsRoots
+
 data GetAddressPoolGapError =
       GetEosWalletErrorNoAccounts Text
     | GetEosWalletErrorWrongAccounts Text
@@ -208,3 +231,8 @@ instance Buildable GetAddressPoolGapError where
         bprint ("FO-accounts found in EOS-wallet " % build) txt
     build (GetEosWalletErrorGapsDiffer txt) =
         bprint ("Address pool gaps differ, for EOS-wallet " % build) txt
+
+data WalletOwnership
+    = WalletFullyOwned
+    | WalletExternallyOwned
+    deriving Eq
