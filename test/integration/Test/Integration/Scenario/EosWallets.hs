@@ -564,6 +564,3 @@ spec = do
             let endpoint = "api/v1/wallets/externally-owned/" <> fromWalletId (eowallet ^. walletId)
             response <- unsafeRequest ("PUT", endpoint) $ Just $ [json| #{payload} |]
             verify (response :: Either ClientError EosWallet) expectations
-    where
-        fromWalletId :: Client.WalletId -> Text
-        fromWalletId (Client.WalletId a) = a
