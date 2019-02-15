@@ -472,7 +472,6 @@ spec = do
     describe "EOSWALLETS_UPDATE_03 - addressPoolGap cannot be outside [10..100]" $ do
         forM_ ([-1, 0, 9, 101]) $ \poolGap -> scenario ("addressPoolGap = " ++ show (poolGap :: Int)) $ do
             fixture  <- setup $ defaultSetup
-                & rawAddressPoolGap .~ 12
             eowallet <- successfulRequest $ Client.postEosWallet $- NewEosWallet
                 (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
                 noAddressPoolGap
@@ -522,9 +521,8 @@ spec = do
 
         forM_ matrix $ \(title, assurLevel, expectations) -> scenario ("assuranceLevel = " ++ title) $ do
             fixture  <- setup $ defaultSetup
-                & rawAddressPoolGap .~ 12
             eowallet <- successfulRequest $ Client.postEosWallet $- NewEosWallet
-                (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
+                (NE.fromList $ take 5 $ fixture ^. externallyOwnedAccounts)
                 noAddressPoolGap
                 defaultAssuranceLevel
                 defaultWalletName
