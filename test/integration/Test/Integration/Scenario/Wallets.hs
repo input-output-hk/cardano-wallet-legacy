@@ -1150,9 +1150,6 @@ spec = do
             verify (response :: Either ClientError Wallet) expectations
   where
 
-    fromWalletId :: Client.WalletId -> Text
-    fromWalletId (Client.WalletId a) = a
-
     testBackupPhrase :: [Text]
     testBackupPhrase =
         ["clap", "panda", "slim", "laundry", "more", "vintage", "cash", "shaft"
