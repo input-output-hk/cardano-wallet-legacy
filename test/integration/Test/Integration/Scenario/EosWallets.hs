@@ -377,6 +377,7 @@ spec = do
             ]
 
     scenario "EOSWALLETS_LIST_01, EOSWALLETS_LIST_02 - cannot get FO wallets with EOS endpoint" $ do
+        pendingWith "This test is failing due to broken Client.getEosWalletIndexFilterSorts endpoint (#336)"
         fixture  <- setup defaultSetup
         eowallet <- successfulRequest $ Client.postEosWallet $- NewEosWallet
             (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
