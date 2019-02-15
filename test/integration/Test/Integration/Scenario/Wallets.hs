@@ -5,7 +5,8 @@ module Test.Integration.Scenario.Wallets
 import           Universum
 
 import           Pos.Core (Coin (getCoin))
-import           Cardano.Wallet.API.V1.Types (EstimatedFees (feeEstimatedAmount),
+import           Cardano.Wallet.API.V1.Types
+                    (EstimatedFees (feeEstimatedAmount),
                     WalletCoin (unWalletCoin))
 import           Cardano.Wallet.Client.Http (ClientError, Wallet)
 import qualified Cardano.Wallet.Client.Http as Client
@@ -77,7 +78,7 @@ spec = do
             [ expectFieldEqual amount 0
             ]
 
-        fee <- fmap getCoin $ fmap unWalletCoin $ fmap feeEstimatedAmount $ successfulRequest $ Client.getTransactionFee $- Payment
+        fee <- fmap (getCoin . unWalletCoin . feeEstimatedAmount) $ successfulRequest $ Client.getTransactionFee $- Payment
             (defaultSource fixtureSource)
             (defaultDistribution 10 fixtureDest)
             defaultGroupingPolicy
