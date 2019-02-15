@@ -96,7 +96,7 @@ spec = do
             "name": "My EOS Wallet"
             }|]
         verify (response :: Either ClientError EosWallet)
-            [ expectJSONError "Error in $.accounts[0]: When parsing the record accountPublicKeyWithIx of type Cardano.Wallet.API.V1.Types.AccountPublicKeyWithIx the key publicKey was not present."
+            [ expectJSONError "the key publicKey was not present."
             ]
 
     scenario "EOSWALLETS_CREATE_03 - index must be present" $ do
@@ -112,7 +112,7 @@ spec = do
             "name": "My EOS Wallet"
             }|]
         verify (response :: Either ClientError EosWallet)
-            [ expectJSONError "Error in $.accounts[0]: When parsing the record accountPublicKeyWithIx of type Cardano.Wallet.API.V1.Types.AccountPublicKeyWithIx the key index was not present."
+            [ expectJSONError "the key index was not present."
             ]
 
     describe "EOSWALLETS_CREATE_03 - index must be [2147483648..4294967295]" $ do
@@ -173,15 +173,15 @@ spec = do
                   )
                 , ( "empty string"
                   , [json| "" |]
-                  , [ expectJSONError "Error in $.assuranceLevel: When parsing Cardano.Wallet.API.V1.Types.AssuranceLevel expected a String with the tag of a constructor but got ." ]
+                  , [ expectJSONError "expected a String with the tag of a constructor but got ." ]
                   )
                 , ( "555"
                   , [json| 555 |]
-                  , [ expectJSONError "Error in $.assuranceLevel: When parsing Cardano.Wallet.API.V1.Types.AssuranceLevel expected String but got Number." ]
+                  , [ expectJSONError "expected String but got Number." ]
                   )
                 , ( "亜哀愛źiemniak悪握圧扱安"
                   , [json| "亜哀愛źiemniak悪握圧扱安" |]
-                  , [ expectJSONError "Error in $.assuranceLevel: When parsing Cardano.Wallet.API.V1.Types.AssuranceLevel expected a String with the tag of a constructor but got 亜哀愛źiemniak悪握圧扱安" ]
+                  , [ expectJSONError "expected a String with the tag of a constructor but got 亜哀愛źiemniak悪握圧扱安" ]
                   )
                 ]
 
@@ -208,7 +208,7 @@ spec = do
                           "assuranceLevel": "strict",
                           "name": "Wallet EOS"
                           } |]
-                      , [ expectJSONError "Error in $: When parsing the record newEosWallet of type Cardano.Wallet.API.V1.Types.NewEosWallet the key accounts was not present." ]
+                      , [ expectJSONError "the key accounts was not present." ]
                       )
                     , ( "no assuranceLevel"
                       , [json| {
@@ -221,7 +221,7 @@ spec = do
                           "addressPoolGap": 70,
                           "name": "Wallet EOS"
                           } |]
-                      , [ expectJSONError "Error in $: When parsing the record newEosWallet of type Cardano.Wallet.API.V1.Types.NewEosWallet the key assuranceLevel was not present." ]
+                      , [ expectJSONError "the key assuranceLevel was not present." ]
                       )
                     , ( "no name"
                       , [json| {
@@ -234,7 +234,7 @@ spec = do
                           "addressPoolGap": 70,
                           "assuranceLevel": "strict"
                           } |]
-                      , [ expectJSONError "Error in $: When parsing the record newEosWallet of type Cardano.Wallet.API.V1.Types.NewEosWallet the key name was not present." ]
+                      , [ expectJSONError "the key name was not present." ]
                       )
                     ]
         forM_ matrix $ \(title, payload, expectations) -> scenario title $ do
@@ -507,15 +507,15 @@ spec = do
                   )
                 , ( "empty string"
                   , [json| "" |]
-                  , [ expectJSONError "Error in $.assuranceLevel: When parsing Cardano.Wallet.API.V1.Types.AssuranceLevel expected a String with the tag of a constructor but got ." ]
+                  , [ expectJSONError "expected a String with the tag of a constructor but got ." ]
                   )
                 , ( "555"
                   , [json| 555 |]
-                  , [ expectJSONError "Error in $.assuranceLevel: When parsing Cardano.Wallet.API.V1.Types.AssuranceLevel expected String but got Number." ]
+                  , [ expectJSONError "expected String but got Number." ]
                   )
                 , ( "亜哀愛źiemniak悪握圧扱安"
                   , [json| "亜哀愛źiemniak悪握圧扱安" |]
-                  , [ expectJSONError "Error in $.assuranceLevel: When parsing Cardano.Wallet.API.V1.Types.AssuranceLevel expected a String with the tag of a constructor but got 亜哀愛źiemniak悪握圧扱安" ]
+                  , [ expectJSONError "expected a String with the tag of a constructor but got 亜哀愛źiemniak悪握圧扱安" ]
                   )
                 ]
 
@@ -541,15 +541,15 @@ spec = do
         let matrix =
                     [ ( "no addressPoolGap"
                       , [json| { "assuranceLevel": "normal", "name": "My EosWallet" } |]
-                      , [ expectJSONError "Error in $: When parsing the record updateEosWallet of type Cardano.Wallet.API.V1.Types.UpdateEosWallet the key addressPoolGap was not present." ]
+                      , [ expectJSONError "the key addressPoolGap was not present." ]
                       )
                     , ( "no assuranceLevel"
                       , [json| { "addressPoolGap": 10, "name": "My EosWallet" } |]
-                      , [ expectJSONError "Error in $: When parsing the record updateEosWallet of type Cardano.Wallet.API.V1.Types.UpdateEosWallet the key assuranceLevel was not present." ]
+                      , [ expectJSONError "the key assuranceLevel was not present." ]
                       )
                     , ( "no name"
                       , [json| { "addressPoolGap": 10, "assuranceLevel": "normal" } |]
-                      , [ expectJSONError "Error in $: When parsing the record updateEosWallet of type Cardano.Wallet.API.V1.Types.UpdateEosWallet the key name was not present." ]
+                      , [ expectJSONError "the key name was not present." ]
                       )
                     ]
         forM_ matrix $ \(title, payload, expectations) -> scenario title $ do
