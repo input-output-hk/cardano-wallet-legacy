@@ -6,8 +6,8 @@ import           Universum
 
 import           Pos.Core (Coin (getCoin))
 import           Cardano.Wallet.API.V1.Types
-                    (EstimatedFees (feeEstimatedAmount),
-                    WalletCoin (unWalletCoin))
+                     (EstimatedFees (feeEstimatedAmount),
+                     WalletCoin (unWalletCoin))
 import           Cardano.Wallet.Client.Http (ClientError, Wallet)
 import qualified Cardano.Wallet.Client.Http as Client
 import           Test.Hspec (describe)
