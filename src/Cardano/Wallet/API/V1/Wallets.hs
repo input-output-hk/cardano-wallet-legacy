@@ -10,10 +10,10 @@ import           Pos.Core as Core
 import           Servant
 
 type FullyOwnedAPI = Tags '["Wallets"] :>
-    (    "wallets" :> Summary "Creates a new or restores an existing Wallet."
+    (    "wallets" :> Summary "Create a new Wallet or restore an existing one."
                    :> ReqBody '[ValidJSON] (New Wallet)
                    :> PostCreated '[ValidJSON] (APIResponse Wallet)
-    :<|> "wallets" :> Summary "Returns a list of the available wallets."
+    :<|> "wallets" :> Summary "Return a list of the available wallets."
                    :> WalletRequestParams
                    :> FilterBy '[ WalletId
                                 , Core.Coin
@@ -24,34 +24,34 @@ type FullyOwnedAPI = Tags '["Wallets"] :>
                    :> Get '[ValidJSON] (APIResponse [Wallet])
     :<|> "wallets" :> CaptureWalletId
                    :> "password"
-                   :> Summary "Updates the password for the given Wallet."
+                   :> Summary "Update the password for the given Wallet."
                    :> ReqBody '[ValidJSON] PasswordUpdate
                    :> Put '[ValidJSON] (APIResponse Wallet)
     :<|> "wallets" :> CaptureWalletId
-                   :> Summary "Deletes the given Wallet and all its accounts."
+                   :> Summary "Delete the given Wallet and all its accounts."
                    :> DeleteNoContent '[ValidJSON] NoContent
     :<|> "wallets" :> CaptureWalletId
-                   :> Summary "Returns the Wallet identified by the given walletId."
+                   :> Summary "Return the Wallet identified by the given walletId."
                    :> Get '[ValidJSON] (APIResponse Wallet)
     :<|> "wallets" :> CaptureWalletId
                    :> Summary "Update the Wallet identified by the given walletId."
                    :> ReqBody '[ValidJSON] (Update Wallet)
                    :> Put '[ValidJSON] (APIResponse Wallet)
     :<|> "wallets" :> CaptureWalletId :> "statistics" :> "utxos"
-                   :> Summary "Returns Utxo statistics for the Wallet identified by the given walletId."
+                   :> Summary "Return UTxO statistics for the Wallet identified by the given walletId."
                    :> Get '[ValidJSON] (APIResponse UtxoStatistics)
     )
 
 type ExternallyOwnedAPI = Tags '["Externally Owned Wallets"]
     :> ( "wallets"
         :> "externally-owned"
-        :> Summary "Creates a new or restores an existing Wallet."
+        :> Summary "Create a new Wallet or restore an existing one."
         :> ReqBody '[ValidJSON] (NewEosWallet)
         :> PostCreated '[ValidJSON] (APIResponse EosWallet)
 
     :<|> "wallets"
         :> "externally-owned"
-        :> Summary "Returns the Wallet identified by the given walletId."
+        :> Summary "Return the Wallet identified by the given walletId."
         :> CaptureWalletId
         :> Get '[ValidJSON] (APIResponse EosWallet)
 
@@ -64,13 +64,13 @@ type ExternallyOwnedAPI = Tags '["Externally Owned Wallets"]
 
     :<|> "wallets"
         :> "externally-owned"
-        :> Summary "Deletes the given Wallet and all its accounts."
+        :> Summary "Delete the given Wallet and all its accounts."
         :> CaptureWalletId
         :> DeleteNoContent '[ValidJSON] NoContent
 
     :<|> "wallets"
         :> "externally-owned"
-        :> Summary "Returns a list of the available wallets."
+        :> Summary "Return a list of the available wallets."
         :> WalletRequestParams
         :> FilterBy
            '[ WalletId
