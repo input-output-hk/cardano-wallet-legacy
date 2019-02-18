@@ -4,12 +4,12 @@ module Test.Integration.Scenario.Wallets
 
 import           Universum
 
-import           Pos.Core (Coin (getCoin))
 import           Cardano.Wallet.API.V1.Types
                      (EstimatedFees (feeEstimatedAmount),
                      WalletCoin (unWalletCoin))
 import           Cardano.Wallet.Client.Http (ClientError, Wallet)
 import qualified Cardano.Wallet.Client.Http as Client
+import           Pos.Core (Coin (getCoin))
 import           Test.Hspec (describe)
 import           Test.Integration.Framework.DSL
 
