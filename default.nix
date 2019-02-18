@@ -3,7 +3,7 @@
 #
 # To build the wallet, run:
 #
-#    nix-build -A exes.cardano-node
+#    nix-build -A exes.cardano-wallet-server
 #
 ############################################################################
 
@@ -27,7 +27,7 @@ let
   };
 
 in {
-  inherit haskellPackages;
+  inherit pkgs haskellPackages;
 
   inherit (haskellPackages.cardano-wallet.components)
     benchmarks exes library tests;
