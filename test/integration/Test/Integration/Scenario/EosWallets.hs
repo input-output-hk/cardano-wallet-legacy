@@ -8,11 +8,12 @@ import           Universum
 
 import qualified Data.List.NonEmpty as NE
 
+import           Cardano.Wallet.API.V1.Types
 import           Cardano.Wallet.Client.Http (ClientError, Wallet)
 import qualified Cardano.Wallet.Client.Http as Client
 import           Test.Hspec (describe)
 import           Test.Integration.Framework.DSL
-import           Cardano.Wallet.API.V1.Types
+
 
 spec :: Scenarios Context
 spec = do
