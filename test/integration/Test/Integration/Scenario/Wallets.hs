@@ -38,7 +38,7 @@ spec = do
             [ expectFieldEqual walletId (fixture ^. wallet . walletId)
             , expectFieldEqual assuranceLevel defaultAssuranceLevel
             , expectFieldEqual walletName defaultWalletName
-            -- , expectFieldEqual createdAt (fixture ^. wallet . createdAt)
+            , expectFieldEqual createdAt (fixture ^. wallet . createdAt)
             , expectFieldEqual spendingPasswordLastUpdate (fixture ^. wallet . spendingPasswordLastUpdate)
             , expectFieldEqual syncState (fixture ^. wallet . syncState)
             , expectFieldEqual hasSpendingPassword False
@@ -92,7 +92,6 @@ spec = do
         verify respPayment
             [ expectTxStatusEventually [InNewestBlocks, Persisted]
             ]
-
         getSourceAfter <- request $ Client.getWallet $- fixtureSource ^. wallet . walletId
         verify getSourceAfter
             [ expectFieldEqual amount (10000000 - 10 - fee)

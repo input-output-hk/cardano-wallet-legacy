@@ -458,7 +458,7 @@ spec = do
                            , expectFieldEqual walletName "After update EOS"
                            , expectFieldEqual addressPoolGap (fixture ^. addressPoolGap)
                             -- not updated
-                           , expectFieldEqual createdAt (eowallet ^. createdAt)
+                           , expectFieldEqual eosCreatedAt (eowallet ^. eosCreatedAt)
                            , expectFieldEqual amount 0
                            ]
 
