@@ -86,7 +86,6 @@ module Test.Integration.Framework.DSL
     , assuranceLevel
     , backupPhrase
     , createdAt
-    , eosCreatedAt
     , externallyOwnedAccounts
     , failures
     , fromWalletId
@@ -122,6 +121,7 @@ import           Data.Default (Default (..))
 import qualified Data.Foldable as F
 import           Data.Generics.Internal.VL.Lens (lens)
 import           Data.Generics.Product.Fields (field)
+import           Data.Generics.Product.Positions (HasPosition, position)
 import           Data.Generics.Product.Typed (HasType, typed)
 import           Data.List ((!!))
 import qualified Data.List.NonEmpty as NonEmpty
@@ -393,11 +393,8 @@ assuranceLevel = typed
 backupPhrase :: HasType BackupPhrase s => Lens' s BackupPhrase
 backupPhrase = typed
 
-createdAt :: Lens' Wallet WalletTimestamp
-createdAt = field @"walCreatedAt"
-
-eosCreatedAt :: Lens' EosWallet WalletTimestamp
-eosCreatedAt = field @"eoswalCreatedAt"
+createdAt :: HasPosition 6 s s WalletTimestamp WalletTimestamp => Lens' s WalletTimestamp
+createdAt = position @6
 
 externallyOwnedAccounts :: HasType [AccountPublicKeyWithIx] s => Lens' s [AccountPublicKeyWithIx]
 externallyOwnedAccounts = typed

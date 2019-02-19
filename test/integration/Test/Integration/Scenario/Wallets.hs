@@ -4,6 +4,8 @@ module Test.Integration.Scenario.Wallets
 
 import           Universum
 
+import qualified Data.List.NonEmpty as NonEmpty
+
 import           Cardano.Wallet.API.V1.Types
                      (EstimatedFees (feeEstimatedAmount),
                      WalletCoin (unWalletCoin))
@@ -32,7 +34,6 @@ spec = do
 
     scenario "WALLETS_DETAILS_01 - one gets all wallet details when providing valid wallet id" $ do
         fixture  <- setup defaultSetup
-
         response <- request $ Client.getWallet $- fixture ^. wallet . walletId
         verify response
             [ expectFieldEqual walletId (fixture ^. wallet . walletId)
@@ -68,6 +69,9 @@ spec = do
         fixtureSource <- setup $ defaultSetup
             & initialCoins .~ [10000000]
         fixtureDest <- setup $ defaultSetup
+        accountDest <- successfulRequest $ Client.getAccount
+            $- (fixtureDest ^. wallet . walletId)
+            $- defaultAccountId
 
         getSource <- request $ Client.getWallet $- fixtureSource ^. wallet . walletId
         verify getSource
@@ -80,13 +84,13 @@ spec = do
 
         fee <- fmap (getCoin . unWalletCoin . feeEstimatedAmount) $ successfulRequest $ Client.getTransactionFee $- Payment
             (defaultSource fixtureSource)
-            (defaultDistribution 10 fixtureDest)
+            (customDistribution $ NonEmpty.zipWith (,) (accountDest :| []) (10 :| []))
             defaultGroupingPolicy
             (Just $ defaultSpendingPassword)
 
         respPayment <- request $ Client.postTransaction $- Payment
             (defaultSource fixtureSource)
-            (defaultDistribution 10 fixtureDest)
+            (customDistribution $ NonEmpty.zipWith (,) (accountDest :| []) (10 :| []))
             defaultGroupingPolicy
             (Just $ defaultSpendingPassword)
         verify respPayment
@@ -96,10 +100,10 @@ spec = do
         verify getSourceAfter
             [ expectFieldEqual amount (10000000 - 10 - fee)
             ]
-        -- getDestAfter <- request $ Client.getWallet $- fixtureDest ^. wallet . walletId
-        -- verify getDestAfter
-        --     [ expectFieldEqual amount 10
-        --     ]
+        getDestAfter <- request $ Client.getWallet $- fixtureDest ^. wallet . walletId
+        verify getDestAfter
+            [ expectFieldEqual amount 10
+            ]
 
     scenario "WALLETS_LIST_01 - One can list all wallets without providing any parameters" $ do
         fixtures <- forM (zip [1..3] [NormalAssurance, NormalAssurance, StrictAssurance]) $ \(name, level) -> do
