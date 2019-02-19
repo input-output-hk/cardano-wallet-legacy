@@ -283,8 +283,7 @@ newtype WalletCoin = WalletCoin { unWalletCoin :: Core.Coin }
 
 deriveSafeBuildable ''WalletCoin
 instance BuildableSafeGen WalletCoin where
-    buildSafeGen sl (WalletCoin c) =
-        bprint (plainOrSecureF sl build (fconst "<wallet coin>")) c
+    buildSafeGen _ (WalletCoin c) = bprint build c
 
 instance ToJSON WalletCoin where
     toJSON (WalletCoin c) = toJSON . Core.unsafeGetCoin $ c
@@ -347,8 +346,7 @@ newtype WalletTimestamp = WalletTimestamp Core.Timestamp
 
 deriveSafeBuildable ''WalletTimestamp
 instance BuildableSafeGen WalletTimestamp where
-    buildSafeGen sl (WalletTimestamp ts) =
-        bprint (plainOrSecureF sl build (fconst "<wallet timestamp>")) ts
+    buildSafeGen _ (WalletTimestamp ts) = bprint build ts
 
 -- | Represents according to 'apiTimeFormat' format.
 instance ToJSON WalletTimestamp where
@@ -420,8 +418,8 @@ instance ToSchema AssuranceLevel where
 
 deriveSafeBuildable ''AssuranceLevel
 instance BuildableSafeGen AssuranceLevel where
-    buildSafeGen _ NormalAssurance = "normal"
-    buildSafeGen _ StrictAssurance = "strict"
+    buildSafeGen _ NormalAssurance = "assurance level: normal"
+    buildSafeGen _ StrictAssurance = "assurance level: strict"
 
 -- | A Wallet ID.
 newtype WalletId = WalletId Text deriving (Show, Eq, Ord, Generic)
@@ -441,8 +439,8 @@ instance Arbitrary WalletId where
 
 deriveSafeBuildable ''WalletId
 instance BuildableSafeGen WalletId where
-    buildSafeGen sl (WalletId wid) =
-        bprint (plainOrSecureF sl build (fconst "<wallet id>")) wid
+    buildSafeGen _ (WalletId wid) =
+        bprint ("wallet id: " % build) wid
 
 instance FromHttpApiData WalletId where
     parseQueryParam = Right . WalletId
@@ -474,8 +472,8 @@ instance ToSchema WalletOperation where
 
 deriveSafeBuildable ''WalletOperation
 instance BuildableSafeGen WalletOperation where
-    buildSafeGen _ CreateWallet  = "create"
-    buildSafeGen _ RestoreWallet = "restore"
+    buildSafeGen _ CreateWallet  = "operation: create"
+    buildSafeGen _ RestoreWallet = "operation: restore"
 
 
 newtype BackupPhrase = BackupPhrase
@@ -522,21 +520,17 @@ instance ToSchema NewWallet where
       & ("operation"        --^ "Create a new wallet or Restore an existing one.")
     )
 
-
 deriveSafeBuildable ''NewWallet
 instance BuildableSafeGen NewWallet where
-    buildSafeGen sl NewWallet{..} = bprint ("{"
-        %" backupPhrase="%buildSafe sl
-        %" spendingPassword="%(buildSafeMaybe mempty sl)
-        %" assuranceLevel="%buildSafe sl
-        %" name="%buildSafe sl
-        %" operation"%buildSafe sl
-        %" }")
-        newwalBackupPhrase
-        newwalSpendingPassword
-        newwalAssuranceLevel
-        newwalName
+    buildSafeGen _ NewWallet{..} = bprint
+        ( "Request for new wallet"
+        % "\n  " % build
+        % "\n  name: " % build
+        % "\n  " % build
+        )
         newwalOperation
+        newwalName
+        newwalAssuranceLevel
 
 -- | Type for representation of serialized transaction in Base16-format.
 -- We use it for external wallets (to send/receive raw transaction during
@@ -652,12 +646,13 @@ instance Arbitrary WalletUpdate where
 
 deriveSafeBuildable ''WalletUpdate
 instance BuildableSafeGen WalletUpdate where
-    buildSafeGen sl WalletUpdate{..} = bprint ("{"
-        %" assuranceLevel="%buildSafe sl
-        %" name="%buildSafe sl
-        %" }")
-        uwalAssuranceLevel
+    buildSafeGen _ WalletUpdate{..} = bprint
+        ( "Update for wallet"
+        % "\n  name: " % build
+        % "\n  " % build
+        )
         uwalName
+        uwalAssuranceLevel
 
 newtype EstimatedCompletionTime = EstimatedCompletionTime (MeasuredIn 'Milliseconds Word)
   deriving (Show, Eq)
@@ -891,14 +886,21 @@ instance Arbitrary Wallet where
 
 deriveSafeBuildable ''Wallet
 instance BuildableSafeGen Wallet where
-  buildSafeGen sl Wallet{..} = bprint ("{"
-    %" id="%buildSafe sl
-    %" name="%buildSafe sl
-    %" balance="%buildSafe sl
-    %" }")
+  buildSafeGen _ Wallet{..} = bprint
+    ( "Wallet"
+    % "\n  " % build
+    % "\n  name: " % build
+    % "\n  balance: " % build
+    % "\n  created at: " % build
+    % "\n  " % build
+    % "\n  has spending password: " % build
+    )
     walId
     walName
     walBalance
+    walCreatedAt
+    walAssuranceLevel
+    walHasSpendingPassword
 
 instance Buildable [Wallet] where
     build = bprint listJson
