@@ -119,8 +119,12 @@ restoreWallet pw hasSpendingPassword defaultCardanoAddress name assurance esk
     case walletInitInfo of
         WalletCreate utxos -> do
             root <- createWalletHdRnd'
-                $ \root defaultHdAccount defaultHdAddress -> Left
-                $ CreateHdWallet root defaultHdAccount defaultHdAddress utxos
+                $ \root defaultHdAccount defaultHdAddress -> do
+                    let defUtxo = M.singleton
+                            (HD.HdAccountBaseFO defaultHdAccount)
+                            (mempty, maybeToList defaultHdAddress)
+                    let utxos' = M.mapKeys HD.HdAccountBaseFO utxos
+                    Left $ CreateHdWallet root (M.unionWith (<>) utxos' defUtxo)
             return $ fmap (, mkCoin 0) root
         WalletRestore utxos tgt -> do
             -- Create the wallet for restoration, deleting the wallet first if it
@@ -174,11 +178,11 @@ mkPrefilter
     -> (HD.HdRootId, EncryptedSecretKey)
     -> Blund
     -> IO (PrefilteredBlock, [TxMeta])
-mkPrefilter wallet creds blund = do
+mkPrefilter wallet (rootId,esk) blund = do
     foreigns <- fmap Pending.txIns . foreignPendingByAccount <$> getWalletSnapshot wallet
     blundToResolvedBlock (wallet ^. Kernel.walletNode) blund >>= \case
         Nothing -> return (mempty, [])
-        Just rb -> flip evalStateT [creds] $ do
+        Just rb -> flip evalStateT (M.singleton rootId esk) $ do
             pb <- state $ prefilterBlock foreigns rb
             metas <- state (resolvedToTxMetas rb) >>= \case
                 Left e  -> throwM e
@@ -349,7 +353,7 @@ getWalletInitInfo
     -> (HD.HdRootId, EncryptedSecretKey)
     -> Lock (WithNodeState IO)
     -> WithNodeState IO WalletInitInfo
-getWalletInitInfo coreConfig creds lock = do
+getWalletInitInfo coreConfig (rootId,esk) lock = do
     -- Find all of the current UTXO that this wallet owns.
     -- We lock the node state to be sure the tip header and the UTxO match
     (tipHeader, curUtxo) <-
@@ -358,7 +362,7 @@ getWalletInitInfo coreConfig creds lock = do
 
     -- Find genesis UTxO for this wallet
     let genUtxo :: Map HD.HdAccountId (Utxo, [HD.HdAddress])
-        genUtxo = M.unionsWith (<>) $ flip evalState [creds] $ do
+        genUtxo = M.unionsWith (<>) $ flip evalState (M.singleton rootId esk) $ do
             fmap (fmap byAccount . M.toList) $ state $
                 prefilterUtxo (genesisUtxo $ configGenesisData coreConfig)
               where
@@ -408,7 +412,7 @@ getWalletInitInfo coreConfig creds lock = do
 
     isOurs :: (TxIn, TxOutAux) -> Maybe (HD.HdAccountId, Map TxIn (TxOutAux, HD.HdAddressId))
     isOurs (inp, out@(TxOutAux (TxOut addr _))) = do
-        hdAddr <- evalState (state $ HD.isOurs addr) [creds]
+        hdAddr <- evalState (state $ HD.isOurs addr) (M.singleton rootId esk)
         let addrId = hdAddr ^. HD.hdAddressId
         return (addrId ^. HD.hdAddressIdParent, M.singleton inp (out, addrId))
 

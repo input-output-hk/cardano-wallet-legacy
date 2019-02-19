@@ -78,7 +78,6 @@ data WalletClient m
          :: Text -> Resp m WalletAddress
     , importAddresses
         :: WalletId
-        -> AccountIndex
         -> [WalAddress]
         -> Resp m (BatchImportResult WalAddress)
     -- wallets endpoints
@@ -158,6 +157,27 @@ data WalletClient m
         :: m (Either ClientError ())
     , importWallet
         :: WalletImport -> Resp m Wallet
+
+    -- Externally Owned Wallets Endpoints
+    , postEosWallet
+        :: NewEosWallet
+        -> Resp m EosWallet
+    , getEosWallet
+        :: WalletId
+        -> Resp m EosWallet
+    , updateEosWallet
+        :: WalletId
+        -> UpdateEosWallet
+        -> Resp m EosWallet
+    , deleteEosWallet
+        :: WalletId
+        -> m (Either ClientError ())
+    , getEosWalletIndexFilterSorts
+         :: Maybe Page
+         -> Maybe PerPage
+         -> FilterOperations '[WalletId, Core.Coin] EosWallet
+         -> SortOperations EosWallet
+         -> Resp m [EosWallet]
     } deriving Generic
 
 
@@ -238,7 +258,7 @@ natMapClient phi f wc = WalletClient
     , getAddress =
         f . phi . getAddress wc
     , importAddresses =
-        \x y -> f . phi . importAddresses wc x y
+        \x -> f . phi . importAddresses wc x
     , postWallet =
         f . phi . postWallet wc
     , getWalletIndexFilterSorts =
@@ -294,6 +314,16 @@ natMapClient phi f wc = WalletClient
         f $ phi $ resetWalletState wc
     , importWallet =
         f . phi . importWallet wc
+    , postEosWallet =
+        f . phi . postEosWallet wc
+    , getEosWallet =
+        f . phi . getEosWallet wc
+    , updateEosWallet =
+        \x -> f . phi . updateEosWallet wc x
+    , deleteEosWallet =
+        f . phi . deleteEosWallet wc
+    , getEosWalletIndexFilterSorts =
+        \x y p -> f . phi . getEosWalletIndexFilterSorts wc x y p
     }
 
 -- | Run the given natural transformation over the 'WalletClient'.

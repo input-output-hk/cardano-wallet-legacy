@@ -9,7 +9,8 @@ import           Universum
 import           Control.Concurrent.Async
 import           Control.Exception.Safe (bracket)
 import qualified Data.List.NonEmpty as NonEmpty
-import           Formatting (bprint)
+import           Formatting (bprint, (%))
+import qualified Formatting as F
 import           Formatting.Buildable (build)
 import           Serokell.Util.Text (listJsonIndent, pairF)
 import           Test.Hspec (Spec, describe, it, shouldBe, shouldReturn)
@@ -119,7 +120,9 @@ instance Arbitrary Input where
     arbitrary = Input <$> arbitrary
 
 instance Buildable Input where
-    build (Input b) = bprint quadF b
+    build (Input (a, b, c, d)) =
+        bprint ("(" % F.build % ", " % F.build % ", " % F.build % ", " % F.build % ")")
+        a b c d
 
 instance Buildable (Int, Input) where
     build b = bprint pairF b

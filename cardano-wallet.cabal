@@ -27,12 +27,10 @@ library
       OverloadedStrings
       RecordWildCards
       ScopedTypeVariables
-      ScopedTypeVariables
       TemplateHaskell
       TupleSections
       TypeApplications
       TypeFamilies
-      TypeOperators
       TypeOperators
       UndecidableInstances
   ghc-options:
@@ -82,7 +80,6 @@ library
     , exceptions
     , filepath
     , foldl
-    , formatting
     , formatting
     , generics-sop
     , http-api-data
@@ -275,11 +272,9 @@ executable cardano-wallet-server
       OverloadedStrings
       RecordWildCards
       ScopedTypeVariables
-      ScopedTypeVariables
       TemplateHaskell
       TypeApplications
       TypeFamilies
-      TypeOperators
       TypeOperators
       UndecidableInstances
   ghc-options:
@@ -367,6 +362,7 @@ test-suite unit
   ghc-options:
       -threaded -rtsopts
       -Wall
+      -Werror
       -O2
 
   build-depends:
@@ -556,8 +552,8 @@ test-suite integration
       MultiParamTypeClasses
       NoImplicitPrelude
       NoMonomorphismRestriction
-      OverloadedStrings
       OverloadedLabels
+      OverloadedStrings
       QuasiQuotes
       ScopedTypeVariables
       TupleSections
@@ -590,7 +586,10 @@ test-suite integration
     , cardano-wallet
     , containers
     , cryptonite
+    , directory
+    , data-default
     , filepath
+    , formatting
     , generic-lens
     , hspec
     , hspec-core
@@ -619,6 +618,7 @@ test-suite integration
       Test.Integration.Framework.Scenario
       Test.Integration.Scenario.Accounts
       Test.Integration.Scenario.Addresses
+      Test.Integration.Scenario.EosWallets
       Test.Integration.Scenario.Transactions
       Test.Integration.Scenario.Wallets
       Test.Integration.Scenario.Node

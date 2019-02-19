@@ -30,8 +30,7 @@ import qualified Cardano.Wallet.Kernel.Mode as Kernel.Mode
 import           Cardano.Wallet.Kernel.NodeStateAdaptor (newNodeStateAdaptor)
 import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
 import           Cardano.Wallet.Server.CLI (WalletBackendParams (..),
-                     getFullMigrationFlag, getWalletDbOptions, walletDbPath,
-                     walletNodeAddress, walletRebuildDb)
+                     walletDbPath, walletNodeAddress, walletRebuildDb)
 import           Cardano.Wallet.Server.Middlewares
                      (faultInjectionHandleIgnoreAPI, throttleMiddleware,
                      unsupportedMimeTypeMiddleware, withDefaultHeader)
@@ -61,10 +60,8 @@ actionWithWallet
 
     let (nodeIp, nodePort) = walletNodeAddress
     nodeClient <- Plugins.setupNodeClient
-         (BS8.unpack nodeIp, fromIntegral nodePort)
-         walletNodeTlsClientCert
-         walletNodeTlsCaCertPath
-         walletNodeTlsPrivKey
+        (BS8.unpack nodeIp, fromIntegral nodePort)
+        nodeTLSParams
 
     let nodeState = newNodeStateAdaptor
             genesisConfig
@@ -74,9 +71,8 @@ actionWithWallet
             nodeClient
 
     liftIO $ Keystore.bracketLegacyKeystore userSecret $ \keystore -> do
-        let dbOptions = getWalletDbOptions params
-        let dbPath = walletDbPath dbOptions
-        let rebuildDB = walletRebuildDb dbOptions
+        let dbPath = walletDbPath walletDbOptions
+        let rebuildDB = walletRebuildDb walletDbOptions
         let dbMode = Kernel.UseFilePath (Kernel.DatabaseOptions {
               Kernel.dbPathAcidState = dbPath <> "-acid"
             , Kernel.dbPathMetadata  = dbPath <> "-sqlite.sqlite3"
@@ -84,7 +80,7 @@ actionWithWallet
             })
         let pm = configProtocolMagic genesisConfig
         WalletLayer.Kernel.bracketPassiveWallet pm dbMode logMessage' keystore nodeState (npFInjects nodeParams) $ \walletLayer passiveWallet -> do
-            migrateLegacyDataLayer passiveWallet dbPath (getFullMigrationFlag params)
+            migrateLegacyDataLayer passiveWallet dbPath forceFullMigration
 
             let plugs = plugins (walletLayer, passiveWallet) nodeClient dbMode
 
@@ -112,13 +108,12 @@ actionWithWallet
 
             -- Periodically compact & snapshot the acid-state database.
             , ("acid state cleanup", Plugins.acidStateSnapshots (view Kernel.Internal.wallets (snd w)) params dbMode)
+            , ("node monitoring server", Plugins.nodeAPIServer params genesisConfig ntpConfig nodeRes)
             ]
         -- The corresponding wallet documention, served as a different
         -- server which doesn't require client x509 certificates to
         -- connect, but still serves the doc through TLS
         , maybe [] (pure . ("doc server",)) (Plugins.docServer params)
-        -- The monitoring API for the Core node.
-        , Plugins.monitoringServer params
         ]
 
     -- Extract the logger name from node parameters

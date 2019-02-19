@@ -2,6 +2,7 @@ module Cardano.Wallet.Kernel.Accounts (
       createAccount
     , deleteAccount
     , updateAccount
+    , updateAccountGap
     -- * Errors
     , CreateAccountError(..)
     ) where
@@ -19,14 +20,16 @@ import           Data.Acid (update)
 import           Pos.Core.NetworkMagic (makeNetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, PassPhrase)
 
+import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (CreateHdAccount (..), DB,
-                     DeleteHdAccount (..), UpdateHdAccountName (..))
+                     DeleteHdAccount (..), UpdateHdAccountGap (..),
+                     UpdateHdAccountName (..))
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (AccountName (..),
                      HdAccount (..), HdAccountBase (..), HdAccountId (..),
                      HdAccountIx (..), HdAccountState (..),
                      HdAccountUpToDate (..), UnknownHdAccount (..),
-                     hdAccountName)
+                     UpdateGapError (..), hdAccountName)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Create
                      (CreateHdAccountError (..), initHdAccount)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
@@ -168,3 +171,13 @@ updateAccount hdAccountId newAccountName pw = do
     return $ case res of
          Left dbError        -> Left dbError
          Right (db, account) -> Right (db, account)
+
+-- | Updates address pool gap in an HD 'Account' (in EOS-wallet).
+updateAccountGap
+    :: HdAccountId
+    -> AddressPoolGap
+    -- ^ The new adress pool gap for this account.
+    -> PassiveWallet
+    -> IO (Either UpdateGapError (DB, HdAccount))
+updateAccountGap hdAccountId newGap pw = liftIO $
+    update (pw ^. wallets) (UpdateHdAccountGap hdAccountId newGap)

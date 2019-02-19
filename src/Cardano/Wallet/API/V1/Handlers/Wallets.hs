@@ -136,23 +136,32 @@ readEosWallets
     :: PassiveWalletLayer IO
     -> WalletId
     -> Handler (APIResponse EosWallet)
-readEosWallets _ _ = do
-    throwM $ err501 { errBody = "Not Implemented" }
+readEosWallets pwl wid = do
+    res <- liftIO $ WalletLayer.getEosWallet pwl wid
+    case res of
+         Left e  -> throwM e
+         Right w -> return $ single w
 
 updateEosWallets
     :: PassiveWalletLayer IO
     -> WalletId
     -> UpdateEosWallet
     -> Handler (APIResponse EosWallet)
-updateEosWallets _ _ _ = do
-    throwM $ err501 { errBody = "Not Implemented" }
+updateEosWallets pwl wid walletUpdateRequest = do
+    res <- liftIO $ WalletLayer.updateEosWallet pwl wid walletUpdateRequest
+    case res of
+         Left e  -> throwM e
+         Right w -> return $ single w
 
 deleteEosWallets
     :: PassiveWalletLayer IO
     -> WalletId
     -> Handler NoContent
-deleteEosWallets _ _ = do
-    throwM $ err501 { errBody = "Not Implemented" }
+deleteEosWallets pwl wid = do
+    res <- liftIO $ WalletLayer.deleteEosWallet pwl wid
+    case res of
+         Left e   -> throwM e
+         Right () -> return NoContent
 
 listEosWallets
     :: PassiveWalletLayer IO
@@ -160,5 +169,12 @@ listEosWallets
     -> FilterOperations '[WalletId, Coin] EosWallet
     -> SortOperations EosWallet
     -> Handler (APIResponse [EosWallet])
-listEosWallets _ _ _ _ = do
-    throwM $ err501 { errBody = "Not Implemented" }
+listEosWallets pwl params fops sops = do
+    res <- liftIO $ WalletLayer.getEosWallets pwl
+    case res of
+        Left e -> throwM e
+        Right wallets ->
+            respondWith params
+                fops
+                sops
+                (pure wallets)

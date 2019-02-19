@@ -12,6 +12,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import           Options.Applicative (handleParseResult, info)
 import qualified Prelude
+import           System.Directory (doesPathExist)
 import           System.Environment (getEnvironment)
 import           System.FilePath ((</>))
 
@@ -59,16 +60,15 @@ defaultIntegrationEnv = Map.fromList
     , ("CONFIGURATION_KEY", "default")
     , ("STATE_DIR", "./state-integration")
     , ("REBUILD_DB", "True")
-    , ("WALLET_ADDRESS", "127.0.0.1:8090")
-    , ("WALLET_DOC_ADDRESS", "127.0.0.1:8190")
-    , ("WALLET_DB_PATH", "./state-integration/wallet-db/edge")
     , ("WALLET_REBUILD_DB", "True")
-    , ("WALLET_NODE_API_ADDRESS", "127.0.0.1:8089")
-    , ("NODE_API_ADDRESS", "127.0.0.1:8086")
-    , ("NODE_DOC_ADDRESS", "127.0.0.1:3186")
-    , ("NODE_TLS_CLIENT_CERT", "./state-integration/tls/relay/client.crt")
-    , ("NODE_TLS_KEY", "./state-integration/tls/relay/client.key")
-    , ("NODE_TLS_CA_CERT", "./state-integration/tls/relay/ca.crt")
+    , ("WALLET_DB_PATH", "./state-integration/wallet-db/edge")
+    , ("WALLET_API_ADDRESS", "127.0.0.1:8090")
+    , ("WALLET_DOC_ADDRESS", "127.0.0.1:8190")
+    , ("TLS_CA_CERT", "./state-integration/tls/edge/ca.crt")
+    , ("TLS_WALLET_SERVER_CERT", "./state-integration/tls/edge/server.crt")
+    , ("TLS_WALLET_SERVER_KEY", "./state-integration/tls/edge/server.key")
+    , ("TLS_NODE_CLIENT_CERT", "./state-integration/tls/edge/client.crt")
+    , ("TLS_NODE_CLIENT_KEY", "./state-integration/tls/edge/client.key")
     ]
 
 -- | Start an integration cluster. Quite identical to the original "start cluster".
@@ -88,13 +88,20 @@ startCluster nodes = do
     let stateDir   = env0 ! "STATE_DIR" -- Safe, we just defaulted it above
     let configFile = env0 ! "CONFIGURATION_FILE" -- Safe, we just defaulted it above
     let configKey  = env0 ! "CONFIGURATION_KEY" -- Safe, we just defaulted it above
+    let genKeyDir  = stateDir </> "generated-keys"
 
-    handles <- forM nodes $ \node@(_, nodeType) -> runAsync $ \yield -> do
+    handles <- forM nodes $ \node@(NodeName nodeId, nodeType) -> runAsync $ \yield -> do
         let (artifacts, nodeEnv) = prepareEnvironment node nodes stateDir env0
         let (genesis, topology, logger, tls) = artifacts
         case nodeType of
             NodeCore -> do
-                void (init genesis >> init topology >> init logger >> init tls)
+                doesPathExist genKeyDir >>= \case
+                    False -> void (init genesis)
+                    True  -> putTextLn
+                        $ "WARNING (" <> nodeId <> "): "
+                        <> "not generating new keys in '" <> toText genKeyDir <> "' "
+                        <> "because the directory already exists."
+                void (init topology >> init logger >> init tls)
                 yield (nodeEnv, Nothing) >> startNode node nodeEnv
             NodeRelay -> do
                 void (init topology >> init logger >> init tls)
@@ -112,7 +119,7 @@ startCluster nodes = do
             , cfoSystemStart = Just 0
             , cfoSeed        = Nothing
             }
-    (env,,manager) <$> getGenesisKeys stateDir configOpts
+    (env,,manager) <$> getGenesisKeys genKeyDir configOpts
   where
     init :: Artifact a b -> IO b
     init = initializeArtifact
@@ -183,10 +190,10 @@ getGenesisKeys
     :: FilePath
     -> ConfigurationOptions
     -> IO [FilePath]
-getGenesisKeys stateDir configOpts = do
+getGenesisKeys genKeyDir configOpts = do
     gs <- getGeneratedSecrets configOpts
     let genesisKeys =
-            [ stateDir </> "generated-keys" </> "poor" </> (show i <> ".key")
+            [ genKeyDir </> "poor" </> (show i <> ".key")
             | i <- iterate (+1) (0 :: Int)
             ]
     return $ take (length $ gsPoorSecrets gs) genesisKeys
@@ -204,8 +211,12 @@ printCartouche :: Env -> IO ()
 printCartouche env = do
     let colSize = 35
     putTextLn $ toText (env ! "NODE_ID") <> T.replicate (colSize - length (env !  "NODE_ID")) "-"
-    when (Map.member "LISTEN" env) $ putTextLn $  "|.....listen:        " <> toText (env ! "LISTEN")
-    putTextLn $ "|.....api address:   " <> toText (env ! "NODE_API_ADDRESS")
-    putTextLn $ "|.....doc address:   " <> toText (env ! "NODE_DOC_ADDRESS")
-    putTextLn $ "|.....system start:  " <> toText (env ! "SYSTEM_START")
+    safeLine "LISTEN"           "|.....listen:        "
+    safeLine "NODE_API_ADDRESS" "|.....api address:   "
+    safeLine "NODE_DOC_ADDRESS" "|.....doc address:   "
+    safeLine "SYSTEM_START"     "|.....system start:  "
     putTextLn $ T.replicate colSize "-" <> "\n"
+  where
+    safeLine :: String -> Text -> IO ()
+    safeLine k title =
+        when (Map.member k env) $ putTextLn $ title <> toText (env ! k)

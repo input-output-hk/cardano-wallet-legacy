@@ -40,7 +40,6 @@ module Cardano.Wallet.Kernel.DB.TxMeta.Types (
 
   -- * Internals useful for testing
   , uniqueElements
-  , quadF
   , PutReturn (..)
   ) where
 
@@ -49,15 +48,12 @@ import           Universum
 import           Control.Lens.TH (makeLenses)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Set as Set
-import qualified Data.Text.Lazy.Builder as B
-import           Formatting (bprint, shown, (%))
-import qualified Formatting as F
-import           Formatting.Buildable (build)
-import           Pos.Crypto (shortHashF)
-import           Serokell.Util.Text (listBuilderJSON, listJsonIndent,
-                     mapBuilder)
+import           Formatting (bprint, build, int, later, shown, string, (%))
+import qualified Formatting.Buildable
 import           Test.QuickCheck (Arbitrary (..), Gen)
 
+import           Cardano.Wallet.Util (buildIndent, buildList, buildTrunc,
+                     buildTuple2)
 import qualified Pos.Chain.Txp as Txp
 import qualified Pos.Core as Core
 
@@ -109,6 +105,36 @@ data TxMeta = TxMeta {
     } deriving Show
 
 makeLenses ''TxMeta
+
+instance Buildable TxMeta where
+    build txMeta = bprint
+        ( "TxMeta (#"%build%" "%string%" "%string%" "%build%"μs)"
+        % "\n  amount: "%build
+        % "\n  owner: "%buildTrunc build%"/"%build
+        % "\n  inputs:     \n"%buildIndent 4 (buildList buildMetaInput)
+        % "\n  outputs:    \n"%buildIndent 4 (buildList (buildTuple2 (buildTrunc build) "=>" build))
+        )
+        (txMeta ^. txMetaId)
+        (if txMeta ^. txMetaIsLocal then "local" else "!local")
+        (if txMeta ^. txMetaIsOutgoing then "out" else "in")
+        (txMeta ^. txMetaCreationAt)
+        (txMeta ^. txMetaAmount)
+        (txMeta ^. txMetaWalletId)
+        (txMeta ^. txMetaAccountIx)
+        (txMeta ^. txMetaInputs)
+        (txMeta ^. txMetaOutputs)
+      where
+        buildMetaInput = later $ \(txid, i, addr, coin) ->
+            bprint (build%"."%int%" ~ "%buildTrunc build%" "%build)
+                txid
+                i
+                addr
+                coin
+
+instance Buildable [TxMeta] where
+    build [] = "Empty Tx Metas"
+    build xs = bprint ("TxMetas\n" % buildIndent 2 (buildList build)) xs
+
 
 -- | Strict equality for two 'TxMeta': two 'TxMeta' are equal if they have
 -- exactly the same data, and inputs & outputs needs to appear in exactly
@@ -196,43 +222,6 @@ uniqueElements size = do
         else do
           a <- arbitrary
           go (Set.insert a st)
-
-instance Buildable TxMeta where
-    build txMeta = bprint (" id = "%shortHashF%
-                           " amount = " % F.build %
-                           " inputs = " % F.later tQuadBuilder %
-                           " outputs = " % F.later mapBuilder %
-                           " creationAt = " % F.build %
-                           " isLocal = " % F.build %
-                           " isOutgoing = " % F.build %
-                           " walletId = " % F.build %
-                           " accountIx = " % F.build
-                          ) (txMeta ^. txMetaId)
-                            (txMeta ^. txMetaAmount)
-                            (txMeta ^. txMetaInputs)
-                            (txMeta ^. txMetaOutputs)
-                            (txMeta ^. txMetaCreationAt)
-                            (txMeta ^. txMetaIsLocal)
-                            (txMeta ^. txMetaIsOutgoing)
-                            (txMeta ^. txMetaWalletId)
-                            (txMeta ^. txMetaAccountIx)
-
-tQuadBuilder
-    :: (Traversable t, Buildable a, Buildable b, Buildable c, Buildable d)
-    => t (a, b, c, d) -> B.Builder
-tQuadBuilder = listBuilderJSON . fmap quadBuilder
-
-quadBuilder
-    :: (Buildable a, Buildable b, Buildable c, Buildable d)
-    => (a, b, c, d) -> B.Builder
-quadBuilder (a, b, c, d) = bprint ("(" % F.build % ", " % F.build % ", "
-      % F.build % ", " % F.build % ")") a b c d
-
-quadF :: (Buildable a, Buildable b, Buildable c, Buildable d) => F.Format r ((a,b,c,d) -> r)
-quadF = F.later quadBuilder
-
-instance Buildable [TxMeta] where
-    build txMeta = bprint ("TxMetas: "%listJsonIndent 4) txMeta
 
 
 -- | Basic filtering & sorting types.

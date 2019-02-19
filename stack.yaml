@@ -4,7 +4,7 @@ packages:
 
 extra-deps:
 - git: https://github.com/input-output-hk/cardano-sl
-  commit: cdc77284bde949d4b1b9ac7be81b76b906a71fc7
+  commit: 632769d4480d3b19299d801c9fb39e75d20dd7d9
   subdirs:
     - acid-state-exts
     - binary
@@ -30,3 +30,6 @@ extra-deps:
     - x509
 
 - generic-lens-1.1.0.0
+
+nix:
+  shell-file: nix/stack-shell.nix

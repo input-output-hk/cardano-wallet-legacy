@@ -20,22 +20,28 @@ module Test.Integration.Framework.DSL
     , verify
 
     -- * Requests (Only API types)
-    , NewAddress(..)
-    , NewWallet (..)
-    , NewAccount (..)
-    , PasswordUpdate (..)
-    , Payment (..)
-    , Redemption (..)
-    , WalletUpdate(..)
-    , ShieldedRedemptionCode (..)
-    , FilterOperations(..)
-    , SortOperations(..)
-    , WalletOperation(..)
+    , AddressPoolGap
     , AssuranceLevel(..)
     , DestinationChoice(..)
+    , EosWallet(..)
+    , FilterOperations(..)
+    , NewAccount (..)
+    , NewAddress(..)
+    , NewEosWallet (..)
+    , NewWallet (..)
+    , PasswordUpdate (..)
+    , Payment (..)
+    , RawPassword (..)
+    , Redemption (..)
+    , ShieldedRedemptionCode (..)
+    , SortOperations(..)
+    , WalletOperation(..)
+    , WalletUpdate(..)
     , defaultAccountId
     , defaultAssuranceLevel
     , defaultDistribution
+    , defaultAddressPoolGap
+    , customDistribution
     , defaultGroupingPolicy
     , defaultPage
     , defaultPerPage
@@ -44,8 +50,10 @@ module Test.Integration.Framework.DSL
     , defaultSpendingPassword
     , defaultWalletName
     , mkSpendingPassword
+    , mkPassword
     , noRedemptionMnemonic
     , noSpendingPassword
+    , noAddressPoolGap
 
     -- * Expectations
     , WalletError(..)
@@ -71,21 +79,29 @@ module Test.Integration.Framework.DSL
     , ($-)
     , (</>)
     , (!!)
+    , address
+    , addresses
+    , addressPoolGap
     , amount
     , assuranceLevel
     , backupPhrase
+    , createdAt
+    , externallyOwnedAccounts
     , failures
+    , fromWalletId
     , initialCoins
     , mnemonicWords
-    , spendingPassword
-    , totalSuccess
+    , rawAddressPoolGap
+    , rawMnemonicPassword
     , rawPassword
-    , address
+    , spendingPassword
+    , spendingPasswordLastUpdate
+    , totalSuccess
+    , walAddresses
     , wallet
-    , wallets
     , walletId
     , walletName
-    , spendingPasswordLastUpdate
+    , wallets
     , json
     , hasSpendingPassword
     , mkAddress
@@ -100,14 +116,18 @@ import           Crypto.Hash (hash)
 import           Crypto.Hash.Algorithms (Blake2b_256)
 import           Data.Aeson.QQ (aesonQQ)
 import qualified Data.ByteArray as ByteArray
+import           Data.Default (Default (..))
 import qualified Data.Foldable as F
 import           Data.Generics.Internal.VL.Lens (lens)
 import           Data.Generics.Product.Fields (field)
 import           Data.Generics.Product.Typed (HasType, typed)
 import           Data.List ((!!))
+import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import           Data.Typeable (typeOf, typeRepTyCon)
+import           Formatting (build, sformat)
 import           Language.Haskell.TH.Quote (QuasiQuoter)
 import           Test.Hspec.Core.Spec (SpecM, it, xit)
 import qualified Test.Hspec.Core.Spec as H
@@ -124,6 +144,10 @@ import           Cardano.Wallet.API.V1.Types
 import           Cardano.Wallet.Client.Http (BaseUrl, ClientError (..), Manager,
                      WalletClient)
 import qualified Cardano.Wallet.Client.Http as Client
+import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap,
+                     mkAddressPoolGap)
+import           Cardano.Wallet.Kernel.Ed25519Bip44 (deriveAccountPrivateKey,
+                     derivePublicKey, genEncryptedSecretKey)
 import           Pos.Chain.Txp (TxIn (..), TxOut (..), TxOutAux (..))
 import           Pos.Core (Coin, IsBootstrapEraAddr (..), deriveLvl2KeyPair,
                      mkCoin, unsafeGetCoin)
@@ -216,6 +240,10 @@ data Setup = Setup
         :: [Text]
     , _rawPassword
         :: RawPassword
+    , _rawMnemonicPassword
+        :: RawPassword
+    , _rawAddressPoolGap
+        :: Word8
     } deriving (Show, Generic)
 
 data Fixture = Fixture
@@ -227,6 +255,11 @@ data Fixture = Fixture
         :: BackupPhrase
     , _spendingPassword
         :: SpendingPassword
+    , _eoAccounts
+        :: [AccountPublicKeyWithIx]
+        -- ^ WARNING We rely on lazyness here, so don't make this strict
+    , _addressPoolGap
+        :: AddressPoolGap
     } deriving (Show, Generic)
 
 -- | Setup a wallet with the given parameters.
@@ -237,10 +270,12 @@ setup args = do
     phrase <- if null (args ^. mnemonicWords)
         then liftIO $ generate arbitrary
         else mkBackupPhrase (args ^. mnemonicWords)
-    let password = mkPassword (args ^. rawPassword)
-    wal <- setupWallet args phrase
+    let walPwd@(WalletPassPhrase pwd) = mkPassword (args ^. rawPassword)
+    wal <- setupWallet args phrase walPwd
     addrs  <- forM (RandomDestination :| []) setupDestination
-    return $ Fixture wal addrs phrase password
+    let accs = genExternallyOwnedAccounts (phrase, args ^. rawMnemonicPassword) pwd
+    gap <- unsafeMkAddressPoolGap  (args ^. rawAddressPoolGap)
+    return $ Fixture wal addrs phrase walPwd accs gap
 
 -- | Apply 'a' to all actions in sequence
 verify :: (Monad m) => a -> [a -> m ()] -> m ()
@@ -254,6 +289,9 @@ verify a = mapM_ (a &)
 defaultAccountId :: AccountIndex
 defaultAccountId = minBound
 
+defaultAddressPoolGap :: AddressPoolGap
+defaultAddressPoolGap = def
+
 defaultAssuranceLevel :: AssuranceLevel
 defaultAssuranceLevel = NormalAssurance
 
@@ -264,6 +302,20 @@ defaultDistribution
     -> NonEmpty PaymentDistribution
 defaultDistribution c s = pure $
     PaymentDistribution (WalAddress $ head $ s ^. typed) (WalletCoin $ mkCoin c)
+
+customDistribution
+    :: NonEmpty (Account,Word64)
+    -> NonEmpty PaymentDistribution
+customDistribution payees =
+    let recepientWalAddresses = NonEmpty.fromList
+                                $ map (view walAddresses)
+                                $ concatMap (view addresses . fst)
+                                $ payees
+    in NonEmpty.zipWith
+       PaymentDistribution
+       recepientWalAddresses
+       (map ((\coin -> WalletCoin $ mkCoin coin) . snd) payees)
+
 
 defaultGroupingPolicy :: Maybe WalletInputSelectionPolicy
 defaultGroupingPolicy = Nothing
@@ -276,11 +328,13 @@ defaultPerPage = Nothing
 
 defaultSetup :: Setup
 defaultSetup = Setup
-    { _initialCoins   = []
-    , _walletName     = defaultWalletName
-    , _assuranceLevel = defaultAssuranceLevel
-    , _mnemonicWords  = []
-    , _rawPassword    = mempty
+    { _initialCoins        = []
+    , _walletName          = defaultWalletName
+    , _assuranceLevel      = defaultAssuranceLevel
+    , _mnemonicWords       = []
+    , _rawPassword         = mempty
+    , _rawMnemonicPassword = mempty
+    , _rawAddressPoolGap   = 20
     }
 
 defaultSource
@@ -302,6 +356,8 @@ noRedemptionMnemonic = Nothing
 noSpendingPassword :: Maybe SpendingPassword
 noSpendingPassword = Nothing
 
+noAddressPoolGap :: Maybe AddressPoolGap
+noAddressPoolGap = Nothing
 
 --
 -- HELPERS
@@ -314,14 +370,13 @@ infixr 5 </>
 (</>) :: ToHttpApiData a => Text -> a -> Text
 base </> next = mconcat [base, "/", toQueryParam next]
 
-address
-    :: HasType WalAddress s
-    => Lens' s WalAddress
+address :: HasType WalAddress s => Lens' s WalAddress
 address = typed
 
-amount
-    :: HasType WalletCoin s
-    => Lens' s Word64
+addressPoolGap :: HasType AddressPoolGap s => Lens' s AddressPoolGap
+addressPoolGap = typed
+
+amount :: HasType WalletCoin s => Lens' s Word64
 amount =
     lens _get _set
   where
@@ -335,6 +390,12 @@ assuranceLevel = typed
 
 backupPhrase :: HasType BackupPhrase s => Lens' s BackupPhrase
 backupPhrase = typed
+
+createdAt :: HasType WalletTimestamp s => Lens' s WalletTimestamp
+createdAt = typed
+
+externallyOwnedAccounts :: HasType [AccountPublicKeyWithIx] s => Lens' s [AccountPublicKeyWithIx]
+externallyOwnedAccounts = typed
 
 failures :: Lens' (BatchImportResult a) [a]
 failures = field @"aimFailures"
@@ -359,8 +420,14 @@ mnemonicWords = typed
 hasSpendingPassword :: HasType Bool s => Lens' s Bool
 hasSpendingPassword = typed
 
-rawPassword :: HasType RawPassword s => Lens' s RawPassword
-rawPassword = typed
+rawAddressPoolGap :: Lens' Setup Word8
+rawAddressPoolGap = field @"_rawAddressPoolGap"
+
+rawPassword :: Lens' Setup RawPassword
+rawPassword = field @"_rawPassword"
+
+rawMnemonicPassword :: Lens' Setup RawPassword
+rawMnemonicPassword = field @"_rawMnemonicPassword"
 
 spendingPassword :: HasType SpendingPassword s => Lens' s SpendingPassword
 spendingPassword = typed
@@ -382,6 +449,12 @@ walletName = typed
 
 spendingPasswordLastUpdate :: Lens' Wallet WalletTimestamp
 spendingPasswordLastUpdate = field @"walSpendingPasswordLastUpdate"
+
+addresses :: HasType [WalletAddress] s => Lens' s [WalletAddress]
+addresses = typed
+
+walAddresses :: HasType WalAddress s => Lens' s WalAddress
+walAddresses = typed
 
 --
 -- EXPECTATIONS
@@ -575,7 +648,10 @@ expectWalletError
     -> m ()
 expectWalletError e' = \case
     Right a -> wantedErrorButSuccess a
+    Left (ClientWalletError e) -> constructorOf e `shouldBe` constructorOf e'
     Left e  -> e `shouldBe` (ClientWalletError e')
+  where
+    constructorOf = typeRepTyCon . typeOf
 
 -- | Verifies that the response is errored from a failed JSON validation
 -- matching part of the given message.
@@ -611,6 +687,9 @@ expectWalletUTxO coins = \case
 --
 -- INTERNALS
 --
+
+fromWalletId :: Client.WalletId -> Text
+fromWalletId (Client.WalletId a) = a
 
 wantedSuccessButError
     :: (MonadFail m, Show e)
@@ -703,9 +782,10 @@ mkPassword (RawPassword txt)
 mkAddress
     :: (MonadIO m, MonadFail m)
     => BackupPhrase
+    -> AccountIndex
     -> Word32
     -> m WalAddress
-mkAddress (BackupPhrase mnemonic) ix = do
+mkAddress (BackupPhrase mnemonic) (accId) ix = do
     let (_, esk) = safeDeterministicKeyGen
             (mnemonicToSeed mnemonic)
             mempty
@@ -716,7 +796,7 @@ mkAddress (BackupPhrase mnemonic) ix = do
             (ShouldCheckPassphrase False)
             mempty
             esk
-            (getAccIndex minBound)
+            (getAccIndex accId)
             ix
 
     case maddr of
@@ -762,11 +842,12 @@ withNextFaucet actionWithFaucet = do
 setupWallet
     :: Setup
     -> BackupPhrase
+    -> SpendingPassword
     -> Scenario Context IO Wallet
-setupWallet args phrase = do
+setupWallet args phrase password = do
     wal <- successfulRequest $ Client.postWallet $- NewWallet
         phrase
-        Nothing
+        (Just $ password)
         (args ^. assuranceLevel)
         (args ^. walletName)
         CreateWallet
@@ -780,8 +861,9 @@ setupWallet args phrase = do
             -- Making payments to a different address each time to cope with
             -- grouping policy. That's actually a behavior we might want to
             -- test in the future. So, we'll need to do something smarter here.
+
             addr <- successfulRequest $ Client.postAddress $- NewAddress
-                Nothing
+                (Just $ password)
                 minBound
                 (walId wal)
 
@@ -790,8 +872,8 @@ setupWallet args phrase = do
                 (paymentDist (addr, mkCoin coin))
                 Nothing
                 Nothing
-
             expectTxStatusEventually [InNewestBlocks, Persisted] txn
+
     return wal
 
 
@@ -805,8 +887,36 @@ setupDestination
 setupDestination = \case
     RandomDestination -> do
         bp <- liftIO (generate arbitrary)
-        unWalAddress <$> mkAddress bp 1
+        unWalAddress <$> mkAddress bp defaultAccountId 1
     LockedDestination ->
         fail "Asset-locked destination aren't yet implemented. This\
             \ requires slightly more work than it seems and will be\
             \ implemented later."
+
+
+-- | Lazily generate an "infinite" list of accounts (PubKey, Index)
+-- from a mnemonic using the new address derivation scheme V2 (BIP-44 with
+-- Ed25519 elliptic curve)
+genExternallyOwnedAccounts
+    :: (BackupPhrase, RawPassword)
+    -> PassPhrase
+    -> [AccountPublicKeyWithIx]
+genExternallyOwnedAccounts (BackupPhrase mnemonic, RawPassword mnePassphrase) passphrase =
+    let
+        esk = genEncryptedSecretKey (mnemonic, T.encodeUtf8 mnePassphrase) passphrase
+        accountXPrv = fmap derivePublicKey . deriveAccountPrivateKey passphrase esk
+    in
+        catMaybes
+        [ AccountPublicKeyWithIx <$> accountXPrv (getAccIndex ix) <*> pure ix
+        | ix <- [minBound..maxBound]
+        ]
+
+-- | Create an AddressPoolGap from a raw Word32 and throw in IO if anything
+-- goes wrong.
+unsafeMkAddressPoolGap
+    :: (MonadIO m, MonadFail m)
+    => Word8
+    -> m AddressPoolGap
+unsafeMkAddressPoolGap g = either onError return $ mkAddressPoolGap g
+  where
+    onError = fail . toString . sformat build

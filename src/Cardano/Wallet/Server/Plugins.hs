@@ -13,9 +13,9 @@ module Cardano.Wallet.Server.Plugins
     ( Plugin
     , apiServer
     , docServer
-    , monitoringServer
     , acidStateSnapshots
     , setupNodeClient
+    , nodeAPIServer
     ) where
 
 import           Universum
@@ -26,17 +26,19 @@ import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Text as T
 import           Data.Typeable (typeOf)
 import           Formatting.Buildable (build)
-import           Network.HTTP.Client (managerResponseTimeout,
-                     responseTimeoutMicro)
 import           Network.HTTP.Types.Status (badRequest400)
 import           Network.Wai (Application, Middleware, Response, responseLBS)
 import           Network.Wai.Handler.Warp (setOnException,
                      setOnExceptionResponse)
 import qualified Network.Wai.Handler.Warp as Warp
+import qualified Pos.Chain.Genesis as Genesis
+import           Pos.Chain.Update (updateConfiguration)
+import           Pos.Client.CLI (NodeApiArgs (..))
 import qualified Servant
 import           Servant.Client (Scheme (..))
 import qualified Servant.Client as Servant
 
+import           Cardano.Node.API (launchNodeServer)
 import           Cardano.Node.Client (NodeHttpClient)
 import qualified Cardano.Node.Client as NodeClient
 import qualified Cardano.Node.Manager as NodeManager
@@ -49,26 +51,30 @@ import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel (DatabaseMode (..), PassiveWallet)
 import qualified Cardano.Wallet.Kernel.Diffusion as Kernel
 import qualified Cardano.Wallet.Kernel.Mode as Kernel
+import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
 import qualified Cardano.Wallet.Server as Server
 import           Cardano.Wallet.Server.CLI (WalletBackendParams (..),
-                     WalletBackendParams (..), getWalletDbOptions, isDebugMode,
-                     walletAcidInterval)
+                     WalletBackendParams (..), walletAcidInterval,
+                     walletDbOptions)
 import           Cardano.Wallet.Server.Middlewares (withMiddlewares)
 import           Cardano.Wallet.Server.Plugins.AcidState
                      (createAndArchiveCheckpoints)
 import           Cardano.Wallet.WalletLayer (ActiveWalletLayer,
                      PassiveWalletLayer)
 import qualified Cardano.Wallet.WalletLayer.Kernel as WalletLayer.Kernel
+import           Ntp.Client (NtpConfiguration)
+import           Pos.Launcher.Resource (NodeResources (..))
 
-import           Pos.Infra.Diffusion.Types (Diffusion (..))
+import           Pos.Infra.Diffusion.Types (Diffusion (..), hoistDiffusion)
 import           Pos.Infra.Shutdown (HasShutdownContext (shutdownContext),
                      ShutdownContext)
 import           Pos.Launcher.Configuration (HasConfigurations)
-import           Pos.Util.CompileInfo (HasCompileInfo)
+import           Pos.Util.CompileInfo (HasCompileInfo, compileInfo,
+                     withCompileInfo)
 import           Pos.Util.Wlog (logError, logInfo, modifyLoggerName,
                      usingLoggerName)
-import           Pos.Web (serveDocImpl, serveImpl)
-import qualified Pos.Web.Server
+import           Pos.Web (TlsParams (..), serveDocImpl, serveImpl)
+
 
 -- A @Plugin@ running in the monad @m@.
 type Plugin m = Diffusion m -> m ()
@@ -96,7 +102,7 @@ apiServer
     env <- ask
     let diffusion' = Kernel.fromDiffusion (lower env) diffusion
     logInfo "Testing node client connection"
-    eresp <- liftIO . runExceptT $ NodeClient.getNodeSettings nodeClient
+    eresp <- liftIO . NodeStateAdaptor.retrying . runExceptT $ NodeClient.getNodeSettings nodeClient
     case eresp of
         Left err -> do
             logError
@@ -110,7 +116,7 @@ apiServer
             (getApplication active)
             (BS8.unpack ip)
             port
-            (if isDebugMode walletRunMode then Nothing else walletTLSParams)
+            (Just walletTLSParams)
             (Just $ setOnExceptionResponse exceptionHandler defaultSettings)
             (Just $ portCallback ctx)
   where
@@ -143,7 +149,7 @@ apiServer
         return
             $ withMiddlewares middlewares
             $ Servant.serve API.walletAPI
-            $ Server.walletServer nodeClient active walletRunMode
+            $ Server.walletServer nodeClient active
 
     lower :: env -> ReaderT env IO a -> IO a
     lower env m = runReaderT m env
@@ -158,35 +164,19 @@ docServer
     => WalletBackendParams
     -> Maybe (Plugin Kernel.WalletMode)
 docServer WalletBackendParams{walletDocAddress = Nothing} = Nothing
-docServer WalletBackendParams{walletDocAddress = Just (ip, port), walletRunMode, walletTLSParams} = Just (const $ makeWalletServer)
+docServer WalletBackendParams{walletDocAddress = Just (ip, port), walletTLSParams} = Just (const $ makeWalletServer)
   where
     makeWalletServer = serveDocImpl
         application
         (BS8.unpack ip)
         port
-        (if isDebugMode walletRunMode then Nothing else walletTLSParams)
+        (Just walletTLSParams)
         (Just defaultSettings)
         Nothing
 
     application :: Kernel.WalletMode Application
     application =
         return $ Servant.serve API.walletDoc Server.walletDocServer
-
--- | A @Plugin@ to serve the node monitoring API.
-monitoringServer :: HasConfigurations
-                 => WalletBackendParams
-                 -> [ (Text, Plugin Kernel.WalletMode) ]
-monitoringServer WalletBackendParams{..} =
-    case enableMonitoringApi of
-         True  -> [ ("monitoring worker", const worker) ]
-         False -> []
-  where
-    worker = serveImpl Pos.Web.Server.application
-                       "127.0.0.1"
-                       monitoringApiPort
-                       walletTLSParams
-                       Nothing
-                       Nothing
 
 -- | A @Plugin@ to periodically compact & snapshot the acid-state database.
 acidStateSnapshots :: AcidState db
@@ -196,7 +186,7 @@ acidStateSnapshots :: AcidState db
 acidStateSnapshots dbRef params dbMode = const worker
   where
     worker = do
-      let opts = getWalletDbOptions params
+      let opts = walletDbOptions params
       modifyLoggerName (const "acid-state-checkpoint-plugin") $
           createAndArchiveCheckpoints
               dbRef
@@ -206,31 +196,42 @@ acidStateSnapshots dbRef params dbMode = const worker
 instance Buildable Servant.NoContent where
     build Servant.NoContent = build ()
 
+nodeAPIServer
+    :: HasConfigurations
+    => WalletBackendParams
+    -> Genesis.Config
+    -> NtpConfiguration
+    -> NodeResources ()
+    -> Plugin Kernel.WalletMode
+nodeAPIServer params genConfig ntpConfig nodeResources diffusion = withCompileInfo $ do
+    env <- ask
+    lift $ launchNodeServer
+        apiArgs
+        ntpConfig
+        nodeResources
+        updateConfiguration
+        compileInfo
+        genConfig
+        (hoistDiffusion (flip runReaderT env) lift diffusion)
+  where
+    apiArgs = NodeApiArgs
+        (walletNodeAddress params)
+        (Just $ walletTLSParams params) -- NOTE Using the same certs for both wallet server and node server
+        False -- debug mode
+        (walletNodeDocAddress params)
 
--- Copied from the old wallet/integration/SEtupTestEnv.hs
 setupNodeClient
     :: MonadIO m
     => (String, Int)
-    -> FilePath
-    -> FilePath
-    -> FilePath
+    -> TlsParams
     -> m NodeHttpClient
-setupNodeClient
-    (serverHost, serverPort)
-    tlsClientCertPath
-    tlsCACertPath
-    tlsPrivKeyPath
-  = liftIO $ do
+setupNodeClient (serverHost, serverPort) params = liftIO $ do
     let serverId = (serverHost, BS8.pack $ show serverPort)
-    caChain <- NodeManager.readSignedObject tlsCACertPath
-    clientCredentials <- NodeManager.credentialLoadX509 tlsClientCertPath tlsPrivKeyPath >>= \case
+    caChain <- NodeManager.readSignedObject (tpCaPath params)
+    clientCredentials <- NodeManager.credentialLoadX509 (tpCertPath params) (tpKeyPath params) >>= \case
         Right   a -> return a
         Left  err -> fail $ "Error decoding X509 certificates: " <> err
-    let settings = NodeManager.mkHttpsManagerSettings serverId caChain clientCredentials
-    manager <- NodeManager.newManager $ settings
-        { managerResponseTimeout =
-            responseTimeoutSeconds 60 -- force-ntp-check may take 30 s + communication delay
-        } -- TODO(anviking): Move upstream to mkHttpsManagerSettings
+    manager <- NodeManager.newManager $ NodeManager.mkHttpsManagerSettings serverId caChain clientCredentials
 
     let
         baseUrl = Servant.BaseUrl Https serverHost serverPort mempty
@@ -238,5 +239,3 @@ setupNodeClient
         walletClient = NodeClient.mkHttpClient baseUrl manager
 
     return walletClient
-  where
-    responseTimeoutSeconds a = responseTimeoutMicro (a * 1000 * 1000)

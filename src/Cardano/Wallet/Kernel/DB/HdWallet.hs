@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE RankNTypes                 #-}
+
 -- TODO: Not sure about the best way to avoid the orphan instances here
 {-# OPTIONS_GHC -fno-warn-orphans -Wno-redundant-constraints #-}
 
@@ -54,6 +55,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
     -- *** Account
   , hdAccountId
   , hdAccountBase
+  , hdAccountBaseId
   , hdAccountName
   , hdAccountState
   , hdAccountStateCurrent
@@ -76,6 +78,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , UnknownHdRoot(..)
   , UnknownHdAccount(..)
   , UnknownHdAddress(..)
+  , UpdateGapError(..)
   , embedUnknownHdRoot
   , embedUnknownHdAccount
     -- * Zoom to parts of the HD wallet
@@ -96,6 +99,9 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , assumeHdAccountExists
     -- * IsOurs
   , IsOurs(..)
+    -- Address pool
+  , mkAddressPool
+  , mkAddressPoolExisting
   ) where
 
 import           Universum hiding ((:|))
@@ -119,7 +125,8 @@ import qualified Pos.Crypto as Core
 
 import           Cardano.Wallet.API.V1.Types (WalAddress (..))
 import           Cardano.Wallet.Kernel.AddressPool (AddressPool,
-                     lookupAddressPool)
+                     ErrAddressPoolInvalid (..), emptyAddressPool,
+                     initAddressPool, lookupAddressPool)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
@@ -129,10 +136,13 @@ import           Cardano.Wallet.Kernel.DB.Util.AcidState
 import           Cardano.Wallet.Kernel.DB.Util.IxSet hiding (foldl')
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet hiding (Indexable)
 import qualified Cardano.Wallet.Kernel.DB.Util.Zoomable as Z
+import           Cardano.Wallet.Kernel.Ed25519Bip44 (ChangeChain (..),
+                     deriveAddressPublicKey)
 import           Cardano.Wallet.Kernel.NodeStateAdaptor (SecurityParameter (..))
 import qualified Cardano.Wallet.Kernel.Util.StrictList as SL
 import           Cardano.Wallet.Kernel.Util.StrictNonEmpty (StrictNonEmpty (..))
 import qualified Cardano.Wallet.Kernel.Util.StrictNonEmpty as SNE
+import           Cardano.Wallet.Util (buildTrunc)
 import           UTxO.Util (liftNewestFirst, modifyAndGetOld)
 
 {-------------------------------------------------------------------------------
@@ -297,7 +307,8 @@ data HdAccountBase =
           _hdAccountBaseEOId             :: !HdAccountId
         , _hdAccountBaseEOAccountKey     :: !Core.PublicKey
         , _hdAccountBaseEOAddressPoolGap :: !AddressPoolGap
-      }
+        }
+    deriving (Eq, Ord)
 
 instance Arbitrary HdAccountBase where
     arbitrary = oneof
@@ -464,19 +475,22 @@ deriveSafeCopy 1 'base ''HdAccountIncomplete
   Derived lenses
 -------------------------------------------------------------------------------}
 
-getHdAccountId :: HdAccountBase -> HdAccountId
-getHdAccountId (HdAccountBaseFO accountId)     = accountId
-getHdAccountId (HdAccountBaseEO accountId _ _) = accountId
+hdAccountBaseId :: Lens' HdAccountBase HdAccountId
+hdAccountBaseId = lens getHdAccountId setHdAccountId
+  where
+    getHdAccountId :: HdAccountBase -> HdAccountId
+    getHdAccountId (HdAccountBaseFO accountId)     = accountId
+    getHdAccountId (HdAccountBaseEO accountId _ _) = accountId
 
-setHdAccountId :: HdAccountBase -> HdAccountId -> HdAccountBase
-setHdAccountId (HdAccountBaseFO _) newAccountId = HdAccountBaseFO newAccountId
-setHdAccountId (HdAccountBaseEO _ pKey gap) newAccountId = HdAccountBaseEO newAccountId pKey gap
+    setHdAccountId :: HdAccountBase -> HdAccountId -> HdAccountBase
+    setHdAccountId (HdAccountBaseFO _) newAccountId = HdAccountBaseFO newAccountId
+    setHdAccountId (HdAccountBaseEO _ pKey gap) newAccountId = HdAccountBaseEO newAccountId pKey gap
 
 hdAccountId :: Lens' HdAccount HdAccountId
-hdAccountId = hdAccountBase . lens getHdAccountId setHdAccountId
+hdAccountId = hdAccountBase . hdAccountBaseId
 
 hdAccountRootId :: Lens' HdAccount HdRootId
-hdAccountRootId = hdAccountBase . lens getHdAccountId setHdAccountId . hdAccountIdParent
+hdAccountRootId = hdAccountBase . hdAccountBaseId . hdAccountIdParent
 
 hdAddressAccountId :: Lens' HdAddress HdAccountId
 hdAddressAccountId = hdAddressId . hdAddressIdParent
@@ -522,6 +536,7 @@ hdAccountRestorationState a = case a ^. hdAccountState of
 -------------------------------------------------------------------------------}
 
 class IsOurs s where
+    -- For the given state, check whether an address is "ours"
     isOurs :: Core.Address -> s -> (Maybe HdAddress, s)
 
 {-------------------------------------------------------------------------------
@@ -531,8 +546,8 @@ class IsOurs s where
 -- | NOTE: We could modify the given state here to actually store decrypted
 -- addresses in a `Map` to trade a decryption against a map lookup for already
 -- decrypted addresses.
-instance IsOurs [(HdRootId, Core.EncryptedSecretKey)] where
-    isOurs addr s = (,s) $ foldl' (<|>) Nothing $ flip map s $ \(rootId, esk) -> do
+instance IsOurs (Map HdRootId Core.EncryptedSecretKey) where
+    isOurs addr s = (,s) $ foldl' (<|>) Nothing $ flip Map.mapWithKey s $ \rootId esk -> do
         (accountIx, addressIx) <- decryptHdLvl2DerivationPath (eskToHdPassphrase esk) addr
         let accId = HdAccountId rootId accountIx
         let addrId = HdAddressId accId addressIx
@@ -548,6 +563,37 @@ decryptHdLvl2DerivationPath hdPass addr = do
     case derPath of
         [a,b] -> Just (HdAccountIx a, HdAddressIx b)
         _     -> Nothing
+
+{-------------------------------------------------------------------------------
+  create AddressPool for account
+-------------------------------------------------------------------------------}
+
+mkAddressPool
+    :: (Core.PublicKey -> Core.Address)
+    -> Core.PublicKey
+    -> AddressPoolGap
+    -> AddressPool Core.Address
+mkAddressPool mkAddress accPK gap
+    = emptyAddressPool gap (mkAddressBuilder mkAddress accPK)
+
+mkAddressPoolExisting
+    :: (Core.PublicKey -> Core.Address)
+    -> Core.PublicKey
+    -> AddressPoolGap
+    -> [(Core.Address, Word32)]
+    -> Either ErrAddressPoolInvalid (AddressPool Core.Address)
+mkAddressPoolExisting mkAddress accPK gap addrs
+    = initAddressPool gap (mkAddressBuilder mkAddress accPK) addrs
+
+mkAddressBuilder
+    :: (Core.PublicKey -> Core.Address)
+    -> Core.PublicKey
+    -> Word32
+    -> Core.Address
+mkAddressBuilder mkAddress accPK addrIx
+    = case deriveAddressPublicKey accPK ExternalChain addrIx of
+        Nothing     -> error "mkAddressPool: maximum number of addresses reached."
+        Just addrPK -> mkAddress addrPK
 
 {-------------------------------------------------------------------------------
   isOurs for Hd Sequential wallets
@@ -631,6 +677,25 @@ instance Arbitrary UnknownHdAddress where
                       , UnknownHdCardanoAddress <$> arbitrary
                       ]
 
+-- | Specific error that may occur during update address pool gap
+-- in 'HdAccountBase': if we try to update a gap in the account with
+-- 'HdAccountBase' with FO-branch.
+data UpdateGapError =
+    -- | Unknown root ID
+    UpdateGapErrorUnknownHdAccountRoot HdRootId
+    -- | Unknown account (implies the root is known)
+  | UpdateGapErrorUnknownHdAccount HdAccountId
+    -- | Try to update address pool gap in the account with FO-branch.
+  | UpdateGapErrorFOAccount HdAccountId
+  deriving Eq
+
+instance Arbitrary UpdateGapError where
+    arbitrary = oneof
+        [ UpdateGapErrorUnknownHdAccountRoot <$> arbitrary
+        , UpdateGapErrorUnknownHdAccount <$> arbitrary
+        , UpdateGapErrorFOAccount <$> arbitrary
+        ]
+
 embedUnknownHdRoot :: UnknownHdRoot -> UnknownHdAccount
 embedUnknownHdRoot = go
   where
@@ -645,6 +710,7 @@ embedUnknownHdAccount = go
 deriveSafeCopy 1 'base ''UnknownHdRoot
 deriveSafeCopy 1 'base ''UnknownHdAddress
 deriveSafeCopy 1 'base ''UnknownHdAccount
+deriveSafeCopy 1 'base ''UpdateGapError
 
 {-------------------------------------------------------------------------------
   IxSet instantiations
@@ -1008,33 +1074,21 @@ instance Buildable HdAccountIncomplete where
 
 instance Buildable HdAddress where
     build HdAddress{..} = bprint
-      ( "HdAddress "
-      % "{ id      " % build
-      % ", address " % build
-      % "}"
-      )
-      _hdAddressId
-      (_fromDb _hdAddressAddress)
+        (buildTrunc build % "@" % build)
+        (_fromDb _hdAddressAddress)
+        _hdAddressId
 
 instance Buildable HdAccountId where
     build HdAccountId{..} = bprint
-      ( "HdAccountId "
-      % "{ parent " % build
-      % ", ix     " % build
-      % "}"
-      )
-      _hdAccountIdParent
-      _hdAccountIdIx
+        (buildTrunc build % "/" % build)
+        _hdAccountIdParent
+        (getHdAccountIx _hdAccountIdIx)
 
 instance Buildable HdAddressId where
     build HdAddressId{..} = bprint
-      ( "HdAddressId "
-      % " parent " % build
-      % " ix     " % build
-      % "}"
-      )
-      _hdAddressIdParent
-      _hdAddressIdIx
+        (build % "/" % build)
+        _hdAddressIdParent
+        (getHdAddressIx _hdAddressIdIx)
 
 instance Buildable HdAccountIx where
     build (HdAccountIx ix) = bprint ("HdAccountIx " % build) ix
@@ -1050,6 +1104,14 @@ instance Buildable UnknownHdAccount where
       bprint ("UnknownHdAccountRoot " % build) rootId
     build (UnknownHdAccount accountId) =
       bprint ("UnknownHdAccount accountId " % build) accountId
+
+instance Buildable UpdateGapError where
+    build (UpdateGapErrorUnknownHdAccountRoot rootId) =
+      bprint ("UpdateGapErrorUnknownHdAccountRoot " % build) rootId
+    build (UpdateGapErrorUnknownHdAccount accountId) =
+      bprint ("UpdateGapErrorUnknownHdAccount accountId " % build) accountId
+    build (UpdateGapErrorFOAccount accountId) =
+      bprint ("UpdateGapErrorFOAccount accountId " % build) accountId
 
 instance Buildable UnknownHdAddress where
     build (UnknownHdAddressRoot rootId) =

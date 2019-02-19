@@ -34,6 +34,7 @@ translateWalletLayerErrors :: SomeException -> Maybe V1.WalletError
 translateWalletLayerErrors ex = do
        (    try' @CreateAddressError createAddressError
         <|> try' @ValidateAddressError validateAddressError
+        <|> try' @ImportAddressError importAddressError
 
         <|> try' @CreateAccountError createAccountError
         <|> try' @GetAccountError getAccountError
@@ -43,6 +44,7 @@ translateWalletLayerErrors ex = do
 
         <|> try' @CreateWalletError createWalletError
         <|> try' @GetWalletError getWalletError
+        <|> try' @GetEosWalletError getEosWalletError
         <|> try' @UpdateWalletError updateWalletError
         <|> try' @UpdateWalletPasswordError updateWalletPasswordError
         <|> try' @DeleteWalletError deleteWalletError
@@ -59,7 +61,12 @@ translateWalletLayerErrors ex = do
   where try' :: forall e. Exception e => (e -> V1.WalletError) -> Maybe V1.WalletError
         try' f = f <$> fromException @e ex
 
-
+importAddressError :: ImportAddressError -> V1.WalletError
+importAddressError e = case e of
+    (ImportAddressError (Kernel.ImportAddressKeystoreNotFound _)) ->
+        V1.WalletNotFound
+    (ImportAddressAddressDecodingFailed _) ->
+        V1.WalletNotFound
 
 createAddressErrorKernel :: Kernel.CreateAddressError -> V1.WalletError
 createAddressErrorKernel e = case e of
@@ -155,6 +162,24 @@ getWalletError e = case e of
             V1.WalletNotFound
     (GetWalletWalletIdDecodingFailed _txt) ->
             V1.WalletNotFound
+
+getAddressPoolGapError :: GetAddressPoolGapError -> V1.WalletError
+getAddressPoolGapError e = case e of
+    ex@(GetEosWalletErrorNoAccounts _txt) ->
+        V1.EosWalletDoesNotHaveAccounts (sformat build ex)
+    ex@(GetEosWalletErrorWrongAccounts _txt) ->
+        V1.EosWalletHasWrongAccounts (sformat build ex)
+    ex@(GetEosWalletErrorGapsDiffer _txt) ->
+        V1.EosWalletGapsDiffer (sformat build ex)
+
+getEosWalletError :: GetEosWalletError -> V1.WalletError
+getEosWalletError e = case e of
+    (GetEosWalletError (HD.UnknownHdRoot _rootId)) ->
+        V1.WalletNotFound
+    (GetEosWalletWalletIdDecodingFailed _txt) ->
+        V1.WalletNotFound
+    (GetEosWalletErrorAddressPoolGap e') ->
+        getAddressPoolGapError e'
 
 updateWalletError :: UpdateWalletError -> V1.WalletError
 updateWalletError e = case e of
@@ -304,6 +329,13 @@ newTransactionError e = case e of
 
     Kernel.NewTransactionInvalidTxIn ->
             V1.SignedTxSubmitError "NewTransactionInvalidTxIn"
+
+    (Kernel.NewTransactionNotEnoughUtxoFragmentation (Kernel.NumberOfMissingUtxos missingUtxo)) ->
+        V1.UtxoNotEnoughFragmented (V1.ErrUtxoNotEnoughFragmented missingUtxo V1.msgUtxoNotEnoughFragmented)
+
+    (Kernel.NewTransactionZeroAmountCoin (Kernel.NumberOfZeroAmountOutputs zeroOutputs)) ->
+        V1.ZeroAmountCoin (V1.ErrZeroAmountCoin zeroOutputs V1.msgZeroAmountCoin)
+
 
 redeemAdaError :: RedeemAdaError -> V1.WalletError
 redeemAdaError e = case e of

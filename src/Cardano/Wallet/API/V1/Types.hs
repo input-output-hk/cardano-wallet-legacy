@@ -2,6 +2,7 @@
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE DuplicateRecordFields      #-}
 {-# LANGUAGE ExplicitNamespaces         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures             #-}
@@ -122,9 +123,15 @@ module Cardano.Wallet.API.V1.Types (
   , CaptureAccountId
   -- * Core re-exports
   , Core.Address
+  , Core.PublicKey
+  , Core.PassPhrase
   -- * Wallet Errors
   , WalletError(..)
   , ErrNotEnoughMoney(..)
+  , ErrUtxoNotEnoughFragmented(..)
+  , msgUtxoNotEnoughFragmented
+  , ErrZeroAmountCoin(..)
+  , msgZeroAmountCoin
   , toServantError
   , toHttpErrorStatus
   , module Cardano.Wallet.Types.UtxoStatistics
@@ -144,6 +151,7 @@ import qualified Data.ByteArray as ByteArray
 import qualified Data.ByteString as BS
 import qualified Data.Char as C
 import           Data.Default (Default (def))
+import qualified Data.List.NonEmpty as NE
 import           Data.Semigroup (Semigroup)
 import           Data.Swagger hiding (Example, example)
 import           Data.Text (Text, dropEnd, toLower)
@@ -1109,6 +1117,12 @@ instance Bounded AccountIndex where
     minBound = AccountIndex 2147483648
     maxBound = AccountIndex maxBound
 
+instance Enum AccountIndex where
+    fromEnum (AccountIndex a) = fromEnum a
+    toEnum a = case mkAccountIndex (toEnum a) of
+        Left err -> error (sformat build err)
+        Right ix -> ix
+
 instance ToJSON AccountIndex where
     toJSON = toJSON . getAccIndex
 
@@ -1171,13 +1185,13 @@ instance BuildableSafeGen AccountPublicKeyWithIx where
         accpubkeywithixPublicKey
         accpubkeywithixIndex
 
-instance Buildable [AccountPublicKeyWithIx] where
-    build = bprint listJson
+instance Buildable (NonEmpty AccountPublicKeyWithIx) where
+    build = bprint listJson . NE.toList
 
 -- | A type modelling the request for a new 'EosWallet',
 -- on the mobile client or hardware wallet.
 data NewEosWallet = NewEosWallet
-    { neweoswalAccounts       :: ![AccountPublicKeyWithIx]
+    { neweoswalAccounts       :: !(NonEmpty AccountPublicKeyWithIx)
     , neweoswalAddressPoolGap :: !(Maybe AddressPoolGap)
     , neweoswalAssuranceLevel :: !AssuranceLevel
     , neweoswalName           :: !WalletName
@@ -1715,9 +1729,9 @@ instance BuildableSafeGen TransactionType where
 -- | The 'Transaction' @direction@
 data TransactionDirection =
     IncomingTransaction
-  -- ^ This represents an incoming transactions.
+  -- ^ Represents a transaction that adds funds to the local wallet.
   | OutgoingTransaction
-  -- ^ This qualifies external transactions.
+  -- ^ Represents a transaction that removes funds from the local wallet.
   deriving (Show, Ord, Eq, Enum, Bounded)
 
 instance Arbitrary TransactionDirection where
@@ -2410,6 +2424,39 @@ instance FromJSON ErrNotEnoughMoney where
             ErrAvailableBalanceIsInsufficient <$> (o .: "availableBalance")
 
 
+data ErrUtxoNotEnoughFragmented = ErrUtxoNotEnoughFragmented {
+      theMissingUtxos :: !Int
+    , theHelp         :: !Text
+    } deriving (Eq, Generic, Show)
+
+
+msgUtxoNotEnoughFragmented :: Text
+msgUtxoNotEnoughFragmented = "Utxo is not enough fragmented to handle the number of outputs of this transaction. Query /api/v1/wallets/{walletId}/statistics/utxos endpoint for more information"
+
+deriveJSON Aeson.defaultOptions ''ErrUtxoNotEnoughFragmented
+
+instance Buildable ErrUtxoNotEnoughFragmented where
+    build (ErrUtxoNotEnoughFragmented missingUtxos _ ) =
+        bprint ("Missing "%build%" utxo(s) to accommodate all outputs of the transaction") missingUtxos
+
+
+data ErrZeroAmountCoin = ErrZeroAmountCoin {
+      theZeroOutputs :: !Int
+    , theHelp        :: !Text
+    } deriving (Eq, Generic, Show)
+
+
+msgZeroAmountCoin :: Text
+msgZeroAmountCoin = "Each payee must receive positive amount in the transaction - zero amount is not allowed"
+
+deriveJSON Aeson.defaultOptions ''ErrZeroAmountCoin
+
+instance Buildable ErrZeroAmountCoin where
+    build (ErrZeroAmountCoin zeroOutputs _ ) =
+        bprint ("There are "%build%" zero output(s) in the transaction") zeroOutputs
+
+
+
 -- | Type representing any error which might be thrown by wallet.
 --
 -- Errors are represented in JSON in the JSend format (<https://labs.omniti.com/labs/jsend>):
@@ -2474,6 +2521,17 @@ data WalletError =
     | RequestThrottled !Word64
     -- ^ The request has been throttled. The 'Word64' is a count of microseconds
     -- until the user should retry.
+    | UtxoNotEnoughFragmented !ErrUtxoNotEnoughFragmented
+    -- ^ available Utxo is not enough fragmented, ie., there is more outputs of transaction than
+    -- utxos
+    | ZeroAmountCoin !ErrZeroAmountCoin
+    -- ^ there is at least one zero amount output in the transaction
+    | EosWalletDoesNotHaveAccounts Text
+    -- ^ EOS-wallet doesn't have any accounts.
+    | EosWalletHasWrongAccounts Text
+    -- ^ Some of accounts associated with EOS-wallets have FO-branch.
+    | EosWalletGapsDiffer Text
+    -- ^ Accounts associated with EOS-wallet contain different values of address pool gap.
     deriving (Generic, Show, Eq)
 
 deriveGeneric ''WalletError
@@ -2516,6 +2574,12 @@ instance Arbitrary WalletError where
         , NodeIsStillSyncing <$> arbitrary
         , CannotCreateAddress <$> arbitraryText
         , RequestThrottled <$> arbitrary
+        , UtxoNotEnoughFragmented <$> Gen.oneof
+          [ ErrUtxoNotEnoughFragmented <$> Gen.choose (1, 10) <*> arbitrary
+          ]
+        , ZeroAmountCoin <$> Gen.oneof
+          [ ErrZeroAmountCoin <$> Gen.choose (1, 10) <*> arbitrary
+          ]
         ]
       where
         arbitraryText :: Gen Text
@@ -2572,7 +2636,16 @@ instance Buildable WalletError where
             bprint "Cannot create derivation path for new address, for external wallet."
         RequestThrottled _ ->
             bprint "You've made too many requests too soon, and this one was throttled."
-
+        UtxoNotEnoughFragmented x ->
+            bprint build x
+        ZeroAmountCoin x ->
+            bprint build x
+        EosWalletDoesNotHaveAccounts _ ->
+            bprint "EOS-wallet doesn't have any accounts."
+        EosWalletHasWrongAccounts _ ->
+            bprint "Some of accounts associated with EOS-wallets have FO-branch."
+        EosWalletGapsDiffer _ ->
+            bprint "Accounts associated with EOS-wallet contain different values of address pool gap."
 
 -- | Convert wallet errors to Servant errors
 instance ToServantError WalletError where
@@ -2615,6 +2688,16 @@ instance ToServantError WalletError where
             err500
         RequestThrottled{} ->
             err400 { errHTTPCode = 429 }
+        UtxoNotEnoughFragmented{} ->
+            err403
+        ZeroAmountCoin{} ->
+            err400
+        EosWalletDoesNotHaveAccounts{} ->
+            err500
+        EosWalletHasWrongAccounts{} ->
+            err500
+        EosWalletGapsDiffer{} ->
+            err500
 
 -- | Declare the key used to wrap the diagnostic payload, if any
 instance HasDiagnostic WalletError where
@@ -2657,3 +2740,13 @@ instance HasDiagnostic WalletError where
             "msg"
         RequestThrottled{} ->
             "microsecondsUntilRetry"
+        UtxoNotEnoughFragmented{} ->
+            "details"
+        ZeroAmountCoin{} ->
+            "details"
+        EosWalletDoesNotHaveAccounts{} ->
+            noDiagnosticKey
+        EosWalletHasWrongAccounts{} ->
+            noDiagnosticKey
+        EosWalletGapsDiffer{} ->
+            noDiagnosticKey

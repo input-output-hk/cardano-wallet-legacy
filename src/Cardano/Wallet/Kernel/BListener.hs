@@ -1,5 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase   #-}
+{-# LANGUAGE ViewPatterns #-}
+
 -- | React to BListener events
 module Cardano.Wallet.Kernel.BListener (
     -- * Respond to block chain events
@@ -25,15 +27,19 @@ import qualified Formatting.Buildable
 
 import           Pos.Chain.Block (HeaderHash)
 import           Pos.Chain.Genesis (Config (..))
-import           Pos.Chain.Txp (TxId)
+import           Pos.Chain.Txp (TxId, TxIn)
+import           Pos.Core (Address)
 import           Pos.Core.Chrono (OldestFirst (..))
+import           Pos.Crypto (EncryptedSecretKey)
 import           Pos.DB.Block (getBlund)
 import           Pos.Util.Log (Severity (..))
 
+import           Cardano.Wallet.Kernel.AddressPool (AddressPool)
 import           Cardano.Wallet.Kernel.DB.AcidState (ApplyBlock (..),
                      ObservableRollbackUseInTestsOnly (..), SwitchToFork (..),
                      SwitchToForkInternalError (..))
 import           Cardano.Wallet.Kernel.DB.BlockContext
+import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import           Cardano.Wallet.Kernel.DB.Resolved (ResolvedBlock, rbContext,
@@ -44,14 +50,15 @@ import           Cardano.Wallet.Kernel.DB.Spec.Update (ApplyBlockFailed (..))
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types
 import           Cardano.Wallet.Kernel.Internal
 import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
-import           Cardano.Wallet.Kernel.Prefiltering (PrefilteredBlock,
-                     prefilterBlock)
+import           Cardano.Wallet.Kernel.Prefiltering (PrefilteredBlock)
+import qualified Cardano.Wallet.Kernel.Prefiltering as P
 import           Cardano.Wallet.Kernel.Read (foreignPendingByAccount,
-                     getWalletCredentials, getWalletSnapshot)
+                     getEosPools, getFOWallets, getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Restore
 import qualified Cardano.Wallet.Kernel.Submission as Submission
 import           Cardano.Wallet.Kernel.Util.NonEmptyMap (NonEmptyMap)
 import qualified Cardano.Wallet.Kernel.Util.NonEmptyMap as NEM
+import           Cardano.Wallet.Kernel.Wallets (mkEosAddress)
 import           Cardano.Wallet.WalletLayer.Kernel.Wallets
                      (blundToResolvedBlock)
 
@@ -61,24 +68,62 @@ import           Cardano.Wallet.WalletLayer.Kernel.Wallets
 
 type PrefilterResult = ((BlockContext, PrefilteredBlock), [TxMeta])
 
--- | Prefilter the block for each account. Returns 'Nothing' if the prefiltering
--- is irrelevant for this node, i.e. there are no user wallets stored, so we
--- can avoid doing work (i.e. writing into the acid-state DB log) by skipping
--- such block application.
-prefilterBlocks :: PassiveWallet
-                -> [ResolvedBlock]
-                -> IO (Maybe [PrefilterResult])
-prefilterBlocks pw bs = do
-    res <- getWalletCredentials pw
-    isForeign <- fmap Pending.txIns . foreignPendingByAccount <$> getWalletSnapshot pw
-    case res of
-         [] -> return Nothing
-         xs -> fmap Just $ flip evalStateT xs $ forM bs $ \rb -> do
-            pb <- state (prefilterBlock isForeign rb)
-            metas <- state (resolvedToTxMetas rb) >>= \case
-                Left e  -> throwM e
-                Right x -> return x
-            return ((rb ^. rbContext, pb), metas)
+-- | Provides the context required to prefilter all FO wallets.
+prefilterContext
+    :: PassiveWallet
+    -> IO ( Map HdAccountId (Set TxIn)
+          , Map HdRootId EncryptedSecretKey
+          , Map HdAccountId (AddressPool Address))
+       -- ^ (Foreigns, FO Prefilter Context, EO Prefilter Context)
+prefilterContext pw = do
+    db <- getWalletSnapshot pw
+    let foreigns = fmap Pending.txIns . foreignPendingByAccount $ db
+    hdFOs <- getFOWallets pw db
+    hdEOs <- getEosPools db (mkEosAddress $ pw ^. walletProtocolMagic)
+    return (foreigns, hdFOs, hdEOs)
+
+-- | Prefilter a resolved block for all wallets. If no wallets are present
+-- we return Nothing. If either wallet type is present, we return only the
+-- relevant results.
+--
+-- In the case of both wallet types being present, we must merge the prefilter
+-- results and ensure that the block contexts returned by the different
+-- prefilterings are the same.
+prefilterBlock
+    :: Map HdAccountId (Set TxIn)
+    -> Map HdRootId EncryptedSecretKey
+    -> Map HdAccountId (AddressPool Address)
+    -> ResolvedBlock
+    -> IO (Maybe PrefilterResult)
+prefilterBlock _ (Map.null -> True) (Map.null -> True) _
+    = return Nothing
+prefilterBlock fs (Map.null -> True) hdEOs rb
+    = Just <$> prefilterBlock_ rb fs hdEOs
+prefilterBlock fs hdFOs (Map.null -> True) rb
+    = Just <$> prefilterBlock_ rb fs hdFOs
+prefilterBlock fs hdFOs hdEOs rb = do
+    ((ctxt, pb), txMetas)    <- prefilterBlock_ rb fs hdEOs
+    ((ctxt', pb'), txMetas') <- prefilterBlock_ rb fs hdFOs
+    if ctxt /= ctxt'
+        then (error $ "When merging the prefiltering results for FO and EO "
+                   <> "wallets, there were different block contexts")
+        else (return . Just $ ((ctxt, pb <> pb'), txMetas <> txMetas'))
+
+-- Prefilter blocks for any class of wallets for which prefiltering is
+-- defined (any type constrained by IsOurs)
+prefilterBlock_
+    :: IsOurs s
+    => ResolvedBlock
+    -> Map HdAccountId (Set TxIn)
+    -> s
+    -> IO PrefilterResult
+prefilterBlock_ rb fs ws = do
+    flip evalStateT ws $ do
+        pb <- state (P.prefilterBlock fs rb)
+        metas <- state (resolvedToTxMetas rb) >>= \case
+           Left e  -> throwM e
+           Right x -> return x
+        return ((rb ^. rbContext, pb), metas)
 
 data BackfillFailed
     = SuccessorChanged BlockContext (Maybe BlockContext)
@@ -207,11 +252,10 @@ applyBlock pw@PassiveWallet{..} b = do
                     -> ResolvedBlock
                     -> ExceptT (NonEmptyMap HdAccountId ApplyBlockFailed) IO ()
       applyOneBlock k accts b' = ExceptT $ do
-          prefilterBlocks pw [b'] >>= \case
-              -- The block is not relevant as there are no user wallets stored
-              -- in the DB, so don't bother writing into the acid-state transaction log.
+          (foreigns, hdFOs, hdEOs) <- prefilterContext pw
+          prefilterBlock foreigns hdFOs hdEOs b' >>= \case
               Nothing -> return $ Right ()
-              Just [((ctxt, blocksByAccount), metas)] -> do
+              Just ((ctxt, blocksByAccount), metas) -> do
                   -- apply block to all Accounts in all Wallets
                   mConfirmed <- update' _wallets $ ApplyBlock k ctxt accts blocksByAccount
                   case mConfirmed of
@@ -220,9 +264,6 @@ applyBlock pw@PassiveWallet{..} b = do
                           modifyMVar_ _walletSubmission (return . Submission.remPending confirmed)
                           mapM_ (putTxMeta _walletMeta) metas
                           return $ Right ()
-              Just _ -> error $ "applyOneBlock: the impossible happened, "
-                             <> "prefilterBlocks returned "
-                             <> "a different number of elements than the input ones."
 
       -- Determine if a failure in 'ApplyBlock' was due to the account being ahead, behind,
       -- or incomparable with the provided block.
@@ -309,14 +350,13 @@ switchToFork :: PassiveWallet
 switchToFork pw@PassiveWallet{..} oldest bs = do
     k <- Node.getSecurityParameter _walletNode
 
-    blocksAndMeta <- prefilterBlocks pw bs
-    case blocksAndMeta of
+
+    prefilterBlocks >>= \case
          -- We skip the switchToFork completely, as no wallet is configured
          -- in this node.
-         Nothing -> return ()
-         Just xs -> do
+         [] -> return ()
+         xs -> do
              let (blockssByAccount, metas) = unzip xs
-
              changes <- trySwitchingToFork k blockssByAccount
 
              mapM_ (putTxMeta _walletMeta) $ concat metas
@@ -324,7 +364,6 @@ switchToFork pw@PassiveWallet{..} oldest bs = do
                return . Submission.addPendings (fst <$> changes)
                       . Submission.remPending  (snd <$> changes)
   where
-
     trySwitchingToFork :: Node.SecurityParameter
                        -> [(BlockContext, PrefilteredBlock)]
                        -> IO (Map HdAccountId (Pending, Set TxId))
@@ -352,6 +391,19 @@ switchToFork pw@PassiveWallet{..} oldest bs = do
                 -- Restart the restorations, and return the changes.
                 mapM_ restartRestoration restorations
                 return changes
+
+    -- Prefilter the resolved blocks for all wallets
+    -- NOTE: if there are no wallets to prefilter we expect no results. If there
+    -- are any wallets present, we expect the same number of results as blocks
+    prefilterBlocks :: IO [PrefilterResult]
+    prefilterBlocks = do
+        (fs, hdFOs, hdEOs) <- prefilterContext pw
+        blocksAndMeta <- catMaybes <$> mapM (prefilterBlock fs hdFOs hdEOs) bs
+        if (not (null blocksAndMeta)) && ((length blocksAndMeta) /= length bs)
+            then (error $ "the impossible has happened, mapM prefilterBlocks returned "
+                     <> "a different number of prefilter results than blocks (we"
+                     <> "expect no results or the same number as there are blocks)")
+            else (return blocksAndMeta)
 
 -- | Observable rollback
 --

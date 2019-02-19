@@ -9,7 +9,7 @@ import           Pos.Core as Core
 
 import           Servant
 
-type FullyOwnedAPI = Tags '["Wallets"] :>
+type FullyOwnedAPI = Tag "Wallets" 'NoTagDescription :>
     (    "wallets" :> Summary "Create a new Wallet or restore an existing one."
                    :> ReqBody '[ValidJSON] (New Wallet)
                    :> PostCreated '[ValidJSON] (APIResponse Wallet)
@@ -42,7 +42,7 @@ type FullyOwnedAPI = Tags '["Wallets"] :>
                    :> Get '[ValidJSON] (APIResponse UtxoStatistics)
     )
 
-type ExternallyOwnedAPI = Tags '["Externally Owned Wallets"]
+type ExternallyOwnedAPI = Tag "Externally Owned Wallets" 'NoTagDescription
     :> ( "wallets"
         :> "externally-owned"
         :> Summary "Create a new Wallet or restore an existing one."

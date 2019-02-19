@@ -10,7 +10,7 @@ import           Cardano.Wallet.API.V1.Types
 
 
 type API
-    = Tags '["Accounts"] :>
+    = Tag "Accounts" 'NoTagDescription :>
     (    "wallets" :> CaptureWalletId :> "accounts"
           :> CaptureAccountId
           :> Summary "Delete an Account."
