@@ -13,18 +13,18 @@ type API
     = Tag "Accounts" 'NoTagDescription :>
     (    "wallets" :> CaptureWalletId :> "accounts"
           :> CaptureAccountId
-          :> Summary "Deletes an Account."
+          :> Summary "Delete an Account."
           :> DeleteNoContent '[ValidJSON] NoContent
     :<|> "wallets" :> CaptureWalletId :> "accounts"
           :> CaptureAccountId
-          :> Summary "Retrieves a specific Account."
+          :> Summary "Retrieve a specific Account."
           :> Get '[ValidJSON] (APIResponse Account)
     :<|> "wallets" :> CaptureWalletId :> "accounts"
           :> WalletRequestParams
-          :> Summary "Retrieves the full list of Accounts."
+          :> Summary "Retrieve the full list of Accounts."
           :> Get '[ValidJSON] (APIResponse [Account])
     :<|> "wallets" :> CaptureWalletId :> "accounts"
-          :> Summary "Creates a new Account for the given Wallet."
+          :> Summary "Create a new Account for the given Wallet."
           :> ReqBody '[ValidJSON] (New Account)
           :> Post '[ValidJSON] (APIResponse Account)
     :<|> "wallets" :> CaptureWalletId :> "accounts"

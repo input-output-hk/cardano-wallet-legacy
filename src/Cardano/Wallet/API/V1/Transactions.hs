@@ -9,10 +9,10 @@ import           Cardano.Wallet.API.V1.Types
 import           Servant
 
 type API = Tag "Transactions" 'NoTagDescription :>
-    (    "transactions" :> Summary "Generates a new transaction from the source to one or multiple target addresses."
+    (    "transactions" :> Summary "Generate a new transaction from the source to one or multiple target addresses."
                         :> ReqBody '[ValidJSON] Payment
                         :> Post '[ValidJSON] (APIResponse Transaction)
-    :<|> "transactions" :> Summary "Returns the transaction history, i.e the list of all the past transactions."
+    :<|> "transactions" :> Summary "Return the transaction history, i.e the list of all the past transactions."
                         :> QueryParam "wallet_id" WalletId
                         :> QueryParam "account_index" AccountIndex
                         :> QueryParam "address" (WalAddress)
@@ -33,7 +33,7 @@ type API = Tag "Transactions" 'NoTagDescription :>
                         :> Post '[ValidJSON] (APIResponse Transaction)
 
     :<|> "transactions" :> "unsigned"
-                        :> Summary "Creates a new unsigned transaction."
+                        :> Summary "Create a new unsigned transaction."
                         :> ReqBody '[ValidJSON] Payment
                         :> Post '[ValidJSON] (APIResponse UnsignedTransaction)
 
