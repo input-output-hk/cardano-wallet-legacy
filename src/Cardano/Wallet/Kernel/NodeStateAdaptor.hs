@@ -4,9 +4,6 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE RankNTypes                 #-}
 
-{-# OPTIONS_GHC -fno-warn-orphans #-}
--- For SecurityParameter from the Node API
-
 module Cardano.Wallet.Kernel.NodeStateAdaptor (
     WithNodeState     -- opaque
   , NodeStateAdaptor  -- opaque
@@ -27,6 +24,9 @@ module Cardano.Wallet.Kernel.NodeStateAdaptor (
   , getFeePolicy
   , getSlotCount
   , getCoreConfig
+  , getSlotStart
+  , getNextEpochSlotDuration
+  , getNodeSyncProgress
   , curSoftwareVersion
   , compileInfo
   , getNtpDrift
@@ -34,27 +34,23 @@ module Cardano.Wallet.Kernel.NodeStateAdaptor (
     -- * Non-mockable
   , filterUtxo
   , mostRecentMainBlock
+  , triggerShutdown
+  , waitForUpdate
   , defaultGetSlotStart
     -- * Support for tests
+  , NodeStateUnavailable(..)
   , MockNodeStateParams(..)
   , mockNodeState
   , mockNodeStateDef
   , defMockNodeStateParams
-
-  , toMonadIO
-  , retrying
-  , NodeCommunicationError (..)
   ) where
 
 import           Universum
 
-import           Control.Lens (lens)
+import           Control.Lens (lens, to)
 import           Control.Monad.IO.Unlift (MonadUnliftIO, UnliftIO (UnliftIO),
                      askUnliftIO, unliftIO, withUnliftIO)
-import           Control.Monad.STM (retry)
-import           Control.Retry (RetryPolicyM, RetryStatus, fullJitterBackoff,
-                     limitRetries)
-import qualified Control.Retry
+import           Control.Monad.STM (orElse, retry)
 import           Data.Conduit (mapOutputMaybe, runConduitRes, (.|))
 import qualified Data.Conduit.List as Conduit
 import           Data.SafeCopy (base, deriveSafeCopy)
@@ -65,40 +61,40 @@ import           Ntp.Client (NtpStatus (..))
 import           Ntp.Packet (NtpOffset)
 import           Serokell.Data.Memory.Units (Byte)
 
-import           Cardano.Node.Client (NodeClient (..), NodeHttpClient)
 import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel.Util.Core as Util
 import           Pos.Chain.Block (Block, HeaderHash, LastKnownHeader,
                      LastKnownHeaderTag, MainBlock, blockHeader, headerHash,
-                     prevBlockL)
+                     mainBlockSlot, prevBlockL)
 import           Pos.Chain.Genesis as Genesis (Config (..), GenesisHash (..),
-                     configBlockVersionData, configEpochSlots)
+                     configBlockVersionData, configEpochSlots, configK)
 import           Pos.Chain.Txp (TxIn, TxOutAux)
-import           Pos.Chain.Update (HasUpdateConfiguration, SoftwareVersion,
-                     bvdMaxTxSize, bvdTxFeePolicy)
+import           Pos.Chain.Update (ConfirmedProposalState,
+                     HasUpdateConfiguration, SoftwareVersion, bvdMaxTxSize,
+                     bvdTxFeePolicy)
 import qualified Pos.Chain.Update as Upd
 import           Pos.Context (NodeContext (..))
-import           Pos.Core (BlockCount, SlotCount, Timestamp (..), TxFeePolicy)
-import qualified Pos.Core as Core
-import           Pos.Core.Slotting (HasSlottingVar (..), MonadSlots (..),
-                     SlotId (..))
+import           Pos.Core (BlockCount, SlotCount, Timestamp (..), TxFeePolicy,
+                     difficultyL, getChainDifficulty)
+import           Pos.Core.Slotting (EpochIndex (..), HasSlottingVar (..),
+                     LocalSlotIndex (..), MonadSlots (..), SlotId (..))
 import qualified Pos.DB.Block as DB
 import           Pos.DB.BlockIndex (getTipHeader)
 import           Pos.DB.Class (MonadDBRead (..), getBlock)
 import           Pos.DB.GState.Lock (StateLock, withStateLockNoMetrics)
 import           Pos.DB.Rocks (NodeDBs, dbGetDefault, dbIterSourceDefault)
 import           Pos.DB.Txp.Utxo (utxoSource)
+import           Pos.DB.Update (UpdateContext, getAdoptedBVData,
+                     ucDownloadedUpdate)
 import           Pos.Infra.Shutdown.Class (HasShutdownContext (..))
+import qualified Pos.Infra.Shutdown.Logic as Shutdown
 import qualified Pos.Infra.Slotting.Impl.Simple as S
 import qualified Pos.Infra.Slotting.Util as Slotting
 import           Pos.Launcher.Resource (NodeResources (..))
-import           Pos.Node.API (SecurityParameter (..))
-import qualified Pos.Node.API as API
 import           Pos.Util (CompileTimeInfo, HasCompileInfo, HasLens (..),
                      lensOf', withCompileInfo)
 import qualified Pos.Util as Util
 import           Pos.Util.Concurrent.PriorityLock (Priority (..))
-import qualified Pos.Util.UnitsOfMeasure as Util
 import           Pos.Util.Wlog (CanLog (..), HasLoggerName (..))
 import           Test.Pos.Configuration (withDefConfiguration,
                      withDefUpdateConfiguration)
@@ -106,6 +102,8 @@ import           Test.Pos.Configuration (withDefConfiguration,
 {-------------------------------------------------------------------------------
   Additional types
 -------------------------------------------------------------------------------}
+
+newtype SecurityParameter = SecurityParameter Int
 
 deriveSafeCopy 1 'base ''SecurityParameter
 
@@ -259,6 +257,27 @@ data NodeStateAdaptor m = Adaptor {
     -- | Get the @Genesis.Config@
     , getCoreConfig :: m Genesis.Config
 
+      -- | Get the start of a slot
+      --
+      -- When looking up data for past of the current epochs, the value should
+      -- be known.
+    , getSlotStart :: SlotId -> m (Either UnknownEpoch Timestamp)
+
+      -- | Get last known slot duration.
+    , getNextEpochSlotDuration :: m Millisecond
+
+      -- | Get the "sync progress". This term is desperately overloaded but
+      -- in this context we need something very simple: a tuple containing the
+      -- "global blockchain height" and the "node blockchain height". The
+      -- former is the maximum between the biggest height we observed from an
+      -- unsolicited block we received and the current local tip:
+      --
+      -- global_height = max (last_known_header, node_local_tip)
+      --
+      -- The latter is simply the node local tip, i.e. "how far we went into
+      -- chasing the global blockchain height during syncing".
+    , getNodeSyncProgress :: LockContext -> m (Maybe BlockCount, BlockCount)
+
       -- | Version of application (code running)
     , curSoftwareVersion :: m SoftwareVersion
 
@@ -300,6 +319,9 @@ instance HasLens StateLock Res StateLock where
     lensOf = mkResLens (nrContextLens . lensOf')
 
 instance HasLens S.SimpleSlottingStateVar Res S.SimpleSlottingStateVar where
+    lensOf = mkResLens (nrContextLens . lensOf')
+
+instance HasLens UpdateContext Res UpdateContext where
     lensOf = mkResLens (nrContextLens . lensOf')
 
 instance HasLens LastKnownHeaderTag Res LastKnownHeader where
@@ -352,24 +374,25 @@ newNodeStateAdaptor :: forall m ext. (NodeConstraints, MonadIO m, MonadMask m)
                     => Config
                     -> NodeResources ext
                     -> TVar NtpStatus
-                    -- (Above: hopefully to be replaced by below)
-                    -> (forall e a. (Show e, Show a) => ExceptT e IO a -> m a)
-                    -> NodeHttpClient
                     -> NodeStateAdaptor m
-newNodeStateAdaptor genesisConfig nr ntpStatus eta client = Adaptor
+newNodeStateAdaptor genesisConfig nr ntpStatus = Adaptor
     { withNodeState            =            run
-    , getTipSlotId             = eta $ API.unV1 . API.setSlotId <$> getNodeSettings client
-    , getMaxTxSize             = eta $ fromIntegral . unMaxTxSize . API.setMaxTxSize <$> getNodeSettings client
-    , getFeePolicy             = eta $ toCoreFeePolicy . API.setFeePolicy <$> getNodeSettings client
-    , getSecurityParameter     = eta $ API.setSecurityParameter <$> getNodeSettings client
-    , getSlotCount             = eta $ API.unV1 . API.setSlotCount <$> getNodeSettings client
+    , getTipSlotId             =            run $ \_lock -> defaultGetTipSlotId genesisHash
+    , getMaxTxSize             =            run $ \_lock -> defaultGetMaxTxSize
+    , getFeePolicy             =            run $ \_lock -> defaultGetFeePolicy
+    , getSlotStart             = \slotId -> run $ \_lock -> defaultGetSlotStart slotId
+    , getNextEpochSlotDuration =            run $ \_lock -> defaultGetNextEpochSlotDuration
+    , getNodeSyncProgress      = \lockCtx -> run $ defaultSyncProgress lockCtx
+    , getSecurityParameter     = return . SecurityParameter $ configK genesisConfig
+    , getSlotCount             = return $ configEpochSlots genesisConfig
     , getCoreConfig            = return genesisConfig
     , curSoftwareVersion       = return $ Upd.curSoftwareVersion Upd.updateConfiguration
     , compileInfo              = return $ Util.compileInfo
     , getNtpDrift              = defaultGetNtpDrift ntpStatus
-    , getCreationTimestamp     = defaultGetCreationTimestamp
+    , getCreationTimestamp     =             run $ \_lock -> defaultGetCreationTimestamp
     }
   where
+    genesisHash = configGenesisHash genesisConfig
     run :: forall a.
            (    NodeConstraints
              => Lock (WithNodeState m)
@@ -377,14 +400,6 @@ newNodeStateAdaptor genesisConfig nr ntpStatus eta client = Adaptor
            )
         -> m a
     run act = runReaderT (unwrap $ act withLock) (Res nr)
-
-
-    unMaxTxSize :: API.MaxTxSize -> Word
-    unMaxTxSize (API.MaxTxSize (Util.MeasuredIn s)) = s
-
-    toCoreFeePolicy :: API.TxFeePolicy -> TxFeePolicy
-    toCoreFeePolicy (API.TxFeePolicy (Util.MeasuredIn a) (Util.MeasuredIn b)) =
-        Core.TxFeePolicyTxSizeLinear $ Core.TxSizeLinear a b
 
 -- | Internal wrapper around 'withStateLockNoMetrics'
 --
@@ -399,6 +414,26 @@ withLock NotYetLocked  f = Wrap $ withStateLockNoMetrics LowPriority
   Default implementations for functions that are mockable
 -------------------------------------------------------------------------------}
 
+defaultGetMaxTxSize :: (MonadIO m, MonadCatch m, NodeConstraints)
+                    => WithNodeState m Byte
+defaultGetMaxTxSize = bvdMaxTxSize <$> getAdoptedBVData
+
+defaultGetFeePolicy :: (MonadIO m, MonadCatch m, NodeConstraints)
+                    => WithNodeState m TxFeePolicy
+defaultGetFeePolicy = bvdTxFeePolicy <$> getAdoptedBVData
+
+-- | Get the slot ID of the chain tip
+--
+-- Returns slot 0 in epoch 0 if there are no blocks yet.
+defaultGetTipSlotId :: (MonadIO m, MonadCatch m, NodeConstraints)
+                    => GenesisHash -> WithNodeState m SlotId
+defaultGetTipSlotId genesisHash = do
+    hdrHash <- headerHash <$> getTipHeader
+    aux <$> mostRecentMainBlock genesisHash hdrHash
+  where
+    aux :: Maybe MainBlock -> SlotId
+    aux (Just mainBlock) = mainBlock ^. mainBlockSlot
+    aux Nothing          = SlotId (EpochIndex 0) (UnsafeLocalSlotIndex 0)
 
 -- | Get the start of the specified slot
 defaultGetSlotStart :: MonadIO m
@@ -406,8 +441,27 @@ defaultGetSlotStart :: MonadIO m
 defaultGetSlotStart slotId =
     maybe (Left (UnknownEpoch slotId)) Right <$> Slotting.getSlotStart slotId
 
-defaultGetCreationTimestamp :: MonadIO m => m Timestamp
-defaultGetCreationTimestamp = liftIO $ Util.getCurrentTimestamp
+defaultGetNextEpochSlotDuration :: MonadIO m => WithNodeState m Millisecond
+defaultGetNextEpochSlotDuration = Slotting.getNextEpochSlotDuration
+
+defaultSyncProgress :: (MonadIO m, MonadMask m, NodeConstraints)
+                    => LockContext
+                    -> Lock (WithNodeState m)
+                    -> WithNodeState m (Maybe BlockCount, BlockCount)
+defaultSyncProgress lockContext lock = do
+    (globalHeight, localHeight) <- lock lockContext $ \_localTipHash -> do
+        -- We need to grab the localTip again as '_localTip' has type
+        -- 'HeaderHash' but we cannot grab the difficulty out of it.
+        headerRef <- view (lensOf @LastKnownHeaderTag)
+        localTip  <- getTipHeader
+        mbHeader <- atomically $ readTVar headerRef `orElse` pure Nothing
+        pure (view (difficultyL . to getChainDifficulty) <$> mbHeader
+             ,view (difficultyL . to getChainDifficulty) localTip
+             )
+    return (max localHeight <$> globalHeight, localHeight)
+
+defaultGetCreationTimestamp :: MonadIO m => WithNodeState m Timestamp
+defaultGetCreationTimestamp = liftIO $ Util.getCurrentTimestamp
 
 {-------------------------------------------------------------------------------
   Non-mockable functions
@@ -417,6 +471,20 @@ filterUtxo :: (NodeConstraints, MonadCatch m, MonadUnliftIO m)
            => ((TxIn, TxOutAux) -> Maybe a) -> WithNodeState m [a]
 filterUtxo p = runConduitRes $ mapOutputMaybe p utxoSource
                             .| Conduit.fold (flip (:)) []
+
+triggerShutdown :: MonadIO m => WithNodeState m ()
+triggerShutdown = Shutdown.triggerShutdown
+
+-- | Wait for an update
+--
+-- NOTE: This is adopted from 'waitForUpdateWebWallet'. In particular, that
+-- function too uses 'takeMVar'. I guess the assumption is that there is only
+-- one listener on this 'MVar'?
+waitForUpdate :: forall m. MonadIO m => WithNodeState m ConfirmedProposalState
+waitForUpdate = liftIO . takeMVar =<< asks l
+  where
+    l :: Res -> MVar ConfirmedProposalState
+    l = ucDownloadedUpdate . view lensOf'
 
 
 -- | Get the difference between NTP time and local system time, nothing if the
@@ -473,9 +541,6 @@ blockingLookupNtpOffset = \case
     NtpSyncUnavailable -> pure Nothing
 
 
-
--- TODO: Remove use of WithNodeState
-
 -- | Get the most recent main block starting at the specified header
 --
 -- Returns nothing if there are no (regular) blocks on the blockchain yet.
@@ -525,7 +590,7 @@ instance Exception NodeStateUnavailable
 --
 -- See 'NodeStateAdaptor' for an explanation about what is and what is not
 -- mockable.
-mockNodeState :: MonadThrow m
+mockNodeState :: (HasCallStack, MonadThrow m)
               => MockNodeStateParams -> NodeStateAdaptor m
 mockNodeState MockNodeStateParams{..} =
     withDefConfiguration $ \genesisConfig ->
@@ -535,6 +600,9 @@ mockNodeState MockNodeStateParams{..} =
           withNodeState            = \_ -> throwM $ NodeStateUnavailable callStack
         , getTipSlotId             = return mockNodeStateTipSlotId
         , getSecurityParameter     = return mockNodeStateSecurityParameter
+        , getNextEpochSlotDuration = return mockNodeStateNextEpochSlotDuration
+        , getNodeSyncProgress      = \_ -> return mockNodeStateSyncProgress
+        , getSlotStart             = return . mockNodeStateSlotStart
         , getMaxTxSize             = return $ bvdMaxTxSize genesisBvd
         , getFeePolicy             = return $ bvdTxFeePolicy genesisBvd
         , getSlotCount             = return $ configEpochSlots genesisConfig
@@ -546,7 +614,7 @@ mockNodeState MockNodeStateParams{..} =
         }
 
 -- | Variation on 'mockNodeState' that uses the default params
-mockNodeStateDef :: MonadThrow m => NodeStateAdaptor m
+mockNodeStateDef :: (HasCallStack, MonadThrow m) => NodeStateAdaptor m
 mockNodeStateDef = mockNodeState defMockNodeStateParams
 
 -- | Parameters for 'mockNodeState'
@@ -619,40 +687,3 @@ instance Buildable MissingBlock where
 instance Buildable UnknownEpoch where
   build (UnknownEpoch slotId) =
     bprint ("UnknownEpoch " % build) slotId
-
-
-{-------------------------------------------------------------------------------
-  Errors
--------------------------------------------------------------------------------}
-
-newtype NodeCommunicationError = NodeCommunicationError String
-    deriving Show
-
-instance Exception NodeCommunicationError
-
-
---
--- >>> (a :: ExceptT Int IO Int) = print "running" >> throwError 0
--- >>> toMonadIO a
--- "running"
--- "running"
--- "running"
--- "running"
--- "running"
--- *** Exception: NodeCommunicationError "There was an error communicating with the node: 0"
---
-toMonadIO :: (MonadIO m, MonadThrow m, Show e) => ExceptT e m a -> m a
-toMonadIO = retrying . runExceptT >=> \case
-    Right a   -> return a
-    Left  err -> throwM . NodeCommunicationError $ ("There was an error communicating with the node: " <> show err)
-
-retrying :: MonadIO m => m (Either e a) -> m (Either e a)
-retrying a = Control.Retry.retrying policy shouldRetry (const a)
-  where
-    -- See <https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter>
-    policy :: MonadIO m => RetryPolicyM m
-    policy = fullJitterBackoff 1000000 <> limitRetries 4
-
-    shouldRetry :: MonadIO m => RetryStatus -> Either e a -> m Bool
-    shouldRetry _ (Right _) = return False
-    shouldRetry _ (Left  _) = return True
