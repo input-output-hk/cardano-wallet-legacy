@@ -15,7 +15,7 @@ Manual scenarios cover capabilities ADDRESSES_IMPORT_07 and ADDRESSES_IMPORT_08.
 # Scripts
 Following scripts can be useful to aid the manual steps below:
  - [wallet.sh](../scripts/wallet.sh)  - allows basic interaction with the wallet on the node (create, restore, delete, read)
- - [gen-addresses.sh](../scripts/gen-addresses.sh) - generate addresses for the wallet's account
+ - [generate-addresses.sh](../scripts/generate-addresses.sh) - generate addresses for the wallet's account
  - [import-addresses.sh](../scripts/import-addresses.sh) - batch import of addresses to the wallet's account
 
 **Please note:** data in commands below is exemplary. Mnemonics for the tests can be easily generated with https://iancoleman.io/bip39/.
