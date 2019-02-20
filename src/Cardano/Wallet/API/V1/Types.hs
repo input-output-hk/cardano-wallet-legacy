@@ -179,7 +179,8 @@ import           Cardano.Wallet.API.V1.Generic (jsendErrorGenericParseJSON,
 import           Cardano.Wallet.API.V1.Swagger.Example (Example, example)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Types.UtxoStatistics
-import           Cardano.Wallet.Util (mkJsonKey, showApiUtcTime)
+import           Cardano.Wallet.Util (buildIndent, buildList, mkJsonKey,
+                     showApiUtcTime)
 
 import           Cardano.Mnemonic (Mnemonic)
 import qualified Pos.Binary.Class as Bi
@@ -283,7 +284,8 @@ newtype WalletCoin = WalletCoin { unWalletCoin :: Core.Coin }
 
 deriveSafeBuildable ''WalletCoin
 instance BuildableSafeGen WalletCoin where
-    buildSafeGen _ (WalletCoin c) = bprint build c
+    buildSafeGen sl (WalletCoin c) =
+        bprint (plainOrSecureF sl build (fconst "<hidden amount>")) c
 
 instance ToJSON WalletCoin where
     toJSON (WalletCoin c) = toJSON . Core.unsafeGetCoin $ c
@@ -615,15 +617,15 @@ instance Arbitrary UpdateEosWallet where
 
 deriveSafeBuildable ''UpdateEosWallet
 instance BuildableSafeGen UpdateEosWallet where
-    buildSafeGen sl UpdateEosWallet{..} = bprint ("{"
-        %" assuranceLevel="%buildSafe sl
-        %" name="%buildSafe sl
-        %" addressPoolGap="%build
-        %" }")
-        ueowalAssuranceLevel
+    buildSafeGen _ UpdateEosWallet{..} = bprint
+        ( "Update for EOS wallet"
+        % "\n  name: " % build
+        % "\n  " % build
+        % "\n  " % build
+        )
         ueowalName
+        ueowalAssuranceLevel
         ueowalAddressPoolGap
-
 
 -- | A type modelling the update of an existing wallet.
 data WalletUpdate = WalletUpdate {
@@ -886,11 +888,11 @@ instance Arbitrary Wallet where
 
 deriveSafeBuildable ''Wallet
 instance BuildableSafeGen Wallet where
-  buildSafeGen _ Wallet{..} = bprint
+  buildSafeGen sl Wallet{..} = bprint
     ( "Wallet"
     % "\n  " % build
     % "\n  name: " % build
-    % "\n  balance: " % build
+    % "\n  balance: " % buildSafe sl
     % "\n  created at: " % build
     % "\n  " % build
     % "\n  has spending password: " % build
@@ -943,19 +945,24 @@ instance Arbitrary EosWallet where
 
 deriveSafeBuildable ''EosWallet
 instance BuildableSafeGen EosWallet where
-  buildSafeGen sl EosWallet{..} = bprint ("{"
-    %" id="%buildSafe sl
-    %" name="%buildSafe sl
-    %" addressPoolGap="%build
-    %" balance="%buildSafe sl
-    %" }")
+  buildSafeGen sl EosWallet{..} = bprint
+    ( "EOS (externally-owned sequential) wallet"
+    % "\n  " % build
+    % "\n  name: " % build
+    % "\n  balance: " % buildSafe sl
+    % "\n  " % build
+    % "\n  " % build
+    % "\n  created at: " % build
+    )
     eoswalId
     eoswalName
-    eoswalAddressPoolGap
     eoswalBalance
+    eoswalAddressPoolGap
+    eoswalAssuranceLevel
+    eoswalCreatedAt
 
 instance Buildable [EosWallet] where
-    build = bprint listJson
+    build = bprint (buildList build)
 
 --------------------------------------------------------------------------------
 -- Addresses
@@ -1137,10 +1144,9 @@ instance Arbitrary AccountIndex where
         AccountIndex <$> choose (getAccIndex minBound, getAccIndex maxBound)
 
 deriveSafeBuildable ''AccountIndex
--- Nothing secret to redact for a AccountIndex.
 instance BuildableSafeGen AccountIndex where
-    buildSafeGen _ =
-        bprint build . getAccIndex
+    buildSafeGen _ (AccountIndex ix) =
+        bprint ("account ix: " % build) ix
 
 instance ToParamSchema AccountIndex where
     toParamSchema _ = mempty
@@ -1180,15 +1186,13 @@ instance ToSchema AccountPublicKeyWithIx where
 
 deriveSafeBuildable ''AccountPublicKeyWithIx
 instance BuildableSafeGen AccountPublicKeyWithIx where
-    buildSafeGen _ AccountPublicKeyWithIx{..} = bprint ("{"
-        %" publicKey="%build
-        %" index="%build
-        %" }")
+    buildSafeGen _ AccountPublicKeyWithIx{..} = bprint
+        ("account public key: " % build % ", " % build)
         accpubkeywithixPublicKey
         accpubkeywithixIndex
 
 instance Buildable (NonEmpty AccountPublicKeyWithIx) where
-    build = bprint listJson . NE.toList
+    build = bprint (buildList build) . NE.toList
 
 -- | A type modelling the request for a new 'EosWallet',
 -- on the mobile client or hardware wallet.
@@ -1217,16 +1221,17 @@ instance ToSchema NewEosWallet where
 
 deriveSafeBuildable ''NewEosWallet
 instance BuildableSafeGen NewEosWallet where
-    buildSafeGen sl NewEosWallet{..} = bprint ("{"
-        %" accounts="%build
-        %" addressPoolGap="%build
-        %" assuranceLevel="%buildSafe sl
-        %" name="%buildSafe sl
-        %" }")
-        neweoswalAccounts
+    buildSafeGen _ NewEosWallet{..} = bprint
+        ( "Request for new EOS wallet"
+        % "\n  name: " % build
+        % "\n  " % build
+        % "\n  " % build
+        % "\n  accounts:\n" % buildIndent 2 (buildList build)
+        )
+        neweoswalName
         neweoswalAddressPoolGap
         neweoswalAssuranceLevel
-        neweoswalName
+        neweoswalAccounts
 
 -- | A wallet 'Account'.
 data Account = Account

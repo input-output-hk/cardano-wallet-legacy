@@ -60,7 +60,15 @@ instance Arbitrary AddressPoolGap where
 
 instance Buildable AddressPoolGap where
     build (AddressPoolGap gap) =
-        bprint ("Address pool gap "%int) gap
+        bprint ("address pool gap: "%int) gap
+
+-- | There's default instance for 'Buildable (Maybe a)', but it produces
+-- just empty string for 'Nothing', it's not very informative.
+instance {-# OVERLAPPING #-} Buildable (Maybe AddressPoolGap) where
+    build (Just gap) = bprint build gap
+    build Nothing    = do
+        let AddressPoolGap gap = def :: AddressPoolGap
+        bprint ("address pool gap is undefined (default value " % int % " will be used)") gap
 
 instance ToSchema AddressPoolGap where
     declareNamedSchema _ = do
