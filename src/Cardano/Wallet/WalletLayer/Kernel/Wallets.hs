@@ -69,8 +69,8 @@ createWallet wallet newWalletRequest = liftIO $ do
     case newWalletRequest of
         CreateWallet newWallet@V1.NewWallet{..} ->
             case newwalOperation of
-                V1.RestoreWallet scheme -> restore nm scheme newWallet
-                V1.CreateWallet         -> create newWallet
+                V1.RestoreWallet -> restore nm newWallet
+                V1.CreateWallet  -> create newWallet
         ImportWalletFromESK esk mbSpendingPassword scheme ->
             restoreFromESK nm
                            scheme
@@ -90,15 +90,14 @@ createWallet wallet newWalletRequest = liftIO $ do
       return (mkRoot newwalName newwalAssuranceLevel root)
 
     restore :: NetworkMagic
-            -> V1.DerivationSchemeVersion
             -> V1.NewWallet
             -> IO (Either CreateWalletError V1.Wallet)
-    restore nm (V1.DerivationSchemeVersion scheme) newWallet@V1.NewWallet{..} = do
+    restore nm newWallet@V1.NewWallet{..} = do
         let esk    = snd $ safeDeterministicKeyGen
                              (Mnemonic.mnemonicToSeed (mnemonic newWallet))
                              (spendingPassword newwalSpendingPassword)
         restoreFromESK nm
-                       scheme
+                       (V1.derivationScheme newwalDerivationScheme)
                        esk
                        (spendingPassword newwalSpendingPassword)
                        newwalName
@@ -164,7 +163,7 @@ createWallet wallet newWalletRequest = liftIO $ do
         walletId   = toRootId $ hdRoot ^. HD.hdRootId
         scheme     = hdRoot ^. HD.hdDerivationScheme
 
-    mnemonic (V1.NewWallet (V1.BackupPhrase m) _ _ _ _) = m
+    mnemonic (V1.NewWallet (V1.BackupPhrase m) _ _ _ _ _) = m
     spendingPassword = maybe emptyPassphrase coerce
 
 

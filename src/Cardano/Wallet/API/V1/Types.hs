@@ -490,56 +490,26 @@ instance BuildableSafeGen DerivationSchemeVersion where
 -- | A Wallet Operation
 data WalletOperation =
     CreateWallet
-  | RestoreWallet DerivationSchemeVersion
-  deriving (Eq, Show)
-
-instance ToJSON WalletOperation where
-    toJSON ss = object [ "tag"  .= toJSON (renderAsTag ss)
-                       , "data" .= renderAsData ss
-                       ]
-      where
-        renderAsTag :: WalletOperation -> Text
-        renderAsTag CreateWallet      = "create"
-        renderAsTag (RestoreWallet _) = "restore"
-
-        renderAsData :: WalletOperation -> Value
-        renderAsData CreateWallet           = Null
-        renderAsData (RestoreWallet scheme) = toJSON scheme
-
-instance FromJSON WalletOperation where
-    parseJSON = withObject "WalletOperation" $ \wo -> do
-        t <- wo .: "tag"
-        case (t :: Text) of
-            "create"    -> pure CreateWallet
-            "restoring" -> RestoreWallet <$> wo .: "data"
-            _           -> typeMismatch "unrecognised tag" (Object wo)
-
-instance ToSchema WalletOperation where
-    declareNamedSchema _ = do
-      scheme <- declareSchemaRef @DerivationSchemeVersion Proxy
-      pure $ NamedSchema (Just "WalletOperation") $ mempty
-          & type_ .~ SwaggerObject
-          & required .~ ["tag"]
-          & properties .~ (mempty
-              & at "tag" ?~ (Inline $ mempty
-                  & type_ .~ SwaggerString
-                  & enum_ ?~ ["create", "restore"]
-                  )
-              & at "data" ?~ scheme
-              )
+  | RestoreWallet
+  deriving (Eq, Show, Enum, Bounded)
 
 instance Arbitrary WalletOperation where
-  arbitrary = oneof [ pure CreateWallet
-                    , RestoreWallet <$> arbitrary
-                    ]
+  arbitrary = elements [minBound .. maxBound]
+
+-- Drops the @Wallet@ suffix.
+deriveJSON Aeson.defaultOptions  { A.constructorTagModifier = reverse . drop 6 . reverse . map C.toLower
+                                    } ''WalletOperation
+
+instance ToSchema WalletOperation where
+    declareNamedSchema _ =
+        pure $ NamedSchema (Just "WalletOperation") $ mempty
+            & type_ .~ SwaggerString
+            & enum_ ?~ ["create", "restore"]
 
 deriveSafeBuildable ''WalletOperation
 instance BuildableSafeGen WalletOperation where
     buildSafeGen _ CreateWallet  = "create"
-    buildSafeGen sl (RestoreWallet scheme) = bprint ("{"
-        %" derivationScheme="%buildSafe sl
-        %" }")
-        scheme
+    buildSafeGen _ RestoreWallet = "restore"
 
 newtype BackupPhrase = BackupPhrase
     { unBackupPhrase :: Mnemonic 12
@@ -564,6 +534,7 @@ data NewWallet = NewWallet {
     , newwalAssuranceLevel   :: !AssuranceLevel
     , newwalName             :: !WalletName
     , newwalOperation        :: !WalletOperation
+    , newwalDerivationScheme :: !DerivationSchemeVersion
     } deriving (Eq, Show, Generic)
 
 deriveJSON Aeson.defaultOptions  ''NewWallet
@@ -574,6 +545,7 @@ instance Arbitrary NewWallet where
                         <*> arbitrary
                         <*> pure "My Wallet"
                         <*> arbitrary
+                        <*> arbitrary
 
 instance ToSchema NewWallet where
   declareNamedSchema =
@@ -583,6 +555,7 @@ instance ToSchema NewWallet where
       & ("assuranceLevel"   --^ "Desired assurance level based on the number of confirmations counter of each transaction.")
       & ("name"             --^ "Wallet's name.")
       & ("operation"        --^ "Create a new wallet or Restore an existing one.")
+      & ("derivationScheme"        --^ "Derivation scheme used for creating HD wallet tree")
     )
 
 
@@ -594,12 +567,14 @@ instance BuildableSafeGen NewWallet where
         %" assuranceLevel="%buildSafe sl
         %" name="%buildSafe sl
         %" operation"%buildSafe sl
+        %" derivationScheme"%buildSafe sl
         %" }")
         newwalBackupPhrase
         newwalSpendingPassword
         newwalAssuranceLevel
         newwalName
         newwalOperation
+        newwalDerivationScheme
 
 -- | Type for representation of serialized transaction in Base16-format.
 -- We use it for external wallets (to send/receive raw transaction during
@@ -941,8 +916,8 @@ instance ToSchema Wallet where
             --^ "The assurance level of the wallet."
             & "syncState"
             --^ "The sync state for this wallet."
-            & "derivationSchemeVersion"
-            --^ "Derivation scheme version used for creating HD wallet tree"
+            & "derivationScheme"
+            --^ "Derivation scheme used for creating HD wallet tree"
         )
 
 instance Arbitrary Wallet where
@@ -2384,6 +2359,7 @@ instance Example NewWallet where
                         <*> example -- Note: will produce `Just a`
                         <*> example
                         <*> pure "My Wallet"
+                        <*> example
                         <*> example
 
 instance Example TransactionAsBase16 where
