@@ -97,14 +97,14 @@ createWallet wallet newWalletRequest = liftIO $ do
                              (Mnemonic.mnemonicToSeed (mnemonic newWallet))
                              (spendingPassword newwalSpendingPassword)
         restoreFromESK nm
-                       (V1.derivationScheme newwalDerivationScheme)
+                       (V1.derivationScheme <$> newwalDerivationScheme)
                        esk
                        (spendingPassword newwalSpendingPassword)
                        newwalName
                        (fromAssuranceLevel newwalAssuranceLevel)
 
     restoreFromESK :: NetworkMagic
-                   -> DerivationScheme
+                   -> Maybe DerivationScheme
                    -> EncryptedSecretKey
                    -> PassPhrase
                    -> Text

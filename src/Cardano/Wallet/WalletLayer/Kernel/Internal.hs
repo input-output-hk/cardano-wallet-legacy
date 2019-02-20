@@ -58,7 +58,7 @@ importWallet pw WalletImport{..} = liftIO $ do
              case mbEsk of
                  Nothing  -> return (Left $ ImportWalletNoWalletFoundInBackup wiFilePath)
                  Just esk -> do
-                     res <- liftIO $ createWallet pw (ImportWalletFromESK esk wiSpendingPassword $ derivationScheme wiDerivationScheme)
+                     res <- liftIO $ createWallet pw (ImportWalletFromESK esk wiSpendingPassword $ derivationScheme <$> wiDerivationScheme)
                      return $ case res of
                           Left e               -> Left (ImportWalletCreationFailed e)
                           Right importedWallet -> Right importedWallet

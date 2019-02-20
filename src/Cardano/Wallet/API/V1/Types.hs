@@ -534,7 +534,7 @@ data NewWallet = NewWallet {
     , newwalAssuranceLevel   :: !AssuranceLevel
     , newwalName             :: !WalletName
     , newwalOperation        :: !WalletOperation
-    , newwalDerivationScheme :: !DerivationSchemeVersion
+    , newwalDerivationScheme :: !(Maybe DerivationSchemeVersion)
     } deriving (Eq, Show, Generic)
 
 deriveJSON Aeson.defaultOptions  ''NewWallet
@@ -566,8 +566,8 @@ instance BuildableSafeGen NewWallet where
         %" spendingPassword="%(buildSafeMaybe mempty sl)
         %" assuranceLevel="%buildSafe sl
         %" name="%buildSafe sl
-        %" operation"%buildSafe sl
-        %" derivationScheme"%buildSafe sl
+        %" operation="%buildSafe sl
+        %" derivationScheme="%build
         %" }")
         newwalBackupPhrase
         newwalSpendingPassword
@@ -2150,7 +2150,7 @@ instance BuildableSafeGen WalletSoftwareUpdate where
 data WalletImport = WalletImport
   { wiSpendingPassword :: !(Maybe SpendingPassword)
   , wiFilePath         :: !FilePath
-  , wiDerivationScheme :: !DerivationSchemeVersion
+  , wiDerivationScheme :: !(Maybe DerivationSchemeVersion)
   } deriving (Show, Eq, Generic)
 
 deriveJSON Aeson.defaultOptions ''WalletImport
