@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE RankNTypes                 #-}
+
 -- TODO: Not sure about the best way to avoid the orphan instances here
 {-# OPTIONS_GHC -fno-warn-orphans -Wno-redundant-constraints #-}
 
@@ -101,6 +102,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , IsOurs(..)
     -- Address pool
   , mkAddressPool
+  , mkAddressPoolExisting
   ) where
 
 import           Universum hiding ((:|))
@@ -124,7 +126,8 @@ import qualified Pos.Crypto as Core
 
 import           Cardano.Wallet.API.V1.Types (WalAddress (..))
 import           Cardano.Wallet.Kernel.AddressPool (AddressPool,
-                     emptyAddressPool, lookupAddressPool)
+                     ErrAddressPoolInvalid (..), emptyAddressPool,
+                     initAddressPool, lookupAddressPool)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
@@ -541,6 +544,7 @@ hdAccountRestorationState a = case a ^. hdAccountState of
 -------------------------------------------------------------------------------}
 
 class IsOurs s where
+    -- For the given state, check whether an address is "ours"
     isOurs :: Core.Address -> s -> (Maybe HdAddress, s)
 
 {-------------------------------------------------------------------------------
@@ -550,8 +554,8 @@ class IsOurs s where
 -- | NOTE: We could modify the given state here to actually store decrypted
 -- addresses in a `Map` to trade a decryption against a map lookup for already
 -- decrypted addresses.
-instance IsOurs [(HdRootId, Core.EncryptedSecretKey)] where
-    isOurs addr s = (,s) $ foldl' (<|>) Nothing $ flip map s $ \(rootId, esk) -> do
+instance IsOurs (Map HdRootId Core.EncryptedSecretKey) where
+    isOurs addr s = (,s) $ foldl' (<|>) Nothing $ flip Map.mapWithKey s $ \rootId esk -> do
         (accountIx, addressIx) <- decryptHdLvl2DerivationPath (eskToHdPassphrase esk) addr
         let accId = HdAccountId rootId accountIx
         let addrId = HdAddressId accId addressIx
@@ -577,10 +581,25 @@ mkAddressPool
     -> Core.PublicKey
     -> AddressPoolGap
     -> AddressPool Core.Address
-mkAddressPool mkAddress accPK gap = emptyAddressPool gap newAddress
-  where
-    newAddress :: Word32 -> Core.Address
-    newAddress addrIx = case deriveAddressPublicKey accPK ExternalChain addrIx of
+mkAddressPool mkAddress accPK gap
+    = emptyAddressPool gap (mkAddressBuilder mkAddress accPK)
+
+mkAddressPoolExisting
+    :: (Core.PublicKey -> Core.Address)
+    -> Core.PublicKey
+    -> AddressPoolGap
+    -> [(Core.Address, Word32)]
+    -> Either ErrAddressPoolInvalid (AddressPool Core.Address)
+mkAddressPoolExisting mkAddress accPK gap addrs
+    = initAddressPool gap (mkAddressBuilder mkAddress accPK) addrs
+
+mkAddressBuilder
+    :: (Core.PublicKey -> Core.Address)
+    -> Core.PublicKey
+    -> Word32
+    -> Core.Address
+mkAddressBuilder mkAddress accPK addrIx
+    = case deriveAddressPublicKey accPK ExternalChain addrIx of
         Nothing     -> error "mkAddressPool: maximum number of addresses reached."
         Just addrPK -> mkAddress addrPK
 

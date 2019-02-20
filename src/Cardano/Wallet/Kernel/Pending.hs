@@ -10,6 +10,7 @@ module Cardano.Wallet.Kernel.Pending (
 import           Universum hiding (State)
 
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Map.Strict as Map
 
 import           Control.Concurrent.MVar (modifyMVar_)
 
@@ -28,7 +29,7 @@ import           Cardano.Wallet.Kernel.DB.InDb
 import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending
 import           Cardano.Wallet.Kernel.DB.TxMeta (TxMeta, putTxMeta)
 import           Cardano.Wallet.Kernel.Internal
-import           Cardano.Wallet.Kernel.Read (getWalletCredentials)
+import           Cardano.Wallet.Kernel.Read (getFOWallets, getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Submission (Cancelled, addPending)
 import           Cardano.Wallet.Kernel.Util.Core
 
@@ -86,17 +87,19 @@ newTx :: forall e. ActiveWallet
       -> ([HdAddress] -> IO (Either e ())) -- ^ the update to run, takes ourAddrs as arg
       -> IO (Either e TxMeta)
 newTx ActiveWallet{..} accountId tx partialMeta upd = do
+    snapshot <- getWalletSnapshot walletPassive
     -- run the update
-    allCredentials <- getWalletCredentials walletPassive
-    let allOurAddresses = fst <$> allOurs allCredentials
+    hdRnds <- getFOWallets walletPassive snapshot
+
+    let allOurAddresses = fst <$> allOurs hdRnds
     res <- upd $ allOurAddresses
     case res of
         Left e   -> return (Left e)
         Right () -> do
             -- process transaction on success
             -- myCredentials should be a list with a single element.
-            let myCredentials = filter (\(hdRoot, _) -> accountId ^. hdAccountIdParent == hdRoot) allCredentials
-                ourOutputCoins = snd <$> allOurs myCredentials
+            let thisHdRndRoot = Map.filterWithKey (\hdRoot _ -> accountId ^. hdAccountIdParent == hdRoot) hdRnds
+                ourOutputCoins = snd <$> allOurs thisHdRndRoot
                 gainedOutputCoins = sumCoinsUnsafe ourOutputCoins
                 allOutsOurs = length ourOutputCoins == length txOut
                 txMeta = partialMeta allOutsOurs gainedOutputCoins
@@ -109,7 +112,7 @@ newTx ActiveWallet{..} accountId tx partialMeta upd = do
         -- | NOTE: we recognise addresses in the transaction outputs that belong to _all_ wallets,
         --  not only for the wallet to which this transaction is being submitted
         allOurs
-            :: [(HdRootId, EncryptedSecretKey)]
+            :: Map HdRootId EncryptedSecretKey
             -> [(HdAddress, Coin)]
         allOurs = evalState $ fmap catMaybes $ forM txOut $ \out -> do
             fmap (, txOutValue out) <$> state (isOurs $ txOutAddress out)

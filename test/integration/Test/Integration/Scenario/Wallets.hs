@@ -168,7 +168,7 @@ spec = do
             resp <- unsafeRequest ("GET", fromString endpoint) $ Nothing
             verify (resp :: Either ClientError [Wallet]) expectations
 
-    describe "WALLETS_LIST_03 - One can filter wallets by balance" $ do
+    scenario "WALLETS_LIST_03 - One can filter wallets by balance" $ do
 
         let matrix =
                 [ ( "api/v1/wallets?balance=EQ%5B3%5D"
@@ -188,7 +188,7 @@ spec = do
                   , [ expectSuccess
                     , expectListSizeEqual 2
                     , expectListItemFieldEqual 0 amount 3
-                    , expectListItemFieldEqual 1 amount 0
+                    , expectListItemFieldEqual 1 amount 1
                     ]
                   )
                 , ( "api/v1/wallets?balance=GT%5B6%5D"
@@ -210,11 +210,11 @@ spec = do
                     , expectListSizeEqual 4
                     , expectListItemFieldEqual 0 amount 6
                     , expectListItemFieldEqual 1 amount 6
-                    , expectListItemFieldEqual 2 amount 6
-                    , expectListItemFieldEqual 3 amount 0
+                    , expectListItemFieldEqual 2 amount 3
+                    , expectListItemFieldEqual 3 amount 1
                     ]
                   )
-                , ( "api/v1/wallets?balance=RANGE%5B6%3,6D&sort_by=balance"
+                , ( "api/v1/wallets?balance=RANGE%5B3,6%5D&sort_by=balance"
                   , [ expectSuccess
                     , expectListSizeEqual 3
                     , expectListItemFieldEqual 0 amount 6
@@ -222,22 +222,21 @@ spec = do
                     , expectListItemFieldEqual 2 amount 3
                     ]
                   )
-                , ( "api/v1/wallets?balance=RANGE%5B6%3,0,9D&sort_by=balance"
+                , ( "api/v1/wallets?balance=RANGE%5B6,9%5D&sort_by=balance"
                   , [ expectSuccess
                     , expectListSizeEqual 3
                     , expectListItemFieldEqual 0 amount 9
-                    , expectListItemFieldEqual 1 amount 3
-                    , expectListItemFieldEqual 2 amount 0
+                    , expectListItemFieldEqual 1 amount 6
+                    , expectListItemFieldEqual 2 amount 6
                     ]
                   )
                 ]
 
-        forM_ matrix $ \(endpoint, expectations) -> scenario endpoint $ do
-            pendingWith "Test fails due to bug #220"
-            forM_ ([3,6,6,9,0]) $ \coins -> do
-                setup $ defaultSetup
-                    & initialCoins .~ [coins]
+        forM_ ([3,6,6,9,1]) $ \coin ->
+            setup $ defaultSetup
+            & initialCoins .~ [coin]
 
+        forM_ matrix $ \(endpoint, expectations) -> do
             resp <- unsafeRequest ("GET", fromString endpoint) $ Nothing
             verify (resp :: Either ClientError [Wallet]) expectations
 
@@ -414,7 +413,7 @@ spec = do
             , expectListItemFieldEqual 1 walletId ( Client.WalletId $ walletIds !! 0 )
             ]
 
-    describe "WALLETS_LIST_04 - One can sort results only by 'balance' and 'created_at'" $ do
+    scenario "WALLETS_LIST_04 - One can sort results only by 'balance' and 'created_at'" $ do
 
         let matrix =
                 [ ( "api/v1/wallets?sort_by=created_at"
@@ -491,13 +490,12 @@ spec = do
 
                 ]
 
-        forM_ matrix $ \(endpoint, expectations) -> scenario endpoint $ do
-            pendingWith "Test fails due to bug #220"
-            forM_ (zip [1,2,3] [3,2,1]) $ \(name, coins) -> do
-                setup $ defaultSetup
-                    & walletName .~ show (name :: Int)
-                    & initialCoins .~ [coins]
+        forM_ (zip [1,2,3] [3,2,1]) $ \(name, coins) -> do
+            setup $ defaultSetup
+                & walletName .~ show (name :: Int)
+                & initialCoins .~ [coins]
 
+        forM_ matrix $ \(endpoint, expectations) -> do
             resp <- unsafeRequest ("GET", fromString endpoint) $ Nothing
             verify (resp :: Either ClientError [Wallet]) expectations
 
@@ -808,8 +806,6 @@ spec = do
             ]
 
     scenario "WALLETS_UTXO_04 - UTxO statistics reflect wallet's activity" $ do
-        pendingWith "disabled until we figure out why it is randomly failing.  See #220"
-
         fixture <- setup $ defaultSetup
             & initialCoins .~ [14, 42, 1337]
 
@@ -818,6 +814,16 @@ spec = do
 
         verify response
             [ expectWalletUTxO [14, 42, 1337]
+            ]
+
+
+    scenario "WALLETS_UTXO_05 - UTxO statistics reflect wallet's activity" $ do
+        fixture <- setup $ defaultSetup
+            & initialCoins .~ [13, 43, 66, 101, 1339]
+        response <- request $ Client.getUtxoStatistics
+            $- (fixture ^. wallet . walletId)
+        verify response
+            [ expectWalletUTxO [13, 43, 66, 101, 1339]
             ]
 
     -- Below are scenarios that are somewhat 'symmetric' for both 'create' and 'restore' operations.
@@ -1143,9 +1149,6 @@ spec = do
             }|]
             verify (response :: Either ClientError Wallet) expectations
   where
-
-    fromWalletId :: Client.WalletId -> Text
-    fromWalletId (Client.WalletId a) = a
 
     testBackupPhrase :: [Text]
     testBackupPhrase =

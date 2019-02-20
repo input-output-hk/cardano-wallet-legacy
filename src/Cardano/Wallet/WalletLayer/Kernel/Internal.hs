@@ -9,8 +9,8 @@ import           Control.Concurrent.MVar (modifyMVar_)
 import           Data.Acid.Advanced (update')
 import           System.IO.Error (isDoesNotExistError)
 
-import           Cardano.Wallet.API.V1.Types (Wallet, WalletImport (..),
-                     derivationScheme)
+import           Cardano.Wallet.API.V1.Types (DerivationSchemeVersion (..),
+                     Wallet, WalletImport (..))
 import           Cardano.Wallet.Kernel.DB.AcidState (ClearDB (..))
 import           Cardano.Wallet.Kernel.DB.TxMeta
 import qualified Cardano.Wallet.Kernel.Internal as Kernel

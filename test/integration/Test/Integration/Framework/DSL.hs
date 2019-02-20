@@ -20,22 +20,23 @@ module Test.Integration.Framework.DSL
     , verify
 
     -- * Requests (Only API types)
-    , NewAddress(..)
-    , NewWallet (..)
+    , AddressPoolGap
+    , AssuranceLevel(..)
+    , DestinationChoice(..)
+    , EosWallet(..)
+    , FilterOperations(..)
     , NewAccount (..)
+    , NewAddress(..)
     , NewEosWallet (..)
+    , NewWallet (..)
     , PasswordUpdate (..)
     , Payment (..)
     , RawPassword (..)
     , Redemption (..)
-    , WalletUpdate(..)
     , ShieldedRedemptionCode (..)
-    , FilterOperations(..)
     , SortOperations(..)
     , WalletOperation(..)
-    , AssuranceLevel(..)
-    , DestinationChoice(..)
-    , AddressPoolGap
+    , WalletUpdate(..)
     , defaultAccountId
     , defaultAssuranceLevel
     , defaultDistribution
@@ -84,8 +85,10 @@ module Test.Integration.Framework.DSL
     , amount
     , assuranceLevel
     , backupPhrase
+    , createdAt
     , externallyOwnedAccounts
     , failures
+    , fromWalletId
     , initialCoins
     , mnemonicWords
     , rawAddressPoolGap
@@ -388,6 +391,9 @@ assuranceLevel = typed
 backupPhrase :: HasType BackupPhrase s => Lens' s BackupPhrase
 backupPhrase = typed
 
+createdAt :: HasType WalletTimestamp s => Lens' s WalletTimestamp
+createdAt = typed
+
 externallyOwnedAccounts :: HasType [AccountPublicKeyWithIx] s => Lens' s [AccountPublicKeyWithIx]
 externallyOwnedAccounts = typed
 
@@ -682,6 +688,9 @@ expectWalletUTxO coins = \case
 -- INTERNALS
 --
 
+fromWalletId :: Client.WalletId -> Text
+fromWalletId (Client.WalletId a) = a
+
 wantedSuccessButError
     :: (MonadFail m, Show e)
     => e
@@ -773,9 +782,10 @@ mkPassword (RawPassword txt)
 mkAddress
     :: (MonadIO m, MonadFail m)
     => BackupPhrase
+    -> AccountIndex
     -> Word32
     -> m WalAddress
-mkAddress (BackupPhrase mnemonic) ix = do
+mkAddress (BackupPhrase mnemonic) (accId) ix = do
     let (_, esk) = safeDeterministicKeyGen
             (mnemonicToSeed mnemonic)
             mempty
@@ -786,7 +796,7 @@ mkAddress (BackupPhrase mnemonic) ix = do
             (ShouldCheckPassphrase False)
             mempty
             esk
-            (getAccIndex minBound)
+            (getAccIndex accId)
             ix
 
     case maddr of
@@ -877,7 +887,7 @@ setupDestination
 setupDestination = \case
     RandomDestination -> do
         bp <- liftIO (generate arbitrary)
-        unWalAddress <$> mkAddress bp 1
+        unWalAddress <$> mkAddress bp defaultAccountId 1
     LockedDestination ->
         fail "Asset-locked destination aren't yet implemented. This\
             \ requires slightly more work than it seems and will be\

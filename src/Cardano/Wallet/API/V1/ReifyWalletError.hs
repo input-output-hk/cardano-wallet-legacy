@@ -34,6 +34,7 @@ translateWalletLayerErrors :: SomeException -> Maybe V1.WalletError
 translateWalletLayerErrors ex = do
        (    try' @CreateAddressError createAddressError
         <|> try' @ValidateAddressError validateAddressError
+        <|> try' @ImportAddressError importAddressError
 
         <|> try' @CreateAccountError createAccountError
         <|> try' @GetAccountError getAccountError
@@ -60,7 +61,12 @@ translateWalletLayerErrors ex = do
   where try' :: forall e. Exception e => (e -> V1.WalletError) -> Maybe V1.WalletError
         try' f = f <$> fromException @e ex
 
-
+importAddressError :: ImportAddressError -> V1.WalletError
+importAddressError e = case e of
+    (ImportAddressError (Kernel.ImportAddressKeystoreNotFound _)) ->
+        V1.WalletNotFound
+    (ImportAddressAddressDecodingFailed _) ->
+        V1.WalletNotFound
 
 createAddressErrorKernel :: Kernel.CreateAddressError -> V1.WalletError
 createAddressErrorKernel e = case e of
@@ -326,6 +332,10 @@ newTransactionError e = case e of
 
     (Kernel.NewTransactionNotEnoughUtxoFragmentation (Kernel.NumberOfMissingUtxos missingUtxo)) ->
         V1.UtxoNotEnoughFragmented (V1.ErrUtxoNotEnoughFragmented missingUtxo V1.msgUtxoNotEnoughFragmented)
+
+    (Kernel.NewTransactionZeroAmountCoin (Kernel.NumberOfZeroAmountOutputs zeroOutputs)) ->
+        V1.ZeroAmountCoin (V1.ErrZeroAmountCoin zeroOutputs V1.msgZeroAmountCoin)
+
 
 redeemAdaError :: RedeemAdaError -> V1.WalletError
 redeemAdaError e = case e of

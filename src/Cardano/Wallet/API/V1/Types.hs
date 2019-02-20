@@ -2,6 +2,7 @@
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE DuplicateRecordFields      #-}
 {-# LANGUAGE ExplicitNamespaces         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures             #-}
@@ -130,6 +131,8 @@ module Cardano.Wallet.API.V1.Types (
   , ErrNotEnoughMoney(..)
   , ErrUtxoNotEnoughFragmented(..)
   , msgUtxoNotEnoughFragmented
+  , ErrZeroAmountCoin(..)
+  , msgZeroAmountCoin
   , toServantError
   , toHttpErrorStatus
   , module Cardano.Wallet.Types.UtxoStatistics
@@ -149,6 +152,7 @@ import qualified Data.ByteArray as ByteArray
 import qualified Data.ByteString as BS
 import qualified Data.Char as C
 import           Data.Default (Default (def))
+import qualified Data.List.NonEmpty as NE
 import           Data.Semigroup (Semigroup)
 import           Data.Swagger hiding (Example, example)
 import           Data.Text (Text, dropEnd, toLower)
@@ -282,8 +286,7 @@ newtype WalletCoin = WalletCoin { unWalletCoin :: Core.Coin }
 
 deriveSafeBuildable ''WalletCoin
 instance BuildableSafeGen WalletCoin where
-    buildSafeGen sl (WalletCoin c) =
-        bprint (plainOrSecureF sl build (fconst "<wallet coin>")) c
+    buildSafeGen _ (WalletCoin c) = bprint build c
 
 instance ToJSON WalletCoin where
     toJSON (WalletCoin c) = toJSON . Core.unsafeGetCoin $ c
@@ -346,8 +349,7 @@ newtype WalletTimestamp = WalletTimestamp Core.Timestamp
 
 deriveSafeBuildable ''WalletTimestamp
 instance BuildableSafeGen WalletTimestamp where
-    buildSafeGen sl (WalletTimestamp ts) =
-        bprint (plainOrSecureF sl build (fconst "<wallet timestamp>")) ts
+    buildSafeGen _ (WalletTimestamp ts) = bprint build ts
 
 -- | Represents according to 'apiTimeFormat' format.
 instance ToJSON WalletTimestamp where
@@ -419,8 +421,8 @@ instance ToSchema AssuranceLevel where
 
 deriveSafeBuildable ''AssuranceLevel
 instance BuildableSafeGen AssuranceLevel where
-    buildSafeGen _ NormalAssurance = "normal"
-    buildSafeGen _ StrictAssurance = "strict"
+    buildSafeGen _ NormalAssurance = "assurance level: normal"
+    buildSafeGen _ StrictAssurance = "assurance level: strict"
 
 -- | A Wallet ID.
 newtype WalletId = WalletId Text deriving (Show, Eq, Ord, Generic)
@@ -440,8 +442,8 @@ instance Arbitrary WalletId where
 
 deriveSafeBuildable ''WalletId
 instance BuildableSafeGen WalletId where
-    buildSafeGen sl (WalletId wid) =
-        bprint (plainOrSecureF sl build (fconst "<wallet id>")) wid
+    buildSafeGen _ (WalletId wid) =
+        bprint ("wallet id: " % build) wid
 
 instance FromHttpApiData WalletId where
     parseQueryParam = Right . WalletId
@@ -508,8 +510,8 @@ instance ToSchema WalletOperation where
 
 deriveSafeBuildable ''WalletOperation
 instance BuildableSafeGen WalletOperation where
-    buildSafeGen _ CreateWallet  = "create"
-    buildSafeGen _ RestoreWallet = "restore"
+    buildSafeGen _ CreateWallet  = "operation: create"
+    buildSafeGen _ RestoreWallet = "operation: restore"
 
 newtype BackupPhrase = BackupPhrase
     { unBackupPhrase :: Mnemonic 12
@@ -558,22 +560,18 @@ instance ToSchema NewWallet where
       & ("derivationScheme"        --^ "Derivation scheme used for creating HD wallet tree")
     )
 
-
 deriveSafeBuildable ''NewWallet
 instance BuildableSafeGen NewWallet where
-    buildSafeGen sl NewWallet{..} = bprint ("{"
-        %" backupPhrase="%buildSafe sl
-        %" spendingPassword="%(buildSafeMaybe mempty sl)
-        %" assuranceLevel="%buildSafe sl
-        %" name="%buildSafe sl
-        %" operation="%buildSafe sl
-        %" derivationScheme="%build
-        %" }")
-        newwalBackupPhrase
-        newwalSpendingPassword
-        newwalAssuranceLevel
-        newwalName
+    buildSafeGen _ NewWallet{..} = bprint
+        ( "Request for new wallet"
+        % "\n  " % build
+        % "\n  name: " % build
+        % "\n  " % build
+        % "\n  " % build
+        )
         newwalOperation
+        newwalName
+        newwalAssuranceLevel
         newwalDerivationScheme
 
 -- | Type for representation of serialized transaction in Base16-format.
@@ -690,12 +688,13 @@ instance Arbitrary WalletUpdate where
 
 deriveSafeBuildable ''WalletUpdate
 instance BuildableSafeGen WalletUpdate where
-    buildSafeGen sl WalletUpdate{..} = bprint ("{"
-        %" assuranceLevel="%buildSafe sl
-        %" name="%buildSafe sl
-        %" }")
-        uwalAssuranceLevel
+    buildSafeGen _ WalletUpdate{..} = bprint
+        ( "Update for wallet"
+        % "\n  name: " % build
+        % "\n  " % build
+        )
         uwalName
+        uwalAssuranceLevel
 
 newtype EstimatedCompletionTime = EstimatedCompletionTime (MeasuredIn 'Milliseconds Word)
   deriving (Show, Eq)
@@ -933,14 +932,21 @@ instance Arbitrary Wallet where
 
 deriveSafeBuildable ''Wallet
 instance BuildableSafeGen Wallet where
-  buildSafeGen sl Wallet{..} = bprint ("{"
-    %" id="%buildSafe sl
-    %" name="%buildSafe sl
-    %" balance="%buildSafe sl
-    %" }")
+  buildSafeGen _ Wallet{..} = bprint
+    ( "Wallet"
+    % "\n  " % build
+    % "\n  name: " % build
+    % "\n  balance: " % build
+    % "\n  created at: " % build
+    % "\n  " % build
+    % "\n  has spending password: " % build
+    )
     walId
     walName
     walBalance
+    walCreatedAt
+    walAssuranceLevel
+    walHasSpendingPassword
 
 instance Buildable [Wallet] where
     build = bprint listJson
@@ -1227,13 +1233,13 @@ instance BuildableSafeGen AccountPublicKeyWithIx where
         accpubkeywithixPublicKey
         accpubkeywithixIndex
 
-instance Buildable [AccountPublicKeyWithIx] where
-    build = bprint listJson
+instance Buildable (NonEmpty AccountPublicKeyWithIx) where
+    build = bprint listJson . NE.toList
 
 -- | A type modelling the request for a new 'EosWallet',
 -- on the mobile client or hardware wallet.
 data NewEosWallet = NewEosWallet
-    { neweoswalAccounts       :: ![AccountPublicKeyWithIx]
+    { neweoswalAccounts       :: !(NonEmpty AccountPublicKeyWithIx)
     , neweoswalAddressPoolGap :: !(Maybe AddressPoolGap)
     , neweoswalAssuranceLevel :: !AssuranceLevel
     , neweoswalName           :: !WalletName
@@ -2486,6 +2492,22 @@ instance Buildable ErrUtxoNotEnoughFragmented where
         bprint ("Missing "%build%" utxo(s) to accommodate all outputs of the transaction") missingUtxos
 
 
+data ErrZeroAmountCoin = ErrZeroAmountCoin {
+      theZeroOutputs :: !Int
+    , theHelp        :: !Text
+    } deriving (Eq, Generic, Show)
+
+
+msgZeroAmountCoin :: Text
+msgZeroAmountCoin = "Each payee must receive positive amount in the transaction - zero amount is not allowed"
+
+deriveJSON Aeson.defaultOptions ''ErrZeroAmountCoin
+
+instance Buildable ErrZeroAmountCoin where
+    build (ErrZeroAmountCoin zeroOutputs _ ) =
+        bprint ("There are "%build%" zero output(s) in the transaction") zeroOutputs
+
+
 
 -- | Type representing any error which might be thrown by wallet.
 --
@@ -2554,6 +2576,8 @@ data WalletError =
     | UtxoNotEnoughFragmented !ErrUtxoNotEnoughFragmented
     -- ^ available Utxo is not enough fragmented, ie., there is more outputs of transaction than
     -- utxos
+    | ZeroAmountCoin !ErrZeroAmountCoin
+    -- ^ there is at least one zero amount output in the transaction
     | EosWalletDoesNotHaveAccounts Text
     -- ^ EOS-wallet doesn't have any accounts.
     | EosWalletHasWrongAccounts Text
@@ -2604,6 +2628,9 @@ instance Arbitrary WalletError where
         , RequestThrottled <$> arbitrary
         , UtxoNotEnoughFragmented <$> Gen.oneof
           [ ErrUtxoNotEnoughFragmented <$> Gen.choose (1, 10) <*> arbitrary
+          ]
+        , ZeroAmountCoin <$> Gen.oneof
+          [ ErrZeroAmountCoin <$> Gen.choose (1, 10) <*> arbitrary
           ]
         ]
       where
@@ -2663,6 +2690,8 @@ instance Buildable WalletError where
             bprint "You've made too many requests too soon, and this one was throttled."
         UtxoNotEnoughFragmented x ->
             bprint build x
+        ZeroAmountCoin x ->
+            bprint build x
         EosWalletDoesNotHaveAccounts _ ->
             bprint "EOS-wallet doesn't have any accounts."
         EosWalletHasWrongAccounts _ ->
@@ -2713,6 +2742,8 @@ instance ToServantError WalletError where
             err400 { errHTTPCode = 429 }
         UtxoNotEnoughFragmented{} ->
             err403
+        ZeroAmountCoin{} ->
+            err400
         EosWalletDoesNotHaveAccounts{} ->
             err500
         EosWalletHasWrongAccounts{} ->
@@ -2762,6 +2793,8 @@ instance HasDiagnostic WalletError where
         RequestThrottled{} ->
             "microsecondsUntilRetry"
         UtxoNotEnoughFragmented{} ->
+            "details"
+        ZeroAmountCoin{} ->
             "details"
         EosWalletDoesNotHaveAccounts{} ->
             noDiagnosticKey
