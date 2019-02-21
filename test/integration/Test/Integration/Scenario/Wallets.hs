@@ -19,8 +19,6 @@ spec :: Scenarios Context
 spec = do
     scenario "WALLETS_DELETE_01 - deleted wallet is not available" $ do
         fixture <- setup $ defaultSetup
-            & walletName .~ "漢ę ó ł ąś ł żźćń字"
-            & mnemonicWords .~ testBackupPhrase
 
         successfulRequest $ Client.deleteWallet
             $- (fixture ^. wallet . walletId)
@@ -30,6 +28,40 @@ spec = do
 
         verify response02
             [ expectWalletError (WalletNotFound)
+            ]
+
+    scenario "WALLETS_DELETE_02 - Providing non-existing wallet id returns 404 error and appropriate error message." $ do
+        fixture <- setup $ defaultSetup
+
+        successfulRequest $ Client.deleteWallet
+            $- (fixture ^. wallet . walletId)
+
+        response02 <- request $ Client.deleteWallet
+            $- (fixture ^. wallet . walletId)
+
+        verify response02
+            [ expectWalletError (WalletNotFound)
+            ]
+
+    describe "WALLETS_DELETE_02 - Providing not valid wallet id returns 404 error and appropriate error message." $ do
+        forM_ (["", "123", "ziemniak"]) $ \(notValidId) -> scenario ("walId = \"" ++ notValidId ++ "\"") $ do
+            let endpoint = "api/v1/wallets/" ++ notValidId
+            response <- unsafeRequest ("DELETE", fromString endpoint) $ Nothing
+            verify (response :: Either ClientError EosWallet)
+                [ expectError
+                -- TODO: add more expectations after #221 is resolved
+                ]
+
+    scenario "WALLETS_DELETE_03 - Deleted wallet does not appear in the Client.getWallets" $ do
+        fixture <- setup $ defaultSetup
+
+        successfulRequest $ Client.deleteWallet
+            $- (fixture ^. wallet . walletId)
+
+        resp <- request $ Client.getWallets
+        verify resp
+            [ expectSuccess
+            , expectListSizeEqual 0
             ]
 
     scenario "WALLETS_DETAILS_01 - one gets all wallet details when providing valid wallet id" $ do
@@ -46,7 +78,7 @@ spec = do
             , expectFieldEqual amount 0
             ]
 
-    scenario "WALLETS_DETAILS_02 - Providing non-existing wallet id returns 404 error and appropriate error message." $ do
+    scenario "WALLETS_DETAILS_02, WALLETS_DELETE_05 - Providing non-existing wallet id returns 404 error and appropriate error message." $ do
         fixture  <- setup defaultSetup
 
         _ <- successfulRequest $ Client.deleteWallet $- fixture ^. wallet . walletId
@@ -617,23 +649,100 @@ spec = do
                 $- (fixture ^. wallet . walletId)
             verify response fullExpectations
 
-    describe "WALLETS_UPDATE_01, WALLETS_DETAILS_06 - updating a wallet persists the update" $ do
+    describe "WALLETS_UPDATE_01,04,05, WALLETS_DETAILS_06 - Updating wallet, updates name, assuranceLevel only" $ do
         forM_ ([(StrictAssurance, NormalAssurance), (NormalAssurance, StrictAssurance)]) $ \(initLvl, updLvl) -> scenario ((show initLvl) ++ " -> " ++ (show updLvl)) $ do
             fixture <- setup $ defaultSetup
                 & assuranceLevel .~ initLvl
 
-            [_, response01] <- sequence
-                [ request $ Client.updateWallet
+            let expectations = [ -- updated
+                                 expectFieldEqual assuranceLevel updLvl
+                               , expectFieldEqual walletName "漢patate字"
+                                -- not updated
+                               , expectFieldEqual walletId (fixture ^. wallet . walletId)
+                               , expectFieldEqual createdAt (fixture ^. wallet . createdAt)
+                               , expectFieldEqual spendingPasswordLastUpdate (fixture ^. wallet . spendingPasswordLastUpdate)
+                               , expectFieldEqual syncState (fixture ^. wallet . syncState)
+                               , expectFieldEqual hasSpendingPassword (fixture ^. wallet . hasSpendingPassword)
+                               , expectFieldEqual amount 0
+                               ]
+
+            walUpdateResp <- request $ Client.updateWallet
                     $- (fixture ^. wallet . walletId)
                     $- WalletUpdate updLvl "漢patate字"
-                , request $ Client.getWallet
+            verify walUpdateResp expectations
+
+            getWalResp <- request $ Client.getWallet
                     $- (fixture ^. wallet . walletId)
+            verify getWalResp expectations
+
+    scenario "WALLETS_UPDATE_02, WALLETS_DELETE_04 - Invalid or non-existing 'walletId' results in response code: 404 and appropriate error message." $ do
+        fixture <- setup $ defaultSetup
+        successfulRequest $ Client.deleteWallet
+            $- (fixture ^. wallet . walletId)
+
+        resp <- request $ Client.updateWallet
+                $- (fixture ^. wallet . walletId)
+                $- WalletUpdate StrictAssurance "漢patate字"
+        verify resp
+            [ expectWalletError (WalletNotFound)
+            ]
+
+    describe "WALLETS_UPDATE_02 - Providing not valid wallet id returns 404 error and appropriate error message." $ do
+        forM_ (["", "123", "ziemniak"]) $ \(notValidId) -> scenario ("walId = \"" ++ notValidId ++ "\"") $ do
+            let endpoint = "api/v1/wallets/" ++ notValidId
+            response <- unsafeRequest ("PUT", fromString endpoint) $ Just $ [json|{
+                "name": "new name",
+                "assuranceLevel": "strict"
+            }|]
+            verify (response :: Either ClientError EosWallet)
+                [ expectError
+                -- TODO: add more expectations after #221 is resolved
                 ]
 
-            verify response01
-                [ expectFieldEqual walletName "漢patate字"
-                , expectFieldEqual assuranceLevel updLvl
+    describe "WALLETS_UPDATE_03 - one has to provide all required parameters" $ do
+
+        let matrix =
+                    [ ( "no assuranceLevel"
+                      , [json| { "name": "My EosWallet" } |]
+                      , [ expectJSONError "the key assuranceLevel was not present." ]
+                      )
+                    , ( "no name"
+                      , [json| { "assuranceLevel": "normal" } |]
+                      , [ expectJSONError "the key name was not present." ]
+                      )
+                    ]
+        forM_ matrix $ \(title, payload, expectations) -> scenario title $ do
+            fixture  <- setup $ defaultSetup
+
+            let endpoint = "api/v1/wallets/" <> fromWalletId (fixture ^. wallet . walletId)
+            response <- unsafeRequest ("PUT", endpoint) $ Just $ [json| #{payload} |]
+            verify (response :: Either ClientError EosWallet) expectations
+
+    describe "WALLETS_UPDATE_04 - one has to provide assuranceLevel to be either 'normal' or 'strict'" $ do
+        let matrix =
+                [ ( "empty string"
+                  , [json| "" |]
+                  , [ expectJSONError "expected a String with the tag of a constructor but got ." ]
+                  )
+                , ( "555"
+                  , [json| 555 |]
+                  , [ expectJSONError "expected String but got Number." ]
+                  )
+                , ( "亜哀愛źiemniak悪握圧扱安"
+                  , [json| "亜哀愛źiemniak悪握圧扱安" |]
+                  , [ expectJSONError "expected a String with the tag of a constructor but got 亜哀愛źiemniak悪握圧扱安" ]
+                  )
                 ]
+
+        forM_ matrix $ \(title, assurLevel, expectations) -> scenario ("assuranceLevel = " ++ title) $ do
+            fixture  <- setup $ defaultSetup
+
+            let endpoint = "api/v1/wallets/" <> fromWalletId (fixture ^. wallet . walletId)
+            response <- unsafeRequest ("PUT", endpoint) $ Just $ [json|{
+                "assuranceLevel": #{assurLevel},
+                "name": "My Updated Wallet"
+                }|]
+            verify (response :: Either ClientError EosWallet) expectations
 
     describe "WALLETS_UPDATE_PASS_02,03 - Updated password makes old password invalid" $ do
         let matrix =
@@ -653,7 +762,6 @@ spec = do
                   , [ expectFieldEqual hasSpendingPassword True ]
                   )
                 ]
-
 
         let setupUpdatePass oldPassword newPassword expectations = do
                 fixture <- setup $ defaultSetup
@@ -783,7 +891,7 @@ spec = do
             [ expectWalletError (CannotCreateAddress "")
             ]
 
-    scenario "WALLETS_UPDATE_PASS_07 - Invalid or non-existing 'walletId' results in response code: 404 and appropriate error message" $ do
+    scenario "WALLETS_UPDATE_PASS_07, WALLETS_DELETE_04 - Invalid or non-existing 'walletId' results in response code: 404 and appropriate error message" $ do
         fixture <- setup $ defaultSetup
             & rawPassword .~ "valid raw pass"
         successfulRequest $ Client.deleteWallet
@@ -915,7 +1023,29 @@ spec = do
             }|]
             verify (updatePassResp :: Either ClientError Wallet) expectations
 
-    scenario "WALLETS_UTXO_03 - UTxO statistics reflect wallet's inactivity" $ do
+    scenario "WALLETS_UTXO_02, WALLETS_DELETE_06 - Providing non-existing wallet id returns 404 error and appropriate error message." $ do
+        fixture <- setup $ defaultSetup
+
+        successfulRequest $ Client.deleteWallet
+            $- (fixture ^. wallet . walletId)
+
+        resp <- request $ Client.getUtxoStatistics
+            $- (fixture ^. wallet . walletId)
+
+        verify resp
+            [ expectWalletError (WalletNotFound)
+            ]
+
+    describe "WALLETS_UTXO_02 - Providing not valid wallet id returns 404 error and appropriate error message." $ do
+        forM_ (["", "123", "ziemniak"]) $ \(notValidId) -> scenario ("walId = \"" ++ notValidId ++ "\"") $ do
+            let endpoint = "api/v1/wallets/" ++ notValidId ++ "/statistics/utxos"
+            response <- unsafeRequest ("GET", fromString endpoint) $ Nothing
+            verify (response :: Either ClientError EosWallet)
+                [ expectError
+                -- TODO: add more expectations after #221 is resolved
+                ]
+
+    scenario "WALLETS_UTXO_01, WALLETS_UTXO_03 - UTxO statistics reflect wallet's inactivity" $ do
         fixture <- setup defaultSetup
 
         response <- request $ Client.getUtxoStatistics
@@ -925,19 +1055,17 @@ spec = do
             [ expectWalletUTxO []
             ]
 
-    scenario "WALLETS_UTXO_04 - UTxO statistics reflect wallet's activity" $ do
+    scenario "WALLETS_UTXO_01, WALLETS_UTXO_04 - UTxO statistics reflect wallet's activity" $ do
         fixture <- setup $ defaultSetup
             & initialCoins .~ [14, 42, 1337]
 
         response <- request $ Client.getUtxoStatistics
             $- (fixture ^. wallet . walletId)
-
         verify response
             [ expectWalletUTxO [14, 42, 1337]
             ]
 
-
-    scenario "WALLETS_UTXO_05 - UTxO statistics reflect wallet's activity" $ do
+    scenario "WALLETS_UTXO_04 - UTxO statistics reflect wallet's activity" $ do
         fixture <- setup $ defaultSetup
             & initialCoins .~ [13, 43, 66, 101, 1339]
         response <- request $ Client.getUtxoStatistics
