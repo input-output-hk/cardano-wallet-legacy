@@ -43,33 +43,28 @@ type FullyOwnedAPI = Tag "Wallets" 'NoTagDescription :>
     )
 
 type ExternallyOwnedAPI = Tag "Externally Owned Wallets" 'NoTagDescription
-    :> ( "wallets"
-        :> "externally-owned"
+    :> ( "externally-owned-wallets"
         :> Summary "Create a new Wallet or restore an existing one."
         :> ReqBody '[ValidJSON] (NewEosWallet)
         :> PostCreated '[ValidJSON] (APIResponse EosWallet)
 
-    :<|> "wallets"
-        :> "externally-owned"
+    :<|> "externally-owned-wallets"
         :> Summary "Return the Wallet identified by the given walletId."
         :> CaptureWalletId
         :> Get '[ValidJSON] (APIResponse EosWallet)
 
-    :<|> "wallets"
-        :> "externally-owned"
+    :<|> "externally-owned-wallets"
         :> Summary "Update the Wallet identified by the given walletId."
         :> CaptureWalletId
         :> ReqBody '[ValidJSON] (UpdateEosWallet)
         :> Put '[ValidJSON] (APIResponse EosWallet)
 
-    :<|> "wallets"
-        :> "externally-owned"
+    :<|> "externally-owned-wallets"
         :> Summary "Delete the given Wallet and all its accounts."
         :> CaptureWalletId
         :> DeleteNoContent '[ValidJSON] NoContent
 
-    :<|> "wallets"
-        :> "externally-owned"
+    :<|> "externally-owned-wallets"
         :> Summary "Return a list of the available wallets."
         :> WalletRequestParams
         :> FilterBy

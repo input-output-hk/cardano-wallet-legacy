@@ -55,7 +55,7 @@ spec = do
 
     describe "EOSWALLETS_CREATE_02 - addressPoolGap cannot be outside [10..100]" $ do
         forM_ ([-1, 0, 9, 101]) $ \poolGap -> scenario ("addressPoolGap = " ++ show (poolGap :: Int)) $ do
-            let endpoint = "api/v1/wallets/externally-owned"
+            let endpoint = "api/v1/externally-owned-wallets"
             response <- unsafeRequest ("POST", endpoint) $ Just $ [json|{
                 "accounts": [
                             {
@@ -74,7 +74,7 @@ spec = do
                 ]
 
     scenario "EOSWALLETS_CREATE_03 - one can't provide an empty list of accounts" $ do
-        let endpoint = "api/v1/wallets/externally-owned"
+        let endpoint = "api/v1/externally-owned-wallets"
         response <- unsafeRequest ("POST", endpoint) $ Just $ [json|{
             "accounts": [],
             "addressPoolGap": 10,
@@ -86,7 +86,7 @@ spec = do
             ]
 
     scenario "EOSWALLETS_CREATE_03 - publicKey must be present" $ do
-        response <- unsafeRequest ("POST", "api/v1/wallets/externally-owned") $ Just $ [json|{
+        response <- unsafeRequest ("POST", "api/v1/externally-owned-wallets") $ Just $ [json|{
             "accounts": [
                         {
                             "index": 2710723942
@@ -101,7 +101,7 @@ spec = do
             ]
 
     scenario "EOSWALLETS_CREATE_03 - index must be present" $ do
-        response <- unsafeRequest ("POST", "api/v1/wallets/externally-owned") $ Just $ [json|{
+        response <- unsafeRequest ("POST", "api/v1/externally-owned-wallets") $ Just $ [json|{
             "accounts": [
                         {
                             "publicKey": "1OQQ6jrO8xzPyybgLEk5vuUcoCCH4fds3k5rqnxErglRb7EiGQKa74TP9jx0ATHCqUiD8uLO6pP8z31+c393lw=="
@@ -118,7 +118,7 @@ spec = do
 
     describe "EOSWALLETS_CREATE_03 - index must be [2147483648..4294967295]" $ do
         forM_ ([-1, 0, 1, 2147483647, 2147483648, 4294967295, 4294967296]) $ \(index) -> scenario ("index = " ++ show (index :: Int)) $ do
-            response <- unsafeRequest ("POST", "api/v1/wallets/externally-owned") $ Just $ [json|{
+            response <- unsafeRequest ("POST", "api/v1/externally-owned-wallets") $ Just $ [json|{
                 "accounts": [
                             {
                                 "publicKey": "1OQQ6jrO8xzPyybgLEk5vuUcoCCH4fds3k5rqnxErglRb7EiGQKa74TP9jx0ATHCqUiD8uLO6pP8z31+c393lw==",
@@ -140,7 +140,7 @@ spec = do
 
     describe "EOSWALLETS_CREATE_03 - publicKey must be valid" $ do
         forM_ (["", "123", "ziemniak", "1OQQ6jrO8xzPyybgLEk5vuUcoCCH4fds3k5rqnxErglRb7EiGQKa74TP9jx0ATHCqUiD8uLO6pP8z31"]) $ \(key) -> scenario ("key = \"" ++ key ++ "\"") $ do
-            response <- unsafeRequest ("POST", "api/v1/wallets/externally-owned") $ Just $ [json|{
+            response <- unsafeRequest ("POST", "api/v1/externally-owned-wallets") $ Just $ [json|{
                 "accounts": [
                             {
                                 "publicKey": #{key},
@@ -187,7 +187,7 @@ spec = do
                 ]
 
         forM_ matrix $ \(title, assurLevel, expectations) -> scenario ("assuranceLevel = " ++ title) $ do
-            let endpoint = "api/v1/wallets/externally-owned"
+            let endpoint = "api/v1/externally-owned-wallets"
             response <- unsafeRequest ("POST", endpoint) $ Just $ [json|{
                 "accounts": [
                             {
@@ -239,7 +239,7 @@ spec = do
                       )
                     ]
         forM_ matrix $ \(title, payload, expectations) -> scenario title $ do
-            response <- unsafeRequest ("POST", "api/v1/wallets/externally-owned") $ Just $ [json|#{payload}|]
+            response <- unsafeRequest ("POST", "api/v1/externally-owned-wallets") $ Just $ [json|#{payload}|]
             verify (response :: Either ClientError EosWallet) expectations
 
 
@@ -325,7 +325,7 @@ spec = do
 
     describe "EOSWALLETS_DELETE_03 - Providing not valid wallet id returns 404 error and appropriate error message." $ do
         forM_ (["", "123", "ziemniak"]) $ \(notValidId) -> scenario ("walId = \"" ++ notValidId ++ "\"") $ do
-            let endpoint = "api/v1/wallets/externally-owned/" ++ notValidId
+            let endpoint = "api/v1/externally-owned-wallets/" ++ notValidId
             response <- unsafeRequest ("DELETE", fromString endpoint) $ Nothing
             verify (response :: Either ClientError EosWallet)
                 [ expectError
@@ -355,7 +355,7 @@ spec = do
 
     describe "EOSWALLETS_DETAILS_03 - Providing not valid wallet id returns 404 error and appropriate error message." $ do
         forM_ (["", "123", "ziemniak"]) $ \(notValidId) -> scenario ("walId = \"" ++ notValidId ++ "\"") $ do
-            let endpoint = "api/v1/wallets/externally-owned/" ++ notValidId
+            let endpoint = "api/v1/externally-owned-wallets/" ++ notValidId
             response <- unsafeRequest ("GET", fromString endpoint) $ Nothing
             verify (response :: Either ClientError EosWallet)
                 [ expectError
@@ -378,7 +378,6 @@ spec = do
             ]
 
     scenario "EOSWALLETS_LIST_01, EOSWALLETS_LIST_02 - cannot get FO wallets with EOS endpoint" $ do
-        pendingWith "This test is failing due to broken Client.getEosWalletIndexFilterSorts endpoint (#336)"
         fixture  <- setup defaultSetup
         eowallet <- successfulRequest $ Client.postEosWallet $- NewEosWallet
             (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
@@ -402,7 +401,7 @@ spec = do
             & walletName .~ "Before update FO"
             & assuranceLevel .~ NormalAssurance
 
-        let endpoint = "api/v1/wallets/externally-owned/" <> fromWalletId (fixture ^. wallet . walletId)
+        let endpoint = "api/v1/externally-owned-wallets/" <> fromWalletId (fixture ^. wallet . walletId)
         updResp <- unsafeRequest ("PUT", endpoint) $ Just $ [json|{
                 "assuranceLevel": "strict",
                 "addressPoolGap": 12,
@@ -479,7 +478,7 @@ spec = do
                 defaultAssuranceLevel
                 defaultWalletName
 
-            let endpoint = "api/v1/wallets/externally-owned/" <> fromWalletId (eowallet ^. walletId)
+            let endpoint = "api/v1/externally-owned-wallets/" <> fromWalletId (eowallet ^. walletId)
             response <- unsafeRequest ("PUT", endpoint) $ Just $ [json|{
                 "assuranceLevel": "normal",
                 "addressPoolGap": #{poolGap},
@@ -528,7 +527,7 @@ spec = do
                 defaultAssuranceLevel
                 defaultWalletName
 
-            let endpoint = "api/v1/wallets/externally-owned/" <> fromWalletId (eowallet ^. walletId)
+            let endpoint = "api/v1/externally-owned-wallets/" <> fromWalletId (eowallet ^. walletId)
             response <- unsafeRequest ("PUT", endpoint) $ Just $ [json|{
                 "assuranceLevel": #{assurLevel},
                 "addressPoolGap": 10,
@@ -561,6 +560,6 @@ spec = do
                 defaultAssuranceLevel
                 defaultWalletName
 
-            let endpoint = "api/v1/wallets/externally-owned/" <> fromWalletId (eowallet ^. walletId)
+            let endpoint = "api/v1/externally-owned-wallets/" <> fromWalletId (eowallet ^. walletId)
             response <- unsafeRequest ("PUT", endpoint) $ Just $ [json| #{payload} |]
             verify (response :: Either ClientError EosWallet) expectations
