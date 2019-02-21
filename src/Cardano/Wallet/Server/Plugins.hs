@@ -20,6 +20,9 @@ module Cardano.Wallet.Server.Plugins
 
 import           Universum
 
+import           Control.Retry (RetryPolicyM, RetryStatus, fullJitterBackoff,
+                     limitRetries)
+import qualified Control.Retry
 import           Data.Acid (AcidState)
 import           Data.Aeson (encode)
 import qualified Data.ByteString.Char8 as BS8
@@ -51,7 +54,6 @@ import qualified Cardano.Wallet.API.V1.Types as V1
 import           Cardano.Wallet.Kernel (DatabaseMode (..), PassiveWallet)
 import qualified Cardano.Wallet.Kernel.Diffusion as Kernel
 import qualified Cardano.Wallet.Kernel.Mode as Kernel
-import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as NodeStateAdaptor
 import qualified Cardano.Wallet.Server as Server
 import           Cardano.Wallet.Server.CLI (WalletBackendParams (..),
                      WalletBackendParams (..), walletAcidInterval,
@@ -102,7 +104,7 @@ apiServer
     env <- ask
     let diffusion' = Kernel.fromDiffusion (lower env) diffusion
     logInfo "Testing node client connection"
-    eresp <- liftIO . NodeStateAdaptor.retrying . runExceptT $ NodeClient.getNodeSettings nodeClient
+    eresp <- liftIO . retrying . runExceptT $ NodeClient.getNodeSettings nodeClient
     case eresp of
         Left err -> do
             logError
@@ -157,6 +159,17 @@ apiServer
     portCallback :: ShutdownContext -> Word16 -> IO ()
     portCallback ctx =
         usingLoggerName "NodeIPC" . flip runReaderT ctx . startNodeJsIPC
+
+    retrying :: MonadIO m => m (Either e a) -> m (Either e a)
+    retrying a = Control.Retry.retrying policy shouldRetry (const a)
+      where
+        -- See <https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter>
+        policy :: MonadIO m => RetryPolicyM m
+        policy = fullJitterBackoff 1000000 <> limitRetries 4
+
+        shouldRetry :: MonadIO m => RetryStatus -> Either e a -> m Bool
+        shouldRetry _ (Right _) = return False
+        shouldRetry _ (Left  _) = return True
 
 -- | A @Plugin@ to serve the wallet documentation
 docServer
