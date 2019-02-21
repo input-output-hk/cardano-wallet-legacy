@@ -452,7 +452,6 @@ spec = do
             noAddressPoolGap
             NormalAssurance
             "Before update EOS"
-
         let expectations = [ -- updated
                              expectFieldEqual assuranceLevel StrictAssurance
                            , expectFieldEqual walletName "After update EOS"

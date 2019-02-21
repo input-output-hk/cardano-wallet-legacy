@@ -96,6 +96,7 @@ module Test.Integration.Framework.DSL
     , rawPassword
     , spendingPassword
     , spendingPasswordLastUpdate
+    , syncState
     , totalSuccess
     , walAddresses
     , wallet
@@ -120,6 +121,7 @@ import           Data.Default (Default (..))
 import qualified Data.Foldable as F
 import           Data.Generics.Internal.VL.Lens (lens)
 import           Data.Generics.Product.Fields (field)
+import           Data.Generics.Product.Positions (HasPosition, position)
 import           Data.Generics.Product.Typed (HasType, typed)
 import           Data.List ((!!))
 import qualified Data.List.NonEmpty as NonEmpty
@@ -391,8 +393,8 @@ assuranceLevel = typed
 backupPhrase :: HasType BackupPhrase s => Lens' s BackupPhrase
 backupPhrase = typed
 
-createdAt :: HasType WalletTimestamp s => Lens' s WalletTimestamp
-createdAt = typed
+createdAt :: HasPosition 6 s s WalletTimestamp WalletTimestamp => Lens' s WalletTimestamp
+createdAt = position @6
 
 externallyOwnedAccounts :: HasType [AccountPublicKeyWithIx] s => Lens' s [AccountPublicKeyWithIx]
 externallyOwnedAccounts = typed
@@ -431,6 +433,9 @@ rawMnemonicPassword = field @"_rawMnemonicPassword"
 
 spendingPassword :: HasType SpendingPassword s => Lens' s SpendingPassword
 spendingPassword = typed
+
+syncState :: HasType SyncState s => Lens' s SyncState
+syncState = typed
 
 totalSuccess :: Lens' (BatchImportResult a) Natural
 totalSuccess = field @"aimTotalSuccess"
