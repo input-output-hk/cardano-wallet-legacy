@@ -252,8 +252,8 @@ deleteWallet :: MonadIO m
              -> V1.WalletId
              -> m (Either DeleteWalletError ())
 deleteWallet wallet wId = runExceptT $ do
-    rootId <- withExceptT DeleteWalletWalletIdDecodingFailed $ fromRootId wId
     db <- liftIO $ Kernel.getWalletSnapshot wallet
+    rootId <- withExceptT DeleteWalletWalletIdDecodingFailed $ fromRootId wId
     root <- withExceptT DeleteWalletError $ exceptT $ Kernel.lookupHdRootId db rootId
     case ownershipFromHdRoot root of
         WalletExternallyOwned ->
