@@ -31,7 +31,6 @@ import           Pos.Util.Wlog (Severity (..))
 
 import qualified Cardano.Mnemonic as Mnemonic
 import qualified Cardano.Wallet.API.V1.Types as V1
-import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
 import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
@@ -44,8 +43,7 @@ import           Cardano.Wallet.Kernel.Internal (walletKeystore, walletMeta,
 import qualified Cardano.Wallet.Kernel.Internal as Kernel
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
 import           Cardano.Wallet.Kernel.Read (WalletOwnership (..),
-                     addressPoolGapByRootId, eosAccountsByRootId,
-                     getWalletOwnership, getWalletsByOwnership)
+                     getWalletsByOwnership, ownershipFromHdRoot)
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import           Cardano.Wallet.Kernel.Restore (blundToResolvedBlock,
                      restoreWallet)
@@ -190,7 +188,8 @@ updateWallet :: MonadIO m
 updateWallet wallet wId (V1.WalletUpdate v1Level v1Name) = runExceptT $ do
     rootId <- withExceptT UpdateWalletWalletIdDecodingFailed $ fromRootId wId
     db <- liftIO $ Kernel.getWalletSnapshot wallet
-    case getWalletOwnership rootId db of
+    root <- withExceptT UpdateWalletError $ exceptT $ Kernel.lookupHdRootId db rootId
+    case ownershipFromHdRoot root of
         WalletExternallyOwned ->
             exceptT $ Left $ UpdateWalletError $ HD.UnknownHdRoot rootId
         WalletFullyOwned -> do
@@ -210,24 +209,13 @@ updateEosWallet
     -> m (Either UpdateEosWalletError V1.EosWallet)
 updateEosWallet wallet wId (V1.UpdateEosWallet v1Level v1Name newGap) = runExceptT $ do
     rootId <- withExceptT UpdateEosWalletWalletIdDecodingFailed $ fromRootId wId
-    db' <- liftIO $ Kernel.getWalletSnapshot wallet
-    case eosAccountsByRootId rootId db' of
-        Nothing -> exceptT $ Left $ UpdateEosWalletError $ HD.UnknownHdRoot rootId
-        Just (Left e) -> exceptT $ Left $ UpdateEosWalletErrorAddressPoolGap e
-        Just (Right (accountsData, _)) -> do
-            (db, newHdRoot) <- withExceptT UpdateEosWalletError $ ExceptT $ liftIO $
-                Kernel.updateHdWallet wallet rootId newLevel newName
-            -- 'HdRoot' doesn't contain address pool gap, only corresponding
-            -- 'HdAccount's contain it. So we have to update all these accounts.
-            result <- forM accountsData $ \(accId, _) -> do
-                res <- liftIO $ Kernel.updateAccountGap accId newGap wallet
-                return $ either (Left . UpdateEosWalletAccountError) Right res
-            exceptT $ case lefts result of
-                []    -> Right $ toEosWallet db newHdRoot newGap
-                (e:_) -> Left e
-  where
-    newLevel = fromAssuranceLevel v1Level
-    newName  = HD.WalletName v1Name
+    (db, newHdRoot) <- withExceptT UpdateEosWalletError $ ExceptT $ liftIO $ do
+        let newLevel = fromAssuranceLevel v1Level
+        let newName  = HD.WalletName v1Name
+        void $ Kernel.updateHdWallet wallet rootId newLevel newName
+        Kernel.updateGap wallet rootId newGap
+    return $ toEosWallet db newHdRoot
+
 
 -- | Updates the 'SpendingPassword' for this wallet.
 updateWalletPassword :: MonadIO m
@@ -240,10 +228,10 @@ updateWalletPassword wallet
                      (V1.PasswordUpdate
                        (V1.WalletPassPhrase oldPwd)
                        (V1.WalletPassPhrase newPwd)) = runExceptT $ do
-    rootId <- withExceptT UpdateWalletPasswordWalletIdDecodingFailed $
-                fromRootId wId
+    rootId <- withExceptT UpdateWalletPasswordWalletIdDecodingFailed $ fromRootId wId
     db <- liftIO $ Kernel.getWalletSnapshot wallet
-    case getWalletOwnership rootId db of
+    root <- withExceptT (UpdateWalletPasswordError . Kernel.UpdateWalletPasswordUnknownHdRoot) $ exceptT $ Kernel.lookupHdRootId db rootId
+    case ownershipFromHdRoot root of
         WalletExternallyOwned ->
             exceptT
                 $ Left
@@ -264,9 +252,10 @@ deleteWallet :: MonadIO m
              -> V1.WalletId
              -> m (Either DeleteWalletError ())
 deleteWallet wallet wId = runExceptT $ do
-    rootId <- withExceptT DeleteWalletWalletIdDecodingFailed $ fromRootId wId
     db <- liftIO $ Kernel.getWalletSnapshot wallet
-    case getWalletOwnership rootId db of
+    rootId <- withExceptT DeleteWalletWalletIdDecodingFailed $ fromRootId wId
+    root <- withExceptT DeleteWalletError $ exceptT $ Kernel.lookupHdRootId db rootId
+    case ownershipFromHdRoot root of
         WalletExternallyOwned ->
             exceptT $ Left $ DeleteWalletError $ HD.UnknownHdRoot rootId
         WalletFullyOwned ->
@@ -285,7 +274,8 @@ deleteEosWallet :: MonadIO m
 deleteEosWallet wallet wId = runExceptT $ do
     rootId <- withExceptT DeleteWalletWalletIdDecodingFailed $ fromRootId wId
     db <- liftIO $ Kernel.getWalletSnapshot wallet
-    case getWalletOwnership rootId db of
+    root <- withExceptT DeleteWalletError $ exceptT $ Kernel.lookupHdRootId db rootId
+    case ownershipFromHdRoot root of
         WalletFullyOwned ->
             exceptT $ Left $ DeleteWalletError $ HD.UnknownHdRoot rootId
         WalletExternallyOwned ->
@@ -302,7 +292,7 @@ getWallet :: MonadIO m
 getWallet wallet wId db = runExceptT $ do
     rootId <- withExceptT GetWalletWalletIdDecodingFailed (fromRootId wId)
     hdRoot <- withExceptT GetWalletError $ exceptT $ Kernel.lookupHdRootId db rootId
-    case getWalletOwnership rootId db of
+    case ownershipFromHdRoot hdRoot of
         WalletExternallyOwned ->
             exceptT $ Left $ GetWalletError $ HD.UnknownHdRoot rootId
         WalletFullyOwned ->
@@ -320,14 +310,7 @@ getEosWallet _wallet wId db = runExceptT $ do
     rootId <- withExceptT GetEosWalletWalletIdDecodingFailed (fromRootId wId)
     hdRoot <- withExceptT GetEosWalletError $ exceptT $ Kernel.lookupHdRootId db rootId
     debug $ "successfully decoded HdRoot: " <.> hdRoot
-    case addressPoolGapByRootId rootId db of
-        Left _ ->
-            -- No gap. Although wallet exists in DB, it's not EOS-wallet,
-            -- so report about it as if this wallet doesn't exist.
-            exceptT $ Left $ GetEosWalletError $ HD.UnknownHdRoot rootId
-        Right gap -> do
-            debug $ "successfully recovered gap from accounts: " <.> gap
-            return $ toEosWallet db hdRoot gap
+    return $ toEosWallet db hdRoot
   where
     debug :: MonadIO m => Text -> m ()
     debug = Kernel.mkLogger _wallet "getEosWallet" Debug
@@ -353,14 +336,9 @@ getEosWallets
     :: MonadIO m
     => Kernel.PassiveWallet
     -> Kernel.DB
-    -> m (Either GetEosWalletError (IxSet V1.EosWallet))
+    -> m (IxSet V1.EosWallet)
 getEosWallets _wallet db = do
-    let result = traverse (\root -> either Left (Right . toEosWallet db root) $
-                    addressPoolGapByRootId (root ^. HD.hdRootId) db)
-                    eosRoots
-    return $ case result of
-        Left e           -> Left $ GetEosWalletErrorAddressPoolGap e
-        Right eosWallets -> Right $ IxSet.fromList eosWallets
+    return $ IxSet.fromList $ fmap (toEosWallet db) eosRoots
   where
     eosRoots = getWalletsByOwnership WalletExternallyOwned db
 

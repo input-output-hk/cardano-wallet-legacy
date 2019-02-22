@@ -21,7 +21,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , HdAccountId(..)
   , HdAddressId(..)
   , HdRoot(..)
-  , HdAccountBase(..)
+  , HdRootBase(..)
   , HdAccount(..)
   , HdAddress(..)
     -- * HD Wallet state
@@ -48,14 +48,13 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , hdAddressIdIx
     -- *** Root
   , hdRootId
+  , hdRootBase
   , hdRootName
   , hdRootHasPassword
   , hdRootAssurance
   , hdRootCreatedAt
     -- *** Account
   , hdAccountId
-  , hdAccountBase
-  , hdAccountBaseId
   , hdAccountName
   , hdAccountState
   , hdAccountStateCurrent
@@ -78,7 +77,6 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , UnknownHdRoot(..)
   , UnknownHdAccount(..)
   , UnknownHdAddress(..)
-  , UpdateGapError(..)
   , embedUnknownHdRoot
   , embedUnknownHdAccount
     -- * Zoom to parts of the HD wallet
@@ -152,7 +150,7 @@ newtype AccountName = AccountName { getAccountName :: Text }
 
 -- | Account index
 newtype HdAccountIx = HdAccountIx { getHdAccountIx :: Word32 }
-  deriving (Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 instance NFData HdAccountIx
 
@@ -226,7 +224,7 @@ data HdAccountId = HdAccountId {
       _hdAccountIdParent :: !HdRootId
     , _hdAccountIdIx     :: !HdAccountIx
     }
-  deriving (Eq, Generic)
+  deriving (Show, Eq, Generic)
 
 instance NFData HdAccountId
 
@@ -264,8 +262,9 @@ instance Arbitrary HdAddressId where
 --
 -- NOTE: We do not store the encrypted key of the wallet.
 data HdRoot = HdRoot {
-      -- | Wallet ID
-      _hdRootId          :: !HdRootId
+      -- | A root that is either fully owned or externally owned.
+      -- Externally owned root have a few more details attached to them.
+      _hdRootBase        :: !HdRootBase
 
       -- | Wallet name
     , _hdRootName        :: !WalletName
@@ -282,7 +281,7 @@ data HdRoot = HdRoot {
 
       -- | When was this wallet created?
     , _hdRootCreatedAt   :: !(InDb Core.Timestamp)
-    } deriving (Eq, Show)
+    } deriving (Show, Eq)
 
 instance Arbitrary HdRoot where
     arbitrary = HdRoot <$> arbitrary
@@ -291,31 +290,28 @@ instance Arbitrary HdRoot where
                        <*> arbitrary
                        <*> (fmap InDb arbitrary)
 
--- | Contains specific stuff which is related to
--- FO-wallets or EO-wallets.
-data HdAccountBase =
-      -- Branch for FO-wallets.
-      HdAccountBaseFO !HdAccountId
-      -- Branch for EOS-wallets.
-    | HdAccountBaseEO {
-          _hdAccountBaseEOId             :: !HdAccountId
-        , _hdAccountBaseEOAccountKey     :: !Core.PublicKey
-        , _hdAccountBaseEOAddressPoolGap :: !AddressPoolGap
+data HdRootBase
+    = HdRootFullyOwned HdRootId
+    | HdRootExternallyOwned
+        { _hdRootBaseId
+            :: !HdRootId
+        , _hdRootBaseGap
+            :: !AddressPoolGap
+        , _hdRootBaseAccounts
+            :: Map HdAccountId Core.PublicKey
         }
-    deriving (Eq, Ord)
+    deriving (Show, Eq, Ord)
 
-instance Arbitrary HdAccountBase where
+instance Arbitrary HdRootBase where
     arbitrary = oneof
-        [ HdAccountBaseFO <$> arbitrary
-        , HdAccountBaseEO <$> arbitrary <*> arbitrary <*> arbitrary
+        [ HdRootFullyOwned <$> arbitrary
+        , HdRootExternallyOwned <$> arbitrary <*> arbitrary <*> arbitrary
         ]
 
--- | Account in a HD wallet
---
 -- Key derivation is cheap
 data HdAccount = HdAccount {
       -- | Account index
-      _hdAccountBase          :: !HdAccountBase
+      _hdAccountId            :: !HdAccountId
 
       -- | Account name
     , _hdAccountName          :: !AccountName
@@ -457,7 +453,7 @@ deriveSafeCopy 1 'base ''HdAccountId
 deriveSafeCopy 1 'base ''HdAddressId
 
 deriveSafeCopy 1 'base ''HdRoot
-deriveSafeCopy 1 'base ''HdAccountBase
+deriveSafeCopy 1 'base ''HdRootBase
 deriveSafeCopy 1 'base ''HdAccount
 deriveSafeCopy 1 'base ''HdAddress
 
@@ -469,22 +465,22 @@ deriveSafeCopy 1 'base ''HdAccountIncomplete
   Derived lenses
 -------------------------------------------------------------------------------}
 
-hdAccountBaseId :: Lens' HdAccountBase HdAccountId
-hdAccountBaseId = lens getHdAccountId setHdAccountId
-  where
-    getHdAccountId :: HdAccountBase -> HdAccountId
-    getHdAccountId (HdAccountBaseFO accountId)     = accountId
-    getHdAccountId (HdAccountBaseEO accountId _ _) = accountId
+hdRootId :: Lens' HdRoot HdRootId
+hdRootId = hdRootBase . hdRootBaseId
 
-    setHdAccountId :: HdAccountBase -> HdAccountId -> HdAccountBase
-    setHdAccountId (HdAccountBaseFO _) newAccountId = HdAccountBaseFO newAccountId
-    setHdAccountId (HdAccountBaseEO _ pKey gap) newAccountId = HdAccountBaseEO newAccountId pKey gap
+hdRootBaseId :: Lens' HdRootBase HdRootId
+hdRootBaseId = lens getter (flip setter)
+    where
+        getter = \case
+            (HdRootFullyOwned rootId)          -> rootId
+            (HdRootExternallyOwned rootId _ _) -> rootId
+        setter rootId = \case
+            (HdRootFullyOwned _)          -> HdRootFullyOwned rootId
+            (HdRootExternallyOwned _ a b) -> HdRootExternallyOwned rootId a b
 
-hdAccountId :: Lens' HdAccount HdAccountId
-hdAccountId = hdAccountBase . hdAccountBaseId
 
 hdAccountRootId :: Lens' HdAccount HdRootId
-hdAccountRootId = hdAccountBase . hdAccountBaseId . hdAccountIdParent
+hdAccountRootId = hdAccountId . hdAccountIdParent
 
 hdAddressAccountId :: Lens' HdAddress HdAccountId
 hdAddressAccountId = hdAddressId . hdAddressIdParent
@@ -592,6 +588,7 @@ instance IsOurs (Map HdAccountId (AddressPool Core.Address)) where
             mkHdAddress accId_ ix_
                 = initHdAddress (HdAddressId accId_ (HdAddressIx ix_)) addr
 
+
 {-------------------------------------------------------------------------------
   Unknown identifiers
 -------------------------------------------------------------------------------}
@@ -641,25 +638,6 @@ instance Arbitrary UnknownHdAddress where
                       , UnknownHdCardanoAddress <$> arbitrary
                       ]
 
--- | Specific error that may occur during update address pool gap
--- in 'HdAccountBase': if we try to update a gap in the account with
--- 'HdAccountBase' with FO-branch.
-data UpdateGapError =
-    -- | Unknown root ID
-    UpdateGapErrorUnknownHdAccountRoot HdRootId
-    -- | Unknown account (implies the root is known)
-  | UpdateGapErrorUnknownHdAccount HdAccountId
-    -- | Try to update address pool gap in the account with FO-branch.
-  | UpdateGapErrorFOAccount HdAccountId
-  deriving Eq
-
-instance Arbitrary UpdateGapError where
-    arbitrary = oneof
-        [ UpdateGapErrorUnknownHdAccountRoot <$> arbitrary
-        , UpdateGapErrorUnknownHdAccount <$> arbitrary
-        , UpdateGapErrorFOAccount <$> arbitrary
-        ]
-
 embedUnknownHdRoot :: UnknownHdRoot -> UnknownHdAccount
 embedUnknownHdRoot = go
   where
@@ -674,7 +652,6 @@ embedUnknownHdAccount = go
 deriveSafeCopy 1 'base ''UnknownHdRoot
 deriveSafeCopy 1 'base ''UnknownHdAddress
 deriveSafeCopy 1 'base ''UnknownHdAccount
-deriveSafeCopy 1 'base ''UpdateGapError
 
 {-------------------------------------------------------------------------------
   IxSet instantiations
@@ -682,7 +659,7 @@ deriveSafeCopy 1 'base ''UpdateGapError
 
 instance HasPrimKey HdRoot where
     type PrimKey HdRoot = HdRootId
-    primKey = _hdRootId
+    primKey = view hdRootId
 
 instance HasPrimKey HdAccount where
     type PrimKey HdAccount = HdAccountId
@@ -980,34 +957,16 @@ instance Buildable HdRoot where
       _hdRootAssurance
       (_fromDb _hdRootCreatedAt)
 
-instance Buildable HdAccountBase where
-    build (HdAccountBaseFO accountId) = bprint
-      ( "HdAccountBaseFO "
-      % "{ id: " % build
-      % "}"
-      )
-      accountId
-    build (HdAccountBaseEO accountId pKey gap) = bprint
-      ( "HdAccountBaseEO "
-      % "{ id: " % build
-      % "{ public key: " % build
-      % "{ gap: " % build
-      % "}"
-      )
-      accountId
-      pKey
-      gap
-
 instance Buildable HdAccount where
     build HdAccount{..} = bprint
       ( "HdAccount "
-      % "{ base          " % build
+      % "{ id            " % build
       % ", name          " % build
       % ", state         " % build
       % ", autoPkCounter " % build
       % "}"
       )
-      _hdAccountBase
+      _hdAccountId
       _hdAccountName
       _hdAccountState
       _hdAccountAutoPkCounter
@@ -1068,14 +1027,6 @@ instance Buildable UnknownHdAccount where
       bprint ("UnknownHdAccountRoot " % build) rootId
     build (UnknownHdAccount accountId) =
       bprint ("UnknownHdAccount accountId " % build) accountId
-
-instance Buildable UpdateGapError where
-    build (UpdateGapErrorUnknownHdAccountRoot rootId) =
-      bprint ("UpdateGapErrorUnknownHdAccountRoot " % build) rootId
-    build (UpdateGapErrorUnknownHdAccount accountId) =
-      bprint ("UpdateGapErrorUnknownHdAccount accountId " % build) accountId
-    build (UpdateGapErrorFOAccount accountId) =
-      bprint ("UpdateGapErrorFOAccount accountId " % build) accountId
 
 instance Buildable UnknownHdAddress where
     build (UnknownHdAddressRoot rootId) =

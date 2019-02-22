@@ -163,23 +163,12 @@ getWalletError e = case e of
     (GetWalletWalletIdDecodingFailed _txt) ->
             V1.WalletNotFound
 
-getAddressPoolGapError :: GetAddressPoolGapError -> V1.WalletError
-getAddressPoolGapError e = case e of
-    ex@(GetEosWalletErrorNoAccounts _txt) ->
-        V1.EosWalletDoesNotHaveAccounts (sformat build ex)
-    ex@(GetEosWalletErrorWrongAccounts _txt) ->
-        V1.EosWalletHasWrongAccounts (sformat build ex)
-    ex@(GetEosWalletErrorGapsDiffer _txt) ->
-        V1.EosWalletGapsDiffer (sformat build ex)
-
 getEosWalletError :: GetEosWalletError -> V1.WalletError
 getEosWalletError e = case e of
     (GetEosWalletError (HD.UnknownHdRoot _rootId)) ->
         V1.WalletNotFound
     (GetEosWalletWalletIdDecodingFailed _txt) ->
         V1.WalletNotFound
-    (GetEosWalletErrorAddressPoolGap e') ->
-        getAddressPoolGapError e'
 
 updateWalletError :: UpdateWalletError -> V1.WalletError
 updateWalletError e = case e of

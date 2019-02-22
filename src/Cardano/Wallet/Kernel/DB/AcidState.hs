@@ -28,8 +28,8 @@ module Cardano.Wallet.Kernel.DB.AcidState (
     -- *** UPDATE
   , UpdateHdWallet(..)
   , UpdateHdRootPassword(..)
+  , UpdateHdRootGap(..)
   , UpdateHdAccountName(..)
-  , UpdateHdAccountGap(..)
   , ResetAllHdWalletAccounts(..)
     -- *** DELETE
   , DeleteHdRoot(..)
@@ -278,7 +278,7 @@ applyBlock k context restriction blocks = runUpdateDiscardSnapshot $ do
     mkUpdate :: (HdAccountId, Maybe PrefilteredBlock)
              -> AccountUpdate Void (Either Spec.ApplyBlockFailed (Set TxId))
     mkUpdate (accId, mPB) = AccountUpdate {
-          accountUpdateBase  = HdAccountBaseFO accId
+          accountUpdateId    =  accId
         , accountUpdateAddrs = pfbAddrs pb
         , accountUpdateNew   = AccountUpdateNewUpToDate Map.empty
         , accountUpdate      =
@@ -338,7 +338,7 @@ applyHistoricalBlock k context rootId blocks =
     mkUpdate :: (HdAccountId, Maybe PrefilteredBlock)
              -> AccountUpdate Spec.ApplyBlockFailed ()
     mkUpdate (accId, mPb) = AccountUpdate {
-          accountUpdateBase  = HdAccountBaseFO accId
+          accountUpdateId    = accId
         , accountUpdateAddrs = pfbAddrs pb
         , accountUpdateNew   = AccountUpdateNewIncomplete mempty mempty context
         , accountUpdate      = void $ Z.wrap $ \acc -> do
@@ -450,7 +450,7 @@ switchToFork k oldest blocks toSkip =
     mkUpdate :: (HdAccountId, OldestFirst [] (BlockContext, PrefilteredBlock))
              -> AccountUpdate SwitchToForkInternalError (Pending, Set TxId)
     mkUpdate (accId, pbs) = AccountUpdate {
-          accountUpdateBase  = HdAccountBaseFO accId
+          accountUpdateId    = accId
         , accountUpdateAddrs = concatMap (pfbAddrs . snd) pbs
         , accountUpdateNew   = AccountUpdateNewUpToDate Map.empty
         , accountUpdate      =
@@ -508,17 +508,17 @@ observableRollbackUseInTestsOnly = runUpdateDiscardSnapshot $
 -- definitely we do not want it to show up in our acid-state logs.
 --
 createHdWallet :: HdRoot
-               -> Map HdAccountBase (Utxo,[HdAddress])
+               -> Map HdAccountId (Utxo,[HdAddress])
                -> Update DB (Either HD.CreateHdRootError ())
 createHdWallet newRoot utxo0 =
     runUpdateDiscardSnapshot . zoom dbHdWallets $ do
       HD.createHdRoot newRoot
       updateAccounts_ $ map mkUpdate (Map.toList utxo0)
   where
-    mkUpdate :: (HdAccountBase, (Utxo, [HdAddress]))
+    mkUpdate :: (HdAccountId, (Utxo, [HdAddress]))
              -> AccountUpdate HD.CreateHdRootError ()
-    mkUpdate (accBase, (utxo, addrs)) = AccountUpdate {
-          accountUpdateBase  = accBase
+    mkUpdate (accId, (utxo, addrs)) = AccountUpdate {
+          accountUpdateId    = accId
         , accountUpdateNew   = AccountUpdateNewUpToDate utxo
         , accountUpdateAddrs = addrs
         , accountUpdate      = return () -- just need to create it, no more
@@ -554,7 +554,7 @@ restoreHdWallet newRoot defaultHdAccountId defaultHdAddress ctx utxoByAccount =
     mkUpdate :: (HdAccountId, (Utxo, Utxo, [HdAddress]))
              -> AccountUpdate HD.CreateHdRootError ()
     mkUpdate (accId, (curUtxo, genUtxo, addrs)) = AccountUpdate {
-          accountUpdateBase  = HdAccountBaseFO accId
+          accountUpdateId    = accId
         , accountUpdateNew   = AccountUpdateNewIncomplete curUtxo genUtxo ctx
         , accountUpdateAddrs = addrs
         , accountUpdate      = return () -- Create it only
@@ -579,7 +579,7 @@ restoreHdWallet newRoot defaultHdAccountId defaultHdAddress ctx utxoByAccount =
 -- See 'updateAccount' or 'updateAccounts'.
 data AccountUpdate e a = AccountUpdate {
       -- | Account to update
-      accountUpdateBase  :: !HdAccountBase
+      accountUpdateId    :: !HdAccountId
 
       -- | Information needed when we need to create the account from scratch
     , accountUpdateNew   :: !AccountUpdateNew
@@ -627,9 +627,9 @@ data AccountUpdateNew =
   | AccountUpdateNewIncomplete !Utxo !Utxo !BlockContext
 
 -- | Brand new account (if one needs to be created)
-accountUpdateCreate :: HdAccountBase -> AccountUpdateNew -> HdAccount
-accountUpdateCreate accUpdateBase (AccountUpdateNewUpToDate utxo) =
-    HD.initHdAccount accUpdateBase initState
+accountUpdateCreate :: HdAccountId -> AccountUpdateNew -> HdAccount
+accountUpdateCreate accId (AccountUpdateNewUpToDate utxo) =
+    HD.initHdAccount accId initState
   where
     initState :: HdAccountState
     initState = HdAccountStateUpToDate HdAccountUpToDate {
@@ -646,12 +646,11 @@ accountUpdateCreate accUpdateBase (AccountUpdateNewIncomplete curUtxo genUtxo ct
 
 updateAccount :: AccountUpdate e a -> Update' e HdWallets (HdAccountId, a)
 updateAccount AccountUpdate{..} = do
-    let accountId = accountUpdateBase ^. hdAccountBaseId
     res <- zoomOrCreateHdAccount
              assumeHdRootExists
-             (accountUpdateCreate accountUpdateBase accountUpdateNew)
-             accountId
-             ((accountId, ) <$> accountUpdate)
+             (accountUpdateCreate accountUpdateId accountUpdateNew)
+             accountUpdateId
+             ((accountUpdateId, ) <$> accountUpdate)
     mapM_ createAddress accountUpdateAddrs
     return res
   where
@@ -676,9 +675,7 @@ updateAccountsWithErrors :: [AccountUpdate e a]
                          -> Update' [HdAccountId] HdWallets (Map HdAccountId a)
 updateAccountsWithErrors updates = do
     results <- forM updates $ \upd ->
-        let accountId = (accountUpdateBase upd) ^. hdAccountBaseId
-        in
-        tryUpdate (mapUpdateErrors (const accountId) (updateAccount upd))
+        tryUpdate (mapUpdateErrors (const $ accountUpdateId upd) (updateAccount upd))
     let (errors, successes) = partitionEithers results
     case errors of
       []   -> return (Map.fromList successes)
@@ -711,17 +708,18 @@ updateHdRootPassword rootId hasSpendingPassword = do
     runUpdate' . zoom dbHdWallets $
         HD.updateHdRootPassword rootId hasSpendingPassword
 
+updateHdRootGap
+    :: HdRootId
+    -> AddressPoolGap
+    -> Update DB (Either UnknownHdRoot (DB, HdRoot))
+updateHdRootGap rootId gap = do
+    runUpdate' . zoom dbHdWallets $ HD.updateHdRootGap rootId gap
+
 updateHdAccountName :: HdAccountId
                     -> AccountName
                     -> Update DB (Either UnknownHdAccount (DB, HdAccount))
 updateHdAccountName accId name = do
     runUpdate' . zoom dbHdWallets $ HD.updateHdAccountName accId name
-
-updateHdAccountGap :: HdAccountId
-                   -> AddressPoolGap
-                   -> Update DB (Either UpdateGapError (DB, HdAccount))
-updateHdAccountGap accId gap = do
-    runUpdate' . zoom dbHdWallets $ HD.updateHdAccountGap accId gap
 
 deleteHdRoot :: HdRootId -> Update DB (Either UnknownHdRoot ())
 deleteHdRoot rootId = runUpdateDiscardSnapshot . zoom dbHdWallets $
@@ -757,7 +755,7 @@ resetAllHdWalletAccounts rootId context utxoByAccount = mustBeRight <$> do
     mkUpdate :: (HdAccountId, Maybe (Utxo, Utxo, [HdAddress]))
              -> AccountUpdate Void ()
     mkUpdate (accId, utxos) = AccountUpdate {
-          accountUpdateBase  = HdAccountBaseFO accId
+          accountUpdateId    = accId
         , accountUpdateAddrs = []
         , accountUpdateNew   = AccountUpdateNewIncomplete mempty mempty context
         , accountUpdate      =
@@ -823,8 +821,8 @@ makeAcidic ''DB [
     , 'createHdWallet
     , 'updateHdWallet
     , 'updateHdRootPassword
+    , 'updateHdRootGap
     , 'updateHdAccountName
-    , 'updateHdAccountGap
     , 'deleteHdRoot
     , 'deleteHdAccount
     , 'resetAllHdWalletAccounts

@@ -2,11 +2,13 @@
 module Cardano.Wallet.Kernel.DB.HdWallet.Update (
     updateHdRoot
   , updateHdRootPassword
+  , updateHdRootGap
   , updateHdAccountName
-  , updateHdAccountGap
   ) where
 
 import           Universum
+
+import           Formatting (build, sformat)
 
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
@@ -34,26 +36,29 @@ updateHdRootPassword rootId hasSpendingPassword =
     zoomHdRootId identity rootId $ do
         modifyAndGetNew $ hdRootHasPassword .~ hasSpendingPassword
 
+updateHdRootGap
+    :: HdRootId
+    -> AddressPoolGap
+    -> Update' UnknownHdRoot HdWallets HdRoot
+updateHdRootGap rootId gap =
+    zoomHdRootId identity rootId $ do
+        root <- get
+        case root ^. hdRootBase of
+            HdRootExternallyOwned _ _ accounts ->
+                modifyAndGetNew $ hdRootBase .~ HdRootExternallyOwned rootId gap accounts
+            HdRootFullyOwned _ ->
+                error $
+                    "Cardano.Wallet.Kernel.DB.HdWallet.Update: implementation error! \
+                    \We've been trying to update an AddressPoolGap of a an HdRoot \
+                    \that isn't externally-owned (" <> sformat build rootId <> "). \
+                    \This should never happen and our DB-layer should protect us \
+                    \from such scenario. This means something is seriously wrong \
+                    \in our implementation and we are treating fully owned wallet \
+                    \as-if they were externally owned somewhere else in the calling code!"
+
 updateHdAccountName :: HdAccountId
                     -> AccountName
                     -> Update' UnknownHdAccount HdWallets HdAccount
 updateHdAccountName accId name = do
     zoomHdAccountId identity accId $ do
         modifyAndGetNew $ hdAccountName .~ name
-
-updateHdAccountGap :: HdAccountId
-                   -> AddressPoolGap
-                   -> Update' UpdateGapError HdWallets HdAccount
-updateHdAccountGap accId gap =
-    zoomHdAccountId embedErr accId $ do
-        acc <- get
-        case acc ^. hdAccountBase of
-            HdAccountBaseEO _ pKey _ ->
-                modifyAndGetNew $ hdAccountBase .~ HdAccountBaseEO accId pKey gap
-            HdAccountBaseFO _ ->
-                -- It's an error: we try to update a gap in account with FO-branch.
-                throwError $ UpdateGapErrorFOAccount accId
-  where
-    embedErr :: UnknownHdAccount -> UpdateGapError
-    embedErr (UnknownHdAccountRoot rootId) = UpdateGapErrorUnknownHdAccountRoot rootId
-    embedErr (UnknownHdAccount accountId)  = UpdateGapErrorUnknownHdAccount accountId

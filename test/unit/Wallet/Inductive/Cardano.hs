@@ -244,8 +244,8 @@ equivalentT useWW activeWallet esk = \mkWallet w ->
             esk
             (\root defaultAccount defAddress -> do
                 let accs0 = Map.unionWith (<>)
-                        (Map.singleton (HD.HdAccountBaseFO defaultAccount) (mempty, maybeToList defAddress))
-                        (Map.mapKeys HD.HdAccountBaseFO (prefilterUtxo (root ^. HD.hdRootId) esk utxo))
+                        (Map.singleton defaultAccount (mempty, maybeToList defAddress))
+                        (prefilterUtxo (root ^. HD.hdRootId) esk utxo)
                 Left $ DB.CreateHdWallet root accs0
             )
         case res of

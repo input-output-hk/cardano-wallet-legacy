@@ -6,7 +6,6 @@ module Cardano.Wallet.WalletLayer
     -- ** Errors
     , CreateWalletError(..)
     , GetWalletError(..)
-    , GetAddressPoolGapError(..)
     , GetEosWalletError(..)
     , UpdateWalletError(..)
     , UpdateEosWalletError(..)
@@ -64,7 +63,6 @@ import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as Kernel
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (IxSet)
-import           Cardano.Wallet.Kernel.Read (GetAddressPoolGapError (..))
 import qualified Cardano.Wallet.Kernel.Transactions as Kernel
 import qualified Cardano.Wallet.Kernel.Wallets as Kernel
 import           Cardano.Wallet.WalletLayer.ExecutionTimeLimit
@@ -121,7 +119,6 @@ instance Buildable GetWalletError where
 data GetEosWalletError =
       GetEosWalletError Kernel.UnknownHdRoot
     | GetEosWalletWalletIdDecodingFailed Text
-    | GetEosWalletErrorAddressPoolGap GetAddressPoolGapError
     deriving Eq
 
 -- | Unsound show instance needed for the 'Exception' instance.
@@ -135,19 +132,15 @@ instance Buildable GetEosWalletError where
         bprint ("GetEosWalletError " % build) kernelError
     build (GetEosWalletWalletIdDecodingFailed txt) =
         bprint ("GetEosWalletWalletIdDecodingFailed " % build) txt
-    build (GetEosWalletErrorAddressPoolGap gapError) =
-        bprint ("GetEosWalletErrorAddressPoolGap " % build) gapError
 
 data UpdateEosWalletError =
       UpdateEosWalletError Kernel.UnknownHdRoot
-    | UpdateEosWalletAccountError Kernel.UpdateGapError
+    | UpdateEosWalletAccountError Kernel.UnknownHdRoot
     | UpdateEosWalletErrorNotFound WalletId
     -- ^ Error thrown by the legacy wallet layer, isomorphic to the one above,
     -- which is new-data-layer specific.
     | UpdateEosWalletWalletIdDecodingFailed Text
     | UpdateEosWalletErrorNoAccounts WalletId
-    -- ^ Trying to update EOS-wallet which doesn't have any accounts.
-    | UpdateEosWalletErrorAddressPoolGap GetAddressPoolGapError
     deriving Eq
 
 -- | Unsound show instance needed for the 'Exception' instance.
@@ -167,8 +160,6 @@ instance Buildable UpdateEosWalletError where
         bprint ("UpdateEosWalletWalletIdDecodingFailed " % build) txt
     build (UpdateEosWalletErrorNoAccounts walletId) =
         bprint ("UpdateEosWalletErrorNoAccounts " % build) walletId
-    build (UpdateEosWalletErrorAddressPoolGap gapError) =
-        bprint ("UpdateEosWalletErrorAddressPoolGap " % build) gapError
 
 data UpdateWalletError =
       UpdateWalletError Kernel.UnknownHdRoot
@@ -472,7 +463,7 @@ data PassiveWalletLayer m = PassiveWalletLayer
     -- fully-owned wallets
       createWallet         :: CreateWallet -> m (Either CreateWalletError Wallet)
     , getWallets           :: m (IxSet Wallet)
-    , getEosWallets        :: m (Either GetEosWalletError (IxSet EosWallet))
+    , getEosWallets        :: m (IxSet EosWallet)
     , getWallet            :: WalletId -> m (Either GetWalletError Wallet)
     , getEosWallet         :: WalletId -> m (Either GetEosWalletError EosWallet)
     , updateWallet         :: WalletId

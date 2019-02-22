@@ -46,9 +46,9 @@ import           Cardano.Wallet.Kernel.DB.AcidState
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId, decodeHdRootId,
                      eskToHdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel (..),
-                     HasSpendingPassword (..), HdAccountBase (..),
-                     HdAccountId (..), HdAccountIx (..), HdAddressIx (..),
-                     HdRoot (..), WalletName (..), hdAccountIdIx)
+                     HasSpendingPassword (..), HdAccountId (..),
+                     HdAccountIx (..), HdAddressIx (..), HdRoot (..),
+                     HdRootBase (..), WalletName (..), hdAccountIdIx)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Create (initHdRoot)
 import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
                      (HardeningMode (..), deriveIndex)
@@ -102,7 +102,7 @@ prepareFixtures nm initialBalance = do
         let (_, esk) = safeDeterministicKeyGen (B.pack $ replicate 32 b) mempty
         let newRootId = eskToHdRootId nm esk
         now <- getCurrentTimestamp
-        newRoot <- initHdRoot <$> pure newRootId
+        newRoot <- initHdRoot <$> pure (HdRootFullyOwned newRootId)
                             <*> pure (WalletName "A wallet")
                             <*> pure (NoSpendingPassword $ InDb now)
                             <*> pure AssuranceLevelNormal
@@ -140,8 +140,8 @@ prepareFixtures nm initialBalance = do
                 hdAccountId = Kernel.defaultHdAccountId fixtureHdRootId
                 hdAddress   = Kernel.defaultHdAddress nm fixtureESK emptyPassphrase fixtureHdRootId
             let accs0 = M.unionWith (<>)
-                    (M.singleton (HdAccountBaseFO hdAccountId) (mempty, maybeToList hdAddress))
-                    (M.mapKeys HdAccountBaseFO accounts)
+                    (M.singleton hdAccountId (mempty, maybeToList hdAddress))
+                    accounts
             void $ liftIO $ update (pw ^. wallets) (CreateHdWallet fixtureHdRoot accs0)
         return $ Fixture {
               fixture = fixt

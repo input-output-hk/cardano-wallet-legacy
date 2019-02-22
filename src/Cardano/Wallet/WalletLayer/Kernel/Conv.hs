@@ -47,7 +47,6 @@ import           Pos.Crypto (AesKey, RedeemSecretKey, aesDecrypt,
 import           Cardano.Mnemonic (mnemonicToAesKey)
 import           Cardano.Wallet.API.Types.UnitOfMeasure
 import qualified Cardano.Wallet.API.V1.Types as V1
-import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
                      (InputGrouping (..))
 import           Cardano.Wallet.Kernel.DB.BlockMeta (addressMetaIsUsed)
@@ -188,8 +187,11 @@ toWallet db hdRoot = V1.Wallet {
     v1AssuranceLevel = toAssuranceLevel $ hdRoot ^. HD.hdRootAssurance
 
 -- | Converts an 'HdRoot' into a V1 'EosWallet'.
-toEosWallet :: Kernel.DB -> HD.HdRoot -> AddressPoolGap -> V1.EosWallet
-toEosWallet db hdRoot gap = V1.EosWallet {
+--
+-- NOTE:
+-- It's up to the caller to make sure that the root is externally owned
+toEosWallet :: Kernel.DB -> HD.HdRoot -> V1.EosWallet
+toEosWallet db hdRoot = V1.EosWallet {
       eoswalId = V1.WalletId walletId
     , eoswalName = hdRoot ^. HD.hdRootName . to HD.getWalletName
     , eoswalAddressPoolGap = gap
@@ -198,7 +200,7 @@ toEosWallet db hdRoot gap = V1.EosWallet {
     , eoswalAssuranceLevel = v1AssuranceLevel
     }
   where
-    rootId = hdRoot ^. HD.hdRootId
+    (HD.HdRootExternallyOwned rootId gap _) = hdRoot ^. HD.hdRootBase
     createdAt = hdRoot ^. HD.hdRootCreatedAt . fromDb
     walletId = sformat build rootId
     v1AssuranceLevel = toAssuranceLevel $ hdRoot ^. HD.hdRootAssurance

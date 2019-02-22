@@ -121,10 +121,9 @@ restoreWallet pw hasSpendingPassword defaultCardanoAddress name assurance esk
             root <- createWalletHdRnd'
                 $ \root defaultHdAccount defaultHdAddress -> do
                     let defUtxo = M.singleton
-                            (HD.HdAccountBaseFO defaultHdAccount)
+                            defaultHdAccount
                             (mempty, maybeToList defaultHdAddress)
-                    let utxos' = M.mapKeys HD.HdAccountBaseFO utxos
-                    Left $ CreateHdWallet root (M.unionWith (<>) utxos' defUtxo)
+                    Left $ CreateHdWallet root (M.unionWith (<>) utxos defUtxo)
             return $ fmap (, mkCoin 0) root
         WalletRestore utxos tgt -> do
             -- Create the wallet for restoration, deleting the wallet first if it
