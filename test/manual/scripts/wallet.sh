@@ -2,11 +2,13 @@
 #
 # Usage:
 #	wallet (create | restore) [options] MNEMONICS...
-#	wallet delete <wallet_id> [options]
-#	wallet get [<wallet_id>] [options]
 #	wallet create-account <wallet_id>
+#	wallet delete <wallet_id>
+#	wallet get [<wallet_id>]
 #	wallet get-accounts <wallet_id>
 #	wallet get-addresses <wallet_id>
+#	wallet update <wallet_id> [options]
+#	wallet utxo <wallet_id>
 #
 # The script allows for basic interaction with wallet.
 # Please note that you can easily generate mnemonics for the script at https://iancoleman.io/bip39/.
@@ -18,7 +20,7 @@
 #   -h --help
 #   -a --assuranceLevel=STRING  Assurance level [default: normal]
 #   -n --name=STRING            Name of the wallet [default: TestWallet]
-#   -a --account=INT            An optional parent account index [default: 2147483648]
+#   -i --accountIndex=INT       An optional parent account index [default: 2147483648]
 #   -p --port=INT               Port the server is listening to [default: 8090]
 #   -c --client=FILEPATH        TLS client certificate expected by the server [default: ../../../state-staging/tls/client/client.pem]
 #
@@ -31,6 +33,7 @@
 #   ./wallet.sh create-account Ae2tdPwUPEZKyifkHShCKCbzzPbi7DBV7XuyTPEd13KRES4v8Ut3PmKebLy
 #   ./wallet.sh get-accounts Ae2tdPwUPEZKyifkHShCKCbzzPbi7DBV7XuyTPEd13KRES4v8Ut3PmKebLy
 #   ./wallet.sh get-addresses Ae2tdPwUPEZKyifkHShCKCbzzPbi7DBV7XuyTPEd13KRES4v8Ut3PmKebLy
+#   ./wallet.sh update Ae2tdPwUPEZKyifkHShCKCbzzPbi7DBV7XuyTPEd13KRES4v8Ut3PmKebLy -n "new name" -a "normal"
 #
 
 PATH=.:$PATH; source docopts.sh --auto "$@"
@@ -100,8 +103,6 @@ if [ "${ARGS[get]}" == "true" ]; then
 
 fi
 
-
-
 # create-account
 if [ "${ARGS[create-account]}" == "true" ]; then
 
@@ -128,7 +129,31 @@ fi
 # get-addresses
 if [ "${ARGS[get-addresses]}" == "true" ]; then
 
-	curl -kX GET https://localhost:${ARGS[--port]}/api/v1/wallets/${ARGS[<wallet_id>]}/accounts/${ARGS[--account]}/addresses \
+	curl -kX GET https://localhost:${ARGS[--port]}/api/v1/wallets/${ARGS[<wallet_id>]}/accounts/${ARGS[--accountIndex]}/addresses \
+  		-H "Accept: application/json; charset=utf-8" \
+  		-H "Content-Type: application/json; charset=utf-8" \
+  		--cert ${ARGS[--client]} | jq
+
+fi
+
+# update
+if [ "${ARGS[update]}" == "true" ]; then
+
+	curl -kX PUT https://localhost:${ARGS[--port]}/api/v1/wallets/${ARGS[<wallet_id>]} \
+  		-H "Accept: application/json; charset=utf-8" \
+  		-H "Content-Type: application/json; charset=utf-8" \
+  		--cert ${ARGS[--client]} \
+  		-d "{
+  		  \"assuranceLevel\": \"${ARGS[--assuranceLevel]}\",
+  		  \"name\": \"${ARGS[--name]}\"
+  		    }" | jq
+
+fi
+
+# utxo
+if [ "${ARGS[utxo]}" == "true" ]; then
+
+	curl -skX GET https://localhost:${ARGS[--port]}/api/v1/wallets/${ARGS[<wallet_id>]}/statistics/utxos \
   		-H "Accept: application/json; charset=utf-8" \
   		-H "Content-Type: application/json; charset=utf-8" \
   		--cert ${ARGS[--client]} | jq
