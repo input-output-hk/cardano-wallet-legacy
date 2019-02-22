@@ -179,8 +179,8 @@ import           Cardano.Wallet.API.V1.Generic (jsendErrorGenericParseJSON,
 import           Cardano.Wallet.API.V1.Swagger.Example (Example, example)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Types.UtxoStatistics
-import           Cardano.Wallet.Util (buildIndent, buildList, mkJsonKey,
-                     showApiUtcTime)
+import           Cardano.Wallet.Util (buildIndent, buildList, buildTrunc,
+                     mkJsonKey, showApiUtcTime)
 
 import           Cardano.Mnemonic (Mnemonic)
 import qualified Pos.Binary.Class as Bi
@@ -310,8 +310,8 @@ newtype WalAddress = WalAddress { unWalAddress :: Core.Address }
 
 deriveSafeBuildable ''WalAddress
 instance BuildableSafeGen WalAddress where
-    buildSafeGen sl (WalAddress addr) =
-        bprint (plainOrSecureF sl build (fconst "<wallet address>")) addr
+    buildSafeGen _ (WalAddress addr) =
+        bprint ("address: " % buildTrunc build) addr
 
 instance Buildable [WalAddress] where
     build = bprint listJson
@@ -442,7 +442,7 @@ instance Arbitrary WalletId where
 deriveSafeBuildable ''WalletId
 instance BuildableSafeGen WalletId where
     buildSafeGen _ (WalletId wid) =
-        bprint ("wallet id: " % build) wid
+        bprint ("wallet id: " % buildTrunc build) wid
 
 instance FromHttpApiData WalletId where
     parseQueryParam = Right . WalletId
@@ -1146,7 +1146,7 @@ instance Arbitrary AccountIndex where
 deriveSafeBuildable ''AccountIndex
 instance BuildableSafeGen AccountIndex where
     buildSafeGen _ (AccountIndex ix) =
-        bprint ("account ix: " % build) ix
+        bprint ("account index: " % build) ix
 
 instance ToParamSchema AccountIndex where
     toParamSchema _ = mempty
@@ -1310,18 +1310,18 @@ instance Arbitrary AccountBalance where
 
 deriveSafeBuildable ''Account
 instance BuildableSafeGen Account where
-    buildSafeGen sl Account{..} = bprint ("{"
-        %" index="%buildSafe sl
-        %" name="%buildSafe sl
-        %" addresses="%buildSafe sl
-        %" amount="%buildSafe sl
-        %" walletId="%buildSafe sl
-        %" }")
-        accIndex
+    buildSafeGen sl Account{..} = bprint
+        ( "Account (" % build % ")"
+        % "\n  " % build
+        % "\n  " % build
+        % "\n  amount: " % buildSafe sl
+        % "\n  addresses:\n" % buildIndent 2 (buildList build)
+        )
         accName
-        accAddresses
-        accAmount
         accWalletId
+        accIndex
+        accAmount
+        accAddresses
 
 instance Buildable AccountAddresses where
     build =
@@ -1333,7 +1333,7 @@ instance Buildable AccountBalance where
 
 instance Buildable [Account] where
     build =
-        bprint listJson
+        bprint (buildList build)
 
 -- | Account Update
 data AccountUpdate = AccountUpdate {
@@ -1353,9 +1353,8 @@ instance Arbitrary AccountUpdate where
 
 deriveSafeBuildable ''AccountUpdate
 instance BuildableSafeGen AccountUpdate where
-    buildSafeGen sl AccountUpdate{..} =
-        bprint ("{ name="%buildSafe sl%" }") uaccName
-
+    buildSafeGen _ AccountUpdate{..} =
+        bprint ("Account update, new name: " % build) uaccName
 
 -- | New Account
 data NewAccount = NewAccount
@@ -1378,25 +1377,16 @@ instance ToSchema NewAccount where
 
 deriveSafeBuildable ''NewAccount
 instance BuildableSafeGen NewAccount where
-    buildSafeGen sl NewAccount{..} = bprint ("{"
-        %" spendingPassword="%(buildSafeMaybe mempty sl)
-        %" name="%buildSafe sl
-        %" }")
-        naccSpendingPassword
-        naccName
+    buildSafeGen _ NewAccount{..} =
+        bprint ("New account, name: " % build) naccName
 
 deriveSafeBuildable ''WalletAddress
 instance BuildableSafeGen WalletAddress where
-    buildSafeGen sl WalletAddress{..} = bprint ("{"
-        %" id="%buildSafe sl
-        %" used="%build
-        %" }")
-        addrId
-        addrUsed
+    buildSafeGen _ (WalletAddress addr True _)  = bprint ("used   | " % build) addr
+    buildSafeGen _ (WalletAddress addr False _) = bprint ("unused | " % build) addr
 
 instance Buildable [WalletAddress] where
-    build = bprint listJson
-
+    build = bprint (buildList build)
 
 -- | Create a new Address
 data NewAddress = NewAddress
