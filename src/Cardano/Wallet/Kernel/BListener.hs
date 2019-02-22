@@ -34,7 +34,8 @@ import           Pos.Crypto (EncryptedSecretKey)
 import           Pos.DB.Block (getBlund)
 import           Pos.Util.Log (Severity (..))
 
-import           Cardano.Wallet.Kernel.AddressPool (AddressPool)
+import           Cardano.Wallet.Kernel.AddressPool (AddressPool,
+                     ErrAddressPoolInvalid (..))
 import           Cardano.Wallet.Kernel.DB.AcidState (ApplyBlock (..),
                      ObservableRollbackUseInTestsOnly (..), SwitchToFork (..),
                      SwitchToForkInternalError (..))
@@ -53,12 +54,12 @@ import qualified Cardano.Wallet.Kernel.NodeStateAdaptor as Node
 import           Cardano.Wallet.Kernel.Prefiltering (PrefilteredBlock)
 import qualified Cardano.Wallet.Kernel.Prefiltering as P
 import           Cardano.Wallet.Kernel.Read (foreignPendingByAccount,
-                     getEosPools, getFOWallets, getWalletSnapshot)
+                     getAddressPools, getEncryptedSecretKeys,
+                     getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Restore
 import qualified Cardano.Wallet.Kernel.Submission as Submission
 import           Cardano.Wallet.Kernel.Util.NonEmptyMap (NonEmptyMap)
 import qualified Cardano.Wallet.Kernel.Util.NonEmptyMap as NEM
-import           Cardano.Wallet.Kernel.Wallets (mkEosAddress)
 import           Cardano.Wallet.WalletLayer.Kernel.Wallets
                      (blundToResolvedBlock)
 
@@ -78,9 +79,20 @@ prefilterContext
 prefilterContext pw = do
     db <- getWalletSnapshot pw
     let foreigns = fmap Pending.txIns . foreignPendingByAccount $ db
-    hdFOs <- getFOWallets pw db
-    hdEOs <- getEosPools db (mkEosAddress $ pw ^. walletProtocolMagic)
+    hdFOs <- Map.traverseWithKey invariantFO =<< getEncryptedSecretKeys pw db
+    hdEOs <- Map.traverseWithKey invariantEO $ getAddressPools (pw ^. walletProtocolMagic) db
     return (foreigns, hdFOs, hdEOs)
+  where
+    invariantFO :: HdRootId -> Maybe a -> IO a
+    invariantFO rootId = flip maybe return $ fail $ toString $
+        "Cardano.Wallet.Kernel.BListener: invariant violation: encrypted secret key \
+        \hasn't been found for the given root id: " <> sformat build rootId
+
+    invariantEO :: HdAccountId -> Either ErrAddressPoolInvalid a -> IO a
+    invariantEO accId = flip either return $ \err -> fail $ toString $
+        "Cardano.Wallet.Kernel.BListener: invariant violation: recovered invalid \
+        \address pool for the given account: " <> sformat build accId <> " ( "
+        <> sformat build err <> " )"
 
 -- | Prefilter a resolved block for all wallets. If no wallets are present
 -- we return Nothing. If either wallet type is present, we return only the

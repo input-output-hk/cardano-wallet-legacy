@@ -9,16 +9,11 @@ module Cardano.Wallet.Kernel.Pending (
 
 import           Universum hiding (State)
 
+import           Control.Concurrent.MVar (modifyMVar_)
+import           Data.Acid.Advanced (update')
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
-
-import           Control.Concurrent.MVar (modifyMVar_)
-
-import           Data.Acid.Advanced (update')
-
-import           Pos.Chain.Txp (Tx (..), TxAux (..), TxOut (..))
-import           Pos.Core (Coin (..))
-import           Pos.Crypto (EncryptedSecretKey)
+import           Formatting (build, sformat)
 
 import           Cardano.Wallet.Kernel.DB.AcidState (CancelPending (..),
                      NewForeign (..), NewForeignError (..), NewPending (..),
@@ -29,9 +24,13 @@ import           Cardano.Wallet.Kernel.DB.InDb
 import qualified Cardano.Wallet.Kernel.DB.Spec.Pending as Pending
 import           Cardano.Wallet.Kernel.DB.TxMeta (TxMeta, putTxMeta)
 import           Cardano.Wallet.Kernel.Internal
-import           Cardano.Wallet.Kernel.Read (getFOWallets, getWalletSnapshot)
+import           Cardano.Wallet.Kernel.Read (getEncryptedSecretKeys,
+                     getWalletSnapshot)
 import           Cardano.Wallet.Kernel.Submission (Cancelled, addPending)
 import           Cardano.Wallet.Kernel.Util.Core
+import           Pos.Chain.Txp (Tx (..), TxAux (..), TxOut (..))
+import           Pos.Core (Coin (..))
+import           Pos.Crypto (EncryptedSecretKey)
 
 {-------------------------------------------------------------------------------
   Submit pending transactions
@@ -89,7 +88,7 @@ newTx :: forall e. ActiveWallet
 newTx ActiveWallet{..} accountId tx partialMeta upd = do
     snapshot <- getWalletSnapshot walletPassive
     -- run the update
-    hdRnds <- getFOWallets walletPassive snapshot
+    hdRnds <- Map.traverseWithKey invariant =<< getEncryptedSecretKeys walletPassive snapshot
 
     let allOurAddresses = fst <$> allOurs hdRnds
     res <- upd $ allOurAddresses
@@ -107,6 +106,11 @@ newTx ActiveWallet{..} accountId tx partialMeta upd = do
             submitTx
             return (Right txMeta)
     where
+        invariant :: HdRootId -> Maybe a -> IO a
+        invariant rootId = flip maybe return $ fail $ toString $
+            "Cardano.Wallet.Kernel.Pending.newTx: invariant violation: encrypted secret key \
+            \hasn't been found for the given root id: " <> sformat build rootId
+
         (txOut :: [TxOut]) = NE.toList $ (_txOutputs . taTx $ tx)
 
         -- | NOTE: we recognise addresses in the transaction outputs that belong to _all_ wallets,
