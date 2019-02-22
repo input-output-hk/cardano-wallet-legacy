@@ -129,15 +129,14 @@ createHdAddress hdAddress = do
 -- 'BackupPhrase' and (optionally) the 'SpendingPassword' to create a new key
 -- add it to the key storage. This is important, because these are secret
 -- bits of information that should never end up in the DB log.
-initHdRoot :: HdRootId
+initHdRoot :: HdRootBase
            -> WalletName
            -> HasSpendingPassword
            -> AssuranceLevel
            -> InDb Core.Timestamp
            -> HdRoot
-initHdRoot rootId name hasPass assurance created = HdRoot {
-      _hdRootId          = rootId
-    , _hdRootBase        = HdRootFullyOwned rootId
+initHdRoot rootBase name hasPass assurance created = HdRoot
+    { _hdRootBase        = rootBase
     , _hdRootName        = name
     , _hdRootHasPassword = hasPass
     , _hdRootAssurance   = assurance

@@ -266,11 +266,9 @@ instance Arbitrary HdAddressId where
 --
 -- NOTE: We do not store the encrypted key of the wallet.
 data HdRoot = HdRoot {
-      -- | Wallet ID
-      _hdRootId          :: !HdRootId
-
-      -- | Abstracting over the root Id
-    , _hdRootBase        :: !HdRootBase
+      -- | A root that is either fully owned or externally owned.
+      -- Externally owned root have a few more details attached to them.
+      _hdRootBase        :: !HdRootBase
 
       -- | Wallet name
     , _hdRootName        :: !WalletName
@@ -291,7 +289,6 @@ data HdRoot = HdRoot {
 
 instance Arbitrary HdRoot where
     arbitrary = HdRoot <$> arbitrary
-                       <*> arbitrary
                        <*> arbitrary
                        <*> arbitrary
                        <*> arbitrary
@@ -493,6 +490,20 @@ deriveSafeCopy 1 'base ''HdAccountIncomplete
 {-------------------------------------------------------------------------------
   Derived lenses
 -------------------------------------------------------------------------------}
+
+hdRootId :: Lens' HdRoot HdRootId
+hdRootId = hdRootBase . hdRootBaseId
+
+hdRootBaseId :: Lens' HdRootBase HdRootId
+hdRootBaseId = lens getter (flip setter)
+    where
+        getter = \case
+            (HdRootFullyOwned rootId)          -> rootId
+            (HdRootExternallyOwned rootId _ _) -> rootId
+        setter rootId = \case
+            (HdRootFullyOwned _)          -> HdRootFullyOwned rootId
+            (HdRootExternallyOwned _ a b) -> HdRootExternallyOwned rootId a b
+
 
 hdAccountBaseId :: Lens' HdAccountBase HdAccountId
 hdAccountBaseId = lens getHdAccountId setHdAccountId
@@ -707,7 +718,7 @@ deriveSafeCopy 1 'base ''UpdateGapError
 
 instance HasPrimKey HdRoot where
     type PrimKey HdRoot = HdRootId
-    primKey = _hdRootId
+    primKey = view hdRootId
 
 instance HasPrimKey HdAccount where
     type PrimKey HdAccount = HdAccountId

@@ -28,7 +28,6 @@ import qualified Formatting.Buildable
 
 import           Data.Acid.Advanced (update')
 
-import           Pos.Chain.Txp (Utxo)
 import           Pos.Core (Address, Timestamp, makePubKeyAddressBoot)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, PassPhrase, ProtocolMagic,
@@ -47,7 +46,7 @@ import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel,
                      HdAccountBase (..), HdAccountId (..), HdAccountIx (..),
                      HdAddress, HdAddressId (..), HdAddressIx (..), HdRoot,
-                     WalletName, hdRootId)
+                     HdRootBase (..), WalletName)
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
@@ -246,8 +245,7 @@ createEosHdWallet :: PassiveWallet
                   -> IO (Either CreateWalletError HdRoot)
 createEosHdWallet pw accounts gap assuranceLevel walletName = do
     root <- initHdRoot' <$> HD.genHdRootId <*> getCurrentTimestamp
-    let bases = Map.unionsWith (<>) (NE.toList (toAccountBase (root ^. hdRootId) <$> accounts))
-    res <- update' (pw ^. wallets) $ CreateHdWallet root bases
+    res <- update' (pw ^. wallets) $ CreateHdWallet root mempty
     return $ case res of
         Left e@(HD.CreateHdRootExists _) ->
             Left $ CreateWalletFailed e
@@ -257,22 +255,21 @@ createEosHdWallet pw accounts gap assuranceLevel walletName = do
             Right root
   where
     initHdRoot' rootId created = HD.initHdRoot
-        rootId
+        (HdRootExternallyOwned rootId gap (asMap $ fmap (toHdAccountId rootId) $ accounts))
         walletName
         (HD.NoSpendingPassword (InDb created))
         assuranceLevel
         (InDb created)
 
-    toAccountBase
+    toHdAccountId
         :: HdRootId
         -> (PublicKey, HdAccountIx)
-        -> Map HdAccountBase (Utxo, [HdAddress])
-    toAccountBase rootId =
-        let
-            accId ix = HdAccountId rootId ix
-            mkBase (pk, ix) = HdAccountBaseEO (accId ix) pk gap
-        in
-            flip Map.singleton (mempty, mempty) . mkBase
+        -> (HdAccountId, PublicKey)
+    toHdAccountId rootId (pubKey, ix) = (HdAccountId rootId ix, pubKey)
+
+    asMap :: Ord a => NonEmpty (a, b) -> Map a b
+    asMap = Map.fromList . NE.toList
+
 
 mkEosAddress
     :: ProtocolMagic
@@ -311,7 +308,7 @@ createWalletHdRnd pw hasSpendingPassword defaultCardanoAddress name assuranceLev
     created <- InDb <$> getCurrentTimestamp
     let nm      = makeNetworkMagic (pw ^. walletProtocolMagic)
         rootId  = HD.eskToHdRootId nm esk
-        newRoot = HD.initHdRoot rootId
+        newRoot = HD.initHdRoot (HdRootFullyOwned rootId)
                                 name
                                 (hdSpendingPassword created)
                                 assuranceLevel
