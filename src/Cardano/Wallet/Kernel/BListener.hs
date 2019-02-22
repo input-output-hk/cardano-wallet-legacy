@@ -94,6 +94,7 @@ prefilterContext pw = do
         \address pool for the given account: " <> sformat build accId <> " ( "
         <> sformat build err <> " )"
 
+
 -- | Prefilter a resolved block for all wallets. If no wallets are present
 -- we return Nothing. If either wallet type is present, we return only the
 -- relevant results.

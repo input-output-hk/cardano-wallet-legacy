@@ -170,11 +170,8 @@ listEosWallets
     -> SortOperations EosWallet
     -> Handler (APIResponse [EosWallet])
 listEosWallets pwl params fops sops = do
-    res <- liftIO $ WalletLayer.getEosWallets pwl
-    case res of
-        Left e -> throwM e
-        Right wallets ->
-            respondWith params
-                fops
-                sops
-                (pure wallets)
+    wallets <- liftIO $ WalletLayer.getEosWallets pwl
+    respondWith params
+        fops
+        sops
+        (pure wallets)

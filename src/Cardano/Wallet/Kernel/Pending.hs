@@ -87,9 +87,7 @@ newTx :: forall e. ActiveWallet
       -> IO (Either e TxMeta)
 newTx ActiveWallet{..} accountId tx partialMeta upd = do
     snapshot <- getWalletSnapshot walletPassive
-    -- run the update
     hdRnds <- Map.traverseWithKey invariant =<< getEncryptedSecretKeys walletPassive snapshot
-
     let allOurAddresses = fst <$> allOurs hdRnds
     res <- upd $ allOurAddresses
     case res of

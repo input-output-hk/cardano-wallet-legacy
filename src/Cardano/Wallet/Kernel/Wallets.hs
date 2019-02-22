@@ -1,9 +1,9 @@
 module Cardano.Wallet.Kernel.Wallets (
       createHdWallet
     , createEosHdWallet
-    , mkEosAddress
     , updateHdWallet
     , updatePassword
+    , updateGap
     , deleteHdWallet
     , deleteEosHdWallet
     , defaultHdAccountId
@@ -11,7 +11,6 @@ module Cardano.Wallet.Kernel.Wallets (
     , defaultHdAddress
       -- * Errors
     , CreateWalletError(..)
-    , GetAddressPoolGapError (..)
     , UpdateWalletPasswordError(..)
     -- * Internal & testing use only
     , createWalletHdRnd
@@ -28,24 +27,24 @@ import qualified Formatting.Buildable
 
 import           Data.Acid.Advanced (update')
 
-import           Pos.Core (Address, Timestamp, makePubKeyAddressBoot)
+import           Pos.Core (Address, Timestamp)
 import           Pos.Core.NetworkMagic (NetworkMagic, makeNetworkMagic)
-import           Pos.Crypto (EncryptedSecretKey, PassPhrase, ProtocolMagic,
-                     PublicKey, changeEncPassphrase, checkPassMatches,
-                     emptyPassphrase, firstHardened, safeDeterministicKeyGen)
+import           Pos.Crypto (EncryptedSecretKey, PassPhrase, PublicKey,
+                     changeEncPassphrase, checkPassMatches, emptyPassphrase,
+                     firstHardened, safeDeterministicKeyGen)
 
 import           Cardano.Mnemonic (Mnemonic)
 import qualified Cardano.Mnemonic as Mnemonic
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.AcidState (CreateHdWallet (..),
-                     DeleteHdRoot (..), RestoreHdWallet,
+                     DeleteHdRoot (..), RestoreHdWallet, UpdateHdRootGap (..),
                      UpdateHdRootPassword (..), UpdateHdWallet (..))
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel,
-                     HdAccountBase (..), HdAccountId (..), HdAccountIx (..),
-                     HdAddress, HdAddressId (..), HdAddressIx (..), HdRoot,
+                     HdAccountId (..), HdAccountIx (..), HdAddress,
+                     HdAddressId (..), HdAddressIx (..), HdRoot,
                      HdRootBase (..), WalletName)
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
@@ -53,7 +52,6 @@ import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
 import           Cardano.Wallet.Kernel.Internal (PassiveWallet, walletKeystore,
                      walletProtocolMagic, wallets)
 import qualified Cardano.Wallet.Kernel.Keystore as Keystore
-import           Cardano.Wallet.Kernel.Read (GetAddressPoolGapError (..))
 import qualified Cardano.Wallet.Kernel.Read as Kernel
 import           Cardano.Wallet.Kernel.Util.Core (getCurrentTimestamp)
 
@@ -206,7 +204,7 @@ createHdWallet pw mnemonic spendingPassword assuranceLevel walletName = do
                                      -- See preconditon above.
                                      (\hdRoot hdAccountId hdAddr ->
                                          Left $ CreateHdWallet hdRoot
-                                            (Map.singleton (HdAccountBaseFO hdAccountId) (mempty, maybeToList hdAddr))
+                                            (Map.singleton hdAccountId (mempty, maybeToList hdAddr))
                                      )
             case res of
                  -- NOTE(adinapoli): This is the @only@ error the DB can return,
@@ -245,7 +243,7 @@ createEosHdWallet :: PassiveWallet
                   -> IO (Either CreateWalletError HdRoot)
 createEosHdWallet pw accounts gap assuranceLevel walletName = do
     root <- initHdRoot' <$> HD.genHdRootId <*> getCurrentTimestamp
-    res <- update' (pw ^. wallets) $ CreateHdWallet root mempty
+    res <- update' (pw ^. wallets) $ CreateHdWallet root mempty -- TODO MEMPTY
     return $ case res of
         Left e@(HD.CreateHdRootExists _) ->
             Left $ CreateWalletFailed e
@@ -270,13 +268,6 @@ createEosHdWallet pw accounts gap assuranceLevel walletName = do
     asMap :: Ord a => NonEmpty (a, b) -> Map a b
     asMap = Map.fromList . NE.toList
 
-
-mkEosAddress
-    :: ProtocolMagic
-    -> PublicKey
-    -> Address
-mkEosAddress pm
-    = makePubKeyAddressBoot (makeNetworkMagic pm)
 
 -- | Creates an HD wallet where new accounts and addresses are generated
 -- via random index derivation.
@@ -418,6 +409,20 @@ updateHdWallet pw rootId assuranceLevel walletName = do
     case res of
          Left e              -> return (Left e)
          Right (db, newRoot) -> return (Right (db, newRoot))
+
+
+-- | Updates address pool gap for a corresponding root
+--
+-- NOTE:
+-- It's up to the caller to make sure that the given root is actually a valid
+-- externally-owned root.
+updateGap
+    :: PassiveWallet
+    -> HD.HdRootId
+    -> AddressPoolGap
+    -> IO (Either HD.UnknownHdRoot (Kernel.DB, HdRoot))
+updateGap pw rootId gap = liftIO $
+    update' (pw ^. wallets) (UpdateHdRootGap rootId gap)
 
 updatePassword :: PassiveWallet
                -> HD.HdRootId

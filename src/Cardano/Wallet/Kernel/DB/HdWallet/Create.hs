@@ -147,18 +147,17 @@ initHdRoot rootBase name hasPass assurance created = HdRoot
 --
 -- It is the responsibility of the caller to check the wallet's spending
 -- password.
-initHdAccount :: HdAccountBase
+initHdAccount :: HdAccountId
               -> HdAccountState
               -> HdAccount
-initHdAccount accountBase st = HdAccount {
-      _hdAccountBase  = accountBase
+initHdAccount accId st = HdAccount
+    { _hdAccountId    = accId
     , _hdAccountName  = defName
     , _hdAccountState = st
     , _hdAccountAutoPkCounter = AutoIncrementKey 0
     }
   where
     defName = AccountName $ sformat ("Account: " % build) (accId ^. hdAccountIdIx)
-    accId   = accountBase ^. hdAccountBaseId
 
 {-------------------------------------------------------------------------------
   Pretty printing
