@@ -137,6 +137,7 @@ initHdRoot :: HdRootId
            -> HdRoot
 initHdRoot rootId name hasPass assurance created = HdRoot {
       _hdRootId          = rootId
+    , _hdRootBase        = HdRootFullyOwned rootId
     , _hdRootName        = name
     , _hdRootHasPassword = hasPass
     , _hdRootAssurance   = assurance

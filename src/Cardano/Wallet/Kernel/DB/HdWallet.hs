@@ -21,6 +21,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , HdAccountId(..)
   , HdAddressId(..)
   , HdRoot(..)
+  , HdRootBase(..)
   , HdAccountBase(..)
   , HdAccount(..)
   , HdAddress(..)
@@ -48,6 +49,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , hdAddressIdIx
     -- *** Root
   , hdRootId
+  , hdRootBase
   , hdRootName
   , hdRootHasPassword
   , hdRootAssurance
@@ -267,6 +269,9 @@ data HdRoot = HdRoot {
       -- | Wallet ID
       _hdRootId          :: !HdRootId
 
+      -- | Abstracting over the root Id
+    , _hdRootBase        :: !HdRootBase
+
       -- | Wallet name
     , _hdRootName        :: !WalletName
 
@@ -282,14 +287,33 @@ data HdRoot = HdRoot {
 
       -- | When was this wallet created?
     , _hdRootCreatedAt   :: !(InDb Core.Timestamp)
-    } deriving (Eq, Show)
+    } deriving (Eq)
 
 instance Arbitrary HdRoot where
     arbitrary = HdRoot <$> arbitrary
                        <*> arbitrary
                        <*> arbitrary
                        <*> arbitrary
+                       <*> arbitrary
                        <*> (fmap InDb arbitrary)
+
+data HdRootBase
+    = HdRootFullyOwned HdRootId
+    | HdRootExternallyOwned
+        { _hdRootBaseId
+            :: !HdRootId
+        , _hdRootBaseGap
+            :: !AddressPoolGap
+        , _hdRootBaseAccounts
+            :: Map HdAccountId Core.PublicKey
+        }
+    deriving (Eq, Ord)
+
+instance Arbitrary HdRootBase where
+    arbitrary = oneof
+        [ HdRootFullyOwned <$> arbitrary
+        , HdRootExternallyOwned <$> arbitrary <*> arbitrary <*> arbitrary
+        ]
 
 -- | Contains specific stuff which is related to
 -- FO-wallets or EO-wallets.
@@ -457,6 +481,7 @@ deriveSafeCopy 1 'base ''HdAccountId
 deriveSafeCopy 1 'base ''HdAddressId
 
 deriveSafeCopy 1 'base ''HdRoot
+deriveSafeCopy 1 'base ''HdRootBase
 deriveSafeCopy 1 'base ''HdAccountBase
 deriveSafeCopy 1 'base ''HdAccount
 deriveSafeCopy 1 'base ''HdAddress
