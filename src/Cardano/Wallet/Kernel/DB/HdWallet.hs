@@ -150,7 +150,7 @@ newtype AccountName = AccountName { getAccountName :: Text }
 
 -- | Account index
 newtype HdAccountIx = HdAccountIx { getHdAccountIx :: Word32 }
-  deriving (Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 instance NFData HdAccountIx
 
@@ -224,7 +224,7 @@ data HdAccountId = HdAccountId {
       _hdAccountIdParent :: !HdRootId
     , _hdAccountIdIx     :: !HdAccountIx
     }
-  deriving (Eq, Generic)
+  deriving (Show, Eq, Generic)
 
 instance NFData HdAccountId
 
@@ -281,7 +281,7 @@ data HdRoot = HdRoot {
 
       -- | When was this wallet created?
     , _hdRootCreatedAt   :: !(InDb Core.Timestamp)
-    } deriving (Eq)
+    } deriving (Show, Eq)
 
 instance Arbitrary HdRoot where
     arbitrary = HdRoot <$> arbitrary
@@ -300,7 +300,7 @@ data HdRootBase
         , _hdRootBaseAccounts
             :: Map HdAccountId Core.PublicKey
         }
-    deriving (Eq, Ord)
+    deriving (Show, Eq, Ord)
 
 instance Arbitrary HdRootBase where
     arbitrary = oneof
