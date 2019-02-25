@@ -192,8 +192,7 @@ import           Pos.Infra.Communication.Types.Protocol ()
 import           Pos.Infra.Diffusion.Subscription.Status
                      (SubscriptionStatus (..))
 import           Pos.Infra.Util.LogSafe (BuildableSafeGen (..), buildSafe,
-                     buildSafeList, buildSafeMaybe, deriveSafeBuildable,
-                     plainOrSecureF)
+                     deriveSafeBuildable, plainOrSecureF)
 import           Test.Pos.Core.Arbitrary ()
 
 -- | Declare generic schema, while documenting properties
@@ -1513,12 +1512,10 @@ instance Arbitrary PaymentDistribution where
 
 deriveSafeBuildable ''PaymentDistribution
 instance BuildableSafeGen PaymentDistribution where
-    buildSafeGen sl PaymentDistribution{..} = bprint ("{"
-        %" address="%buildSafe sl
-        %" amount="%buildSafe sl
-        %" }")
-        pdAddress
+    buildSafeGen _ PaymentDistribution{..} = bprint
+        ( "amount: " % build % " --> " % build )
         pdAmount
+        pdAddress
 
 
 -- | A 'PaymentSource' encapsulate two essentially piece of data to reach for some funds:
@@ -1543,10 +1540,8 @@ instance Arbitrary PaymentSource where
 
 deriveSafeBuildable ''PaymentSource
 instance BuildableSafeGen PaymentSource where
-    buildSafeGen sl PaymentSource{..} = bprint ("{"
-        %" walletId="%buildSafe sl
-        %" accountIndex="%buildSafe sl
-        %" }")
+    buildSafeGen _ PaymentSource{..} = bprint
+        (build % ", " % build)
         psWalletId
         psAccountIndex
 
@@ -1564,8 +1559,8 @@ newtype WalletInputSelectionPolicy = WalletInputSelectionPolicy Core.InputSelect
 
 deriveSafeBuildable ''WalletInputSelectionPolicy
 instance BuildableSafeGen WalletInputSelectionPolicy where
-    buildSafeGen sl (WalletInputSelectionPolicy policy) =
-        bprint (plainOrSecureF sl build (fconst "<wallet input selection policy>")) policy
+    buildSafeGen _ (WalletInputSelectionPolicy policy) =
+        bprint build policy
 
 instance ToJSON WalletInputSelectionPolicy where
     toJSON (WalletInputSelectionPolicy Core.OptimizeForSecurity)       = String "OptimizeForSecurity"
@@ -1605,16 +1600,15 @@ instance ToSchema Payment where
 
 deriveSafeBuildable ''Payment
 instance BuildableSafeGen Payment where
-    buildSafeGen sl (Payment{..}) = bprint ("{"
-        %" source="%buildSafe sl
-        %" destinations="%buildSafeList sl
-        %" groupingPolicty="%build
-        %" spendingPassword="%(buildSafeMaybe mempty sl)
-        %" }")
+    buildSafeGen _ Payment{..} = bprint
+        ( "Payment"
+        % "\n  grouping policy: " % build
+        % "\n  source:\n" % buildIndent 4 build
+        % "\n  destinations:\n" % buildIndent 2 (buildList build)
+        )
+        pmtGroupingPolicy
         pmtSource
         (toList pmtDestinations)
-        pmtGroupingPolicy
-        pmtSpendingPassword
 
 ----------------------------------------------------------------------------
 -- TxId
@@ -1625,8 +1619,7 @@ newtype WalletTxId = WalletTxId Txp.TxId
 
 deriveSafeBuildable ''WalletTxId
 instance BuildableSafeGen WalletTxId where
-    buildSafeGen sl (WalletTxId txId) =
-        bprint (plainOrSecureF sl build (fconst "<wallet tx id>")) txId
+    buildSafeGen _ (WalletTxId txId) = bprint build txId
 
 instance Arbitrary WalletTxId where
   arbitrary = WalletTxId <$> arbitrary
@@ -1828,25 +1821,26 @@ instance Arbitrary Transaction where
 
 deriveSafeBuildable ''Transaction
 instance BuildableSafeGen Transaction where
-    buildSafeGen sl Transaction{..} = bprint ("{"
-        %" id="%buildSafe sl
-        %" confirmations="%build
-        %" amount="%buildSafe sl
-        %" inputs="%buildSafeList sl
-        %" outputs="%buildSafeList sl
-        %" type="%buildSafe sl
-        %" direction"%buildSafe sl
-        %" }")
+    buildSafeGen sl Transaction{..} = bprint
+        ( "Transaction"
+        % "\n  id: " % build
+        % "\n  confirmations: " % build
+        % "\n  amount: " % buildSafe sl
+        % "\n  type: " % build
+        % "\n  direction: " % build
+        % "\n  inputs:\n" % buildIndent 2 (buildList build)
+        % "\n  outputs:\n" % buildIndent 2 (buildList build)
+        )
         txId
         txConfirmations
         txAmount
-        (toList txInputs)
-        (toList txOutputs)
         txType
         txDirection
+        (toList txInputs)
+        (toList txOutputs)
 
 instance Buildable [Transaction] where
-    build = bprint listJson
+    build = bprint (buildList build)
 
 -- | Technically we have serialized 'Tx' here, from the core.
 mkTransactionAsBase16 :: Txp.Tx -> TransactionAsBase16
