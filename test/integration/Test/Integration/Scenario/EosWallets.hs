@@ -396,6 +396,146 @@ spec = do
             , expectListItemFieldEqual 0 walletId (eowallet ^. walletId)
             ]
 
+    describe "EOSWALLETS_LIST_03 - One can set page >= 1 and per_page [1..50] on the results." $ do
+
+        let failingScenario213 = "1 wallet; page=9223372036854775807 & per_page=50 => 0 wallets returned"
+        let failingScenario353 = "11 wallets; page=1 => 10 wallets returned"
+
+        let matrix =
+                [ ( "2 wallets; page=1 & per_page=1 => 1 wallet returned"
+                  , 2
+                  , Just (Client.Page 1)
+                  , Just (Client.PerPage 1)
+                  , [ expectSuccess
+                    , expectListSizeEqual 1
+                    ]
+                  )
+                , ( "6 wallets; page=3 & per_page=2 => 2 wallets returned"
+                  , 6
+                  , Just (Client.Page 3)
+                  , Just (Client.PerPage 2)
+                  , [ expectSuccess
+                    , expectListSizeEqual 2
+                    ]
+                  )
+                , ( "4 wallets; per_page=3 => 3 wallets returned"
+                  , 4
+                  , Nothing
+                  , Just (Client.PerPage 3)
+                  , [ expectSuccess
+                    , expectListSizeEqual 3
+                    ]
+                  )
+                , ( failingScenario353
+                  , 11
+                  , Just (Client.Page 1)
+                  , Nothing
+                  , [ expectSuccess
+                    , expectListSizeEqual 10
+                    ]
+                  )
+                , ( failingScenario213
+                  , 1
+                  , Just (Client.Page 9223372036854775807)
+                  , Just (Client.PerPage 50)
+                  , [ expectSuccess
+                    , expectListSizeEqual 0
+                    ]
+                  )
+                ]
+
+        forM_ matrix $ \(title, walletsNumber, page, perPage, expectations) -> scenario title $ do
+
+            forM_ [1..walletsNumber] $ \name -> do
+                when (title == failingScenario213) $
+                    pendingWith "Test fails due to bug #213"
+
+                when (title == failingScenario353) $
+                    pendingWith "Test fails due to bug #353"
+
+                fixture  <- setup defaultSetup
+                successfulRequest $ Client.postEosWallet $- NewEosWallet
+                    (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
+                    noAddressPoolGap
+                    defaultAssuranceLevel
+                    (show (name :: Int))
+
+            response <- request $ Client.getEosWalletIndexFilterSorts
+                $- page
+                $- perPage
+                $- NoFilters
+                $- NoSorts
+            verify response expectations
+
+    scenario "EOSWALLETS_LIST_04 - One can filter wallets by wallet id" $ do
+        -- EQ[value] : only allow values equal to value
+        fixture  <- setup defaultSetup
+
+        eoswallets <- forM [1,2] $ \name -> do
+            successfulRequest $ Client.postEosWallet $- NewEosWallet
+                (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
+                noAddressPoolGap
+                defaultAssuranceLevel
+                (show (name :: Int))
+
+        let eosWalletIds =
+                [ (eoswallets !! 0) ^. walletId
+                , (eoswallets !! 1) ^. walletId
+                ]
+        let endpoint = "api/v1/externally-owned-wallets?id=" <> ( fromWalletId $ eosWalletIds !! 0 )
+
+        resp <- unsafeRequest ("GET", endpoint) $ Nothing
+        verify (resp :: Either ClientError [EosWallet])
+            [ expectSuccess
+            , expectListSizeEqual 1
+            , expectListItemFieldEqual 0 walletId ( eosWalletIds !! 0 )
+            ]
+
+    scenario "EOSWALLETS_LIST_05 - One can sort results only by 'balance' and 'created_at'" $ do
+
+        let matrix =
+                [ ( "api/v1/externally-owned-wallets?sort_by=created_at"
+                  , [ expectSuccess
+                    , expectListSizeEqual 2
+                    , expectListItemFieldEqual 0 walletName "2"
+                    , expectListItemFieldEqual 1 walletName "1"
+                    ]
+                  )
+                , ( "api/v1/externally-owned-wallets?sort_by=DES%5Bcreated_at%5D"
+                  , [ expectSuccess
+                    , expectListSizeEqual 2
+                    , expectListItemFieldEqual 0 walletName "2"
+                    , expectListItemFieldEqual 1 walletName "1"
+                    ]
+                  )
+                , ( "api/v1/externally-owned-wallets?sort_by=ASC%5Bcreated_at%5D"
+                  , [ expectSuccess
+                    , expectListSizeEqual 2
+                    , expectListItemFieldEqual 0 walletName "1"
+                    , expectListItemFieldEqual 1 walletName "2"
+                    ]
+                  )
+                , ( "api/v1/externally-owned-wallets?sort_by=漢patate字"
+                  , [ expectSuccess
+                    , expectListSizeEqual 2
+                    ]
+                  )
+
+                ]
+
+        fixture  <- setup defaultSetup
+        forM_ [1,2] $ \name -> do
+            successfulRequest $ Client.postEosWallet $- NewEosWallet
+                (NE.fromList $ take 3 $ fixture ^. externallyOwnedAccounts)
+                noAddressPoolGap
+                defaultAssuranceLevel
+                (show (name :: Int))
+
+        forM_ matrix $ \(endpoint, expectations) -> do
+            resp <- unsafeRequest ("GET", fromString endpoint) $ Nothing
+            verify (resp :: Either ClientError [EosWallet]) expectations
+
+
     scenario "EOSWALLETS_UPDATE_01 - cannot update FO wallets with EOS endpoint" $ do
         fixture  <- setup $ defaultSetup
             & walletName .~ "Before update FO"
