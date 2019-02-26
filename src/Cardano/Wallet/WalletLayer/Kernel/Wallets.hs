@@ -35,6 +35,8 @@ import qualified Cardano.Wallet.Kernel.Accounts as Kernel
 import           Cardano.Wallet.Kernel.Addresses (newHdAddress)
 import qualified Cardano.Wallet.Kernel.DB.HdRootId as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
+import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
+                     (DerivationScheme (..))
 import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import qualified Cardano.Wallet.Kernel.DB.TxMeta.Types as Kernel
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (IxSet)
@@ -68,8 +70,9 @@ createWallet wallet newWalletRequest = liftIO $ do
             case newwalOperation of
                 V1.RestoreWallet -> restore nm newWallet
                 V1.CreateWallet  -> create newWallet
-        ImportWalletFromESK esk mbSpendingPassword ->
+        ImportWalletFromESK esk mbSpendingPassword scheme ->
             restoreFromESK nm
+                           scheme
                            esk
                            (spendingPassword mbSpendingPassword)
                            "Imported Wallet"
@@ -93,18 +96,20 @@ createWallet wallet newWalletRequest = liftIO $ do
                              (Mnemonic.mnemonicToSeed (mnemonic newWallet))
                              (spendingPassword newwalSpendingPassword)
         restoreFromESK nm
+                       (V1.derivationScheme <$> newwalDerivationScheme)
                        esk
                        (spendingPassword newwalSpendingPassword)
                        newwalName
                        (fromAssuranceLevel newwalAssuranceLevel)
 
     restoreFromESK :: NetworkMagic
+                   -> Maybe DerivationScheme
                    -> EncryptedSecretKey
                    -> PassPhrase
                    -> Text
                    -> HD.AssuranceLevel
                    -> IO (Either CreateWalletError V1.Wallet)
-    restoreFromESK nm esk pwd walletName hdAssuranceLevel = runExceptT $ do
+    restoreFromESK nm _ esk pwd walletName hdAssuranceLevel = runExceptT $ do
         let rootId = HD.eskToHdRootId nm esk
 
         -- Insert the 'EncryptedSecretKey' into the 'Keystore'
@@ -127,6 +132,9 @@ createWallet wallet newWalletRequest = liftIO $ do
                       (Just (hdAddress ^. HD.hdAddressAddress . fromDb))
                       (HD.WalletName walletName)
                       hdAssuranceLevel
+                      -- TODO (akegalj): we should probably pass the scheme
+                      -- param to restoreWallet to bootstrap with correct
+                      -- derivation scheme
                       esk
 
                 -- Return the wallet information, with an updated balance.
@@ -143,6 +151,7 @@ createWallet wallet newWalletRequest = liftIO $ do
         , walCreatedAt                  = V1.WalletTimestamp createdAt
         , walAssuranceLevel             = v1AssuranceLevel
         , walSyncState                  = V1.Synced
+        , walDerivationScheme           = V1.DerivationSchemeVersion scheme
         }
       where
         (hasSpendingPassword, lastUpdate) =
@@ -151,8 +160,9 @@ createWallet wallet newWalletRequest = liftIO $ do
                  HD.HasSpendingPassword lu -> (True, lu ^. fromDb)
         createdAt  = hdRoot ^. HD.hdRootCreatedAt . fromDb
         walletId   = toRootId $ hdRoot ^. HD.hdRootId
+        scheme     = hdRoot ^. HD.hdDerivationScheme
 
-    mnemonic (V1.NewWallet (V1.BackupPhrase m) _ _ _ _) = m
+    mnemonic (V1.NewWallet (V1.BackupPhrase m) _ _ _ _ _) = m
     spendingPassword = maybe emptyPassphrase coerce
 
 

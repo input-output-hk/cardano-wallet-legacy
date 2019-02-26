@@ -62,6 +62,7 @@ import qualified Cardano.Wallet.Kernel.Addresses as Kernel
 import           Cardano.Wallet.Kernel.CoinSelection.FromGeneric
                      (ExpenseRegulation, InputGrouping)
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as Kernel
+import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation (DerivationScheme)
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (IxSet)
 import           Cardano.Wallet.Kernel.Read (GetAddressPoolGapError (..))
@@ -77,7 +78,7 @@ import           Cardano.Wallet.WalletLayer.Kernel.Conv (InvalidRedemptionCode)
 
 data CreateWallet =
     CreateWallet NewWallet
-  | ImportWalletFromESK EncryptedSecretKey (Maybe SpendingPassword)
+  | ImportWalletFromESK EncryptedSecretKey (Maybe SpendingPassword) (Maybe DerivationScheme)
 
 data CreateWalletError =
     CreateWalletError Kernel.CreateWalletError

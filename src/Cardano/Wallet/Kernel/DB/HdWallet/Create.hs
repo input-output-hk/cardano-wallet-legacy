@@ -27,6 +27,7 @@ import qualified Pos.Core as Core
 
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
 import           Cardano.Wallet.Kernel.DB.HdWallet
+import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation (DerivationScheme)
 import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.Util.AcidState
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (AutoIncrementKey (..),
@@ -130,17 +131,19 @@ createHdAddress hdAddress = do
 -- add it to the key storage. This is important, because these are secret
 -- bits of information that should never end up in the DB log.
 initHdRoot :: HdRootId
+           -> DerivationScheme
            -> WalletName
            -> HasSpendingPassword
            -> AssuranceLevel
            -> InDb Core.Timestamp
            -> HdRoot
-initHdRoot rootId name hasPass assurance created = HdRoot {
-      _hdRootId          = rootId
-    , _hdRootName        = name
-    , _hdRootHasPassword = hasPass
-    , _hdRootAssurance   = assurance
-    , _hdRootCreatedAt   = created
+initHdRoot rootId scheme name hasPass assurance created = HdRoot {
+      _hdRootId           = rootId
+    , _hdDerivationScheme = scheme
+    , _hdRootName         = name
+    , _hdRootHasPassword  = hasPass
+    , _hdRootAssurance    = assurance
+    , _hdRootCreatedAt    = created
     }
 
 -- | New account

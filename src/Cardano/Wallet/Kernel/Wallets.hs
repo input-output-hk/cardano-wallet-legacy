@@ -50,6 +50,8 @@ import           Cardano.Wallet.Kernel.DB.HdWallet (AssuranceLevel,
                      WalletName, hdRootId)
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Create as HD
+import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
+                     (DerivationScheme (..))
 import           Cardano.Wallet.Kernel.DB.InDb (InDb (..), fromDb)
 import           Cardano.Wallet.Kernel.Internal (PassiveWallet, walletKeystore,
                      walletProtocolMagic, wallets)
@@ -258,6 +260,7 @@ createEosHdWallet pw accounts gap assuranceLevel walletName = do
   where
     initHdRoot' rootId created = HD.initHdRoot
         rootId
+        SequentialDerivationScheme
         walletName
         (HD.NoSpendingPassword (InDb created))
         assuranceLevel
@@ -312,6 +315,9 @@ createWalletHdRnd pw hasSpendingPassword defaultCardanoAddress name assuranceLev
     let nm      = makeNetworkMagic (pw ^. walletProtocolMagic)
         rootId  = HD.eskToHdRootId nm esk
         newRoot = HD.initHdRoot rootId
+                                -- For all new wallets we are using sequential derivation scheme
+                                -- TODO: refactor and rename createWalletHdRnd to createWalletHdFO - FO stands for fully owned wallet
+                                SequentialDerivationScheme
                                 name
                                 (hdSpendingPassword created)
                                 assuranceLevel

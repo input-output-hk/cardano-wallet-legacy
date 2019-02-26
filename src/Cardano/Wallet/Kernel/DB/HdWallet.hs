@@ -48,6 +48,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , hdAddressIdIx
     -- *** Root
   , hdRootId
+  , hdDerivationScheme
   , hdRootName
   , hdRootHasPassword
   , hdRootAssurance
@@ -130,6 +131,8 @@ import           Cardano.Wallet.Kernel.AddressPool (AddressPool,
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
 import           Cardano.Wallet.Kernel.DB.BlockContext
 import           Cardano.Wallet.Kernel.DB.HdRootId (HdRootId)
+import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
+                     (DerivationScheme (..))
 import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.Spec
 import           Cardano.Wallet.Kernel.DB.Util.AcidState
@@ -271,27 +274,31 @@ instance Arbitrary HdAddressId where
 -- NOTE: We do not store the encrypted key of the wallet.
 data HdRoot = HdRoot {
       -- | Wallet ID
-      _hdRootId          :: !HdRootId
+      _hdRootId           :: !HdRootId
+
+    -- | Which derivation scheme is being used
+    , _hdDerivationScheme :: !DerivationScheme
 
       -- | Wallet name
-    , _hdRootName        :: !WalletName
+    , _hdRootName         :: !WalletName
 
       -- | Does this wallet have a spending password?
       --
       -- NOTE: We do not store the spending password itself, but merely record
       -- whether there is one. Updates to the spending password affect only the
       -- external key storage, not the wallet DB proper.
-    , _hdRootHasPassword :: !HasSpendingPassword
+    , _hdRootHasPassword  :: !HasSpendingPassword
 
       -- | Assurance level
-    , _hdRootAssurance   :: !AssuranceLevel
+    , _hdRootAssurance    :: !AssuranceLevel
 
       -- | When was this wallet created?
-    , _hdRootCreatedAt   :: !(InDb Core.Timestamp)
+    , _hdRootCreatedAt    :: !(InDb Core.Timestamp)
     } deriving (Eq, Show)
 
 instance Arbitrary HdRoot where
     arbitrary = HdRoot <$> arbitrary
+                       <*> arbitrary
                        <*> arbitrary
                        <*> arbitrary
                        <*> arbitrary
@@ -463,6 +470,7 @@ deriveSafeCopy 1 'base ''HdAccountId
 deriveSafeCopy 1 'base ''HdAddressId
 
 deriveSafeCopy 1 'base ''HdRoot
+deriveSafeCopy 1 'base ''DerivationScheme
 deriveSafeCopy 1 'base ''HdAccountBase
 deriveSafeCopy 1 'base ''HdAccount
 deriveSafeCopy 1 'base ''HdAddress

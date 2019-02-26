@@ -16,7 +16,7 @@
 -- language extension here.
 {-# LANGUAGE NoPatternSynonyms          #-}
 
--- Needed for the `Buildable`, `SubscriptionStatus` and `NodeId` orphans.
+-- Needed for the `Buildable`, `SubscriptionStatus` and `NodeId` orphans and single deriveJSON instance.
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Cardano.Wallet.API.V1.Types (
@@ -30,6 +30,7 @@ module Cardano.Wallet.API.V1.Types (
   -- * Domain-specific types
   -- * Wallets
   , Wallet (..)
+  , DerivationSchemeVersion (..)
   , AssuranceLevel (..)
   , NewWallet (..)
   , WalletUpdate (..)
@@ -176,6 +177,8 @@ import           Cardano.Wallet.API.V1.Generic (jsendErrorGenericParseJSON,
                      jsendErrorGenericToJSON)
 import           Cardano.Wallet.API.V1.Swagger.Example (Example, example)
 import           Cardano.Wallet.Kernel.AddressPoolGap (AddressPoolGap)
+import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
+                     (DerivationScheme (..))
 import           Cardano.Wallet.Types.UtxoStatistics
 import           Cardano.Wallet.Util (buildIndent, buildList, buildTrunc,
                      mkJsonKey, showApiUtcTime)
@@ -451,6 +454,41 @@ instance ToHttpApiData WalletId where
 instance Hashable WalletId
 instance NFData WalletId
 
+-- Which derivation scheme is being used
+newtype DerivationSchemeVersion = DerivationSchemeVersion
+    { derivationScheme :: DerivationScheme
+    }
+    deriving stock (Show, Eq, Ord)
+
+instance Arbitrary DerivationSchemeVersion where
+    arbitrary = DerivationSchemeVersion <$> arbitrary
+
+instance Example DerivationSchemeVersion
+
+instance ToSchema DerivationSchemeVersion where
+    declareNamedSchema _ =
+        pure $ NamedSchema (Just "DerivationSchemeVersion ") $ mempty
+            & type_ .~ SwaggerString
+            & enum_ ?~ ["random", "sequential"]
+            & description ?~ mconcat
+                [ "Derivation scheme being used in HD wallet tree."
+                , "Derivation scheme random is following bip32 scheme, ed25519v0 curve and addresses contain: account index and address index"
+                , "Derivation scheme sequential is bip44 scheme, ed25519v1 curve and addresses contain no address payload."
+                , "Root key derivation from mnemonic keys also differs from root key derivation in random scheme"
+                ]
+
+-- Drops the @DerivationScheme@ suffix.
+deriveJSON defaultOptions { A.constructorTagModifier = reverse . drop 16 . reverse . map C.toLower
+                          } ''DerivationScheme
+
+deriveJSON defaultOptions { A.unwrapUnaryRecords = True
+                          } ''DerivationSchemeVersion
+
+deriveSafeBuildable ''DerivationSchemeVersion
+instance BuildableSafeGen DerivationSchemeVersion where
+    buildSafeGen _ (DerivationSchemeVersion RandomDerivationScheme) = "random"
+    buildSafeGen _ (DerivationSchemeVersion SequentialDerivationScheme) = "sequential"
+
 -- | A Wallet Operation
 data WalletOperation =
     CreateWallet
@@ -458,7 +496,7 @@ data WalletOperation =
   deriving (Eq, Show, Enum, Bounded)
 
 instance Arbitrary WalletOperation where
-    arbitrary = elements [minBound .. maxBound]
+  arbitrary = elements [minBound .. maxBound]
 
 -- Drops the @Wallet@ suffix.
 deriveJSON Aeson.defaultOptions  { A.constructorTagModifier = reverse . drop 6 . reverse . map C.toLower
@@ -474,7 +512,6 @@ deriveSafeBuildable ''WalletOperation
 instance BuildableSafeGen WalletOperation where
     buildSafeGen _ CreateWallet  = "operation: create"
     buildSafeGen _ RestoreWallet = "operation: restore"
-
 
 newtype BackupPhrase = BackupPhrase
     { unBackupPhrase :: Mnemonic 12
@@ -499,6 +536,7 @@ data NewWallet = NewWallet {
     , newwalAssuranceLevel   :: !AssuranceLevel
     , newwalName             :: !WalletName
     , newwalOperation        :: !WalletOperation
+    , newwalDerivationScheme :: !(Maybe DerivationSchemeVersion)
     } deriving (Eq, Show, Generic)
 
 deriveJSON Aeson.defaultOptions  ''NewWallet
@@ -509,6 +547,7 @@ instance Arbitrary NewWallet where
                         <*> arbitrary
                         <*> pure "My Wallet"
                         <*> arbitrary
+                        <*> arbitrary
 
 instance ToSchema NewWallet where
   declareNamedSchema =
@@ -518,6 +557,7 @@ instance ToSchema NewWallet where
       & ("assuranceLevel"   --^ "Desired assurance level based on the number of confirmations counter of each transaction.")
       & ("name"             --^ "Wallet's name.")
       & ("operation"        --^ "Create a new wallet or Restore an existing one.")
+      & ("derivationScheme"        --^ "Derivation scheme used for creating HD wallet tree")
     )
 
 deriveSafeBuildable ''NewWallet
@@ -527,10 +567,12 @@ instance BuildableSafeGen NewWallet where
         % "\n  " % build
         % "\n  name: " % build
         % "\n  " % build
+        % "\n  " % build
         )
         newwalOperation
         newwalName
         newwalAssuranceLevel
+        newwalDerivationScheme
 
 -- | Type for representation of serialized transaction in Base16-format.
 -- We use it for external wallets (to send/receive raw transaction during
@@ -849,6 +891,7 @@ data Wallet = Wallet {
     , walCreatedAt                  :: !WalletTimestamp
     , walAssuranceLevel             :: !AssuranceLevel
     , walSyncState                  :: !SyncState
+    , walDerivationScheme           :: !DerivationSchemeVersion
     } deriving (Eq, Ord, Show, Generic)
 
 deriveJSON Aeson.defaultOptions ''Wallet
@@ -872,11 +915,14 @@ instance ToSchema Wallet where
             --^ "The assurance level of the wallet."
             & "syncState"
             --^ "The sync state for this wallet."
+            & "derivationScheme"
+            --^ "Derivation scheme used for creating HD wallet tree"
         )
 
 instance Arbitrary Wallet where
   arbitrary = Wallet <$> arbitrary
                      <*> pure "My wallet"
+                     <*> arbitrary
                      <*> arbitrary
                      <*> arbitrary
                      <*> arbitrary
@@ -2069,6 +2115,7 @@ instance BuildableSafeGen WalletSoftwareUpdate where
 data WalletImport = WalletImport
   { wiSpendingPassword :: !(Maybe SpendingPassword)
   , wiFilePath         :: !FilePath
+  , wiDerivationScheme :: !(Maybe DerivationSchemeVersion)
   } deriving (Show, Eq, Generic)
 
 deriveJSON Aeson.defaultOptions ''WalletImport
@@ -2082,6 +2129,7 @@ instance ToSchema WalletImport where
 
 instance Arbitrary WalletImport where
   arbitrary = WalletImport <$> arbitrary
+                           <*> arbitrary
                            <*> arbitrary
 
 deriveSafeBuildable ''WalletImport
@@ -2276,6 +2324,7 @@ instance Example NewWallet where
                         <*> example
                         <*> pure "My Wallet"
                         <*> example
+                        <*> example
 
 instance Example TransactionAsBase16 where
     example = TransactionAsBase16Unsafe <$> pure
@@ -2332,6 +2381,7 @@ instance Example SignedTransaction where
 instance Example WalletImport where
     example = WalletImport <$> example
                            <*> pure "/Users/foo/Documents/wallet_to_import.key"
+                           <*> example
 
 --
 -- Wallet Errors

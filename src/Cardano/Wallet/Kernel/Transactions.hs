@@ -53,6 +53,8 @@ import           Cardano.Wallet.Kernel.DB.AcidState (DB, NewForeignError,
                      NewPendingError)
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
+import           Cardano.Wallet.Kernel.DB.HdWallet.Derivation
+                     (DerivationScheme (..), derivationScheme)
 import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
 import           Cardano.Wallet.Kernel.DB.Read as Getters
 import           Cardano.Wallet.Kernel.DB.TxMeta.Types
@@ -77,7 +79,6 @@ import           Pos.Chain.Txp as Core (TxAttributes, TxAux, TxIn, TxOut,
 import qualified Pos.Client.Txp.Util as CTxp
 import           Pos.Core (Address, Coin, TxFeePolicy (..), unsafeSubCoin)
 import qualified Pos.Core as Core
-import           Pos.Core.Attributes (Attributes (attrData))
 import           Pos.Core.NetworkMagic (NetworkMagic (..), makeNetworkMagic)
 import           Pos.Crypto (EncryptedSecretKey, PassPhrase, ProtocolMagic,
                      PublicKey, RedeemSecretKey, SafeSigner (..),
@@ -675,25 +676,22 @@ mkSigner nm spendingPassword (Just esk) snapshot addr =
                                        . HD.hdAddressIdParent
                                        . HD.hdAccountIdIx
                                        . to HD.getHdAccountIx
-                mAddressPayload = hdAddr ^. HD.hdAddressAddress
+                internalAddress = hdAddr ^. HD.hdAddressAddress
                                           . fromDb
-                                          . to Core.addrAttributes
-                                          . to attrData
-                                          . to Core.aaPkDerivationPath
-                res = case mAddressPayload of
+                res = case derivationScheme internalAddress of
                     -- If there is some payload we expect this payload to be addressIx and accountIx
-                    -- used for old address scheme so we continue with using
-                    -- old HD address derivation scheme: simple bip32 with ed25519 v0
-                    Just _ -> Core.deriveLvl2KeyPair nm
+                    -- used for random address scheme so we continue with using
+                    -- random HD address derivation scheme: simple bip32 with ed25519 v0
+                    RandomDerivationScheme -> Core.deriveLvl2KeyPair nm
                                     (Core.IsBootstrapEraAddr True)
                                     (ShouldCheckPassphrase False)
                                     spendingPassword
                                     esk
                                     accountIndex
                                     addressIndex
-                    -- If there is no payload we assume it is a new address scheme (which doesn't have payload)
-                    -- New HD address derivation scheme: bip44 with ed25519 v1
-                    Nothing -> first (Core.makePubKeyAddressBoot nm) <$>
+                    -- If there is no payload we assume it is sequential address scheme (which doesn't have payload)
+                    -- Sequential HD address derivation scheme: bip44 with ed25519 v1
+                    SequentialDerivationScheme -> first (Core.makePubKeyAddressBoot nm) <$>
                         deriveAddressKeyPair
                             spendingPassword
                             esk
