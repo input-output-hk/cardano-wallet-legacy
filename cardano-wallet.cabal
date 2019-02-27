@@ -622,3 +622,43 @@ test-suite integration
       Test.Integration.Scenario.Transactions
       Test.Integration.Scenario.Wallets
       Test.Integration.Scenario.Node
+
+
+executable decoupled-wallet
+  default-language:    Haskell2010
+
+  default-extensions:  DeriveGeneric
+                       DeriveDataTypeable
+                       GeneralizedNewtypeDeriving
+                       OverloadedStrings
+                       MonadFailDesugaring
+                       TemplateHaskell
+                       LambdaCase
+                       TypeApplications
+                       OverloadedStrings
+                       NoImplicitPrelude
+
+  ghc-options:         -threaded -Wall
+
+  build-depends:       base
+                     , async
+                     , binary
+                     , bytestring
+                     , cardano-sl-binary
+                     , cardano-sl-chain
+                     , cardano-sl-core
+                     , cardano-sl-infra
+                     , cardano-sl-networking
+                     , cardano-sl-util
+                     , contravariant
+                     , formatting
+                     , network-transport
+                     , network-transport-tcp
+                     , serokell-util
+                     , random
+                     , universum >= 0.1.11
+                     , unordered-containers
+
+  main-is:             BListener.hs
+  hs-source-dirs:      decoupled-wallet
+  other-modules:       ByronSpecifics
